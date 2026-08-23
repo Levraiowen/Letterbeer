@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Letterbeer — v3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#0A0A0C; --surface:#141417; --surface-2:#1C1C20; --accent:#FF5A1F;
+  --accent-soft:rgba(255,90,31,.14); --glow:rgba(255,90,31,.45);
+  --text:#F4EFE8; --dim:#8D8D93; --dimmer:#5C5C63; --border:#232327;
+  --ok:#3FD98B; --warn:#E8B04B; --bad:#FF4D4D;
+  --e:cubic-bezier(.22,.8,.28,1);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{background:#000;font-family:'Inter',system-ui,sans-serif;color:var(--text);
+  display:flex;align-items:center;justify-content:center}
+#phone{width:100%;max-width:430px;height:100dvh;max-height:920px;background:var(--bg);
+  display:flex;flex-direction:column;position:relative;overflow:hidden}
+@media(min-width:520px){#phone{border-radius:34px;border:1px solid #1c1c1f;
+  box-shadow:0 40px 100px -30px rgba(255,90,31,.2)}}
+
+#topbar{padding:18px 20px 0;display:flex;align-items:center;justify-content:space-between;flex:0 0 auto;gap:8px}
+.logo{font-family:'Space Grotesk';font-weight:700;font-size:20px;letter-spacing:2.5px;
+  color:var(--accent);text-shadow:0 0 18px var(--glow)}
+.screen-title{font-family:'Space Grotesk';font-weight:600;font-size:19px;flex:1;text-align:center;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.icon-btn{background:none;border:0;color:var(--dim);display:flex;padding:6px;cursor:pointer;
+  border-radius:50%;transition:color .18s,background .18s,transform .12s;flex:0 0 auto}
+.icon-btn:hover{color:var(--text);background:var(--surface-2)}
+.icon-btn:active{transform:scale(.9);color:var(--accent)}
+
+#tabs{flex:0 0 auto;border-bottom:1px solid var(--border);padding-top:14px}
+.tabwrap{position:relative;display:flex;justify-content:center;gap:30px}
+.tab{background:none;border:0;font-family:'Inter';font-size:14px;font-weight:500;color:var(--dim);
+  padding:0 4px 12px;cursor:pointer;transition:color .22s,transform .14s}
+.tab:hover{color:var(--text)}
+.tab:active{transform:scale(.94)}
+.tab.on{color:var(--accent);font-weight:600}
+#ind{position:absolute;bottom:-1px;height:2px;background:var(--accent);border-radius:2px;
+  box-shadow:0 0 10px var(--glow);transition:left .34s var(--e),width .34s var(--e);left:0;width:0}
+
+#view{flex:1;overflow-y:auto;overscroll-behavior:contain;padding-bottom:26px;position:relative}
+#view::-webkit-scrollbar{width:0}
+.page.slide{animation:sl .3s var(--e)}
+@keyframes sl{from{opacity:0;transform:translateX(calc(var(--d,1) * 26px))}to{opacity:1;transform:none}}
+
+#bottombar{flex:0 0 auto;display:flex;align-items:center;justify-content:space-around;
+  padding:12px 12px calc(12px + env(safe-area-inset-bottom));background:#0E0E10;border-top:1px solid var(--border)}
+.nav{background:none;border:0;color:var(--dimmer);display:flex;padding:8px;cursor:pointer;
+  border-radius:14px;transition:color .2s,background .2s,transform .16s}
+.nav:hover{color:var(--dim);background:var(--surface)}
+.nav:active{transform:scale(.86)}
+.nav.on{color:var(--accent);filter:drop-shadow(0 0 8px var(--glow))}
+.nav.on svg{animation:pop .34s var(--e)}
+@keyframes pop{0%{transform:scale(.8)}55%{transform:scale(1.14)}100%{transform:scale(1)}}
+.add{width:44px;height:44px;border-radius:50%;background:var(--accent);color:#0A0A0C;
+  display:flex;align-items:center;justify-content:center;border:0;cursor:pointer;
+  box-shadow:0 0 20px var(--glow);transition:transform .16s var(--e),box-shadow .2s}
+.add:hover{transform:scale(1.08) rotate(90deg);box-shadow:0 0 32px var(--glow)}
+.add:active{transform:scale(.9)}
+
+.sec{padding:20px 20px 4px;display:flex;align-items:baseline;justify-content:space-between}
+.sec h2{font-family:'Space Grotesk';font-size:15px;font-weight:600;letter-spacing:.2px}
+.eyebrow{font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--dimmer);font-weight:500}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:13px;padding:10px 20px 6px}
+.rail{display:flex;gap:13px;padding:10px 20px 6px;overflow-x:auto;scrollbar-width:none}
+.rail::-webkit-scrollbar{display:none}
+.rail .cell{flex:0 0 96px}
+.cell{background:none;border:0;padding:0;cursor:pointer;display:flex;flex-direction:column;gap:6px}
+
+.can{width:100%;aspect-ratio:2/3;border-radius:12px;background:var(--surface-2);
+  border:1px solid var(--border);overflow:hidden;display:flex;flex-direction:column;position:relative;
+  transition:transform .26s var(--e),box-shadow .26s,border-color .26s}
+.can::after{content:'';position:absolute;inset:0;background:linear-gradient(115deg,rgba(255,255,255,.11),transparent 44%);
+  opacity:0;transition:opacity .3s}
+.cell:hover .can{transform:translateY(-6px) scale(1.035);border-color:#3a3a41;
+  box-shadow:0 14px 26px -12px rgba(0,0,0,.9),0 0 22px -6px var(--glow)}
+.cell:hover .can::after{opacity:1}
+.cell:active .can{transform:translateY(-2px) scale(.99)}
+.cell:hover .stars{color:var(--accent)}
+.can .rim{height:15%;background:#2C2C31;border-bottom:1px solid #0f0f11;display:flex;align-items:center;justify-content:center}
+.can .pull{width:15px;height:6px;border-radius:5px;background:#45454c;transition:background .3s}
+.cell:hover .pull{background:var(--accent)}
+.can .body{flex:1;display:flex;flex-direction:column;justify-content:flex-end}
+.can .band{padding:7px 7px 8px}
+.can .bname{font-family:'Space Grotesk';font-weight:600;font-size:10.5px;line-height:1.2;color:#1a0800}
+.can .bstyle{font-size:8px;line-height:1.3;margin-top:2px;color:rgba(26,8,0,.62);font-weight:500}
+.can .abv{position:absolute;top:19%;right:6px;font-size:8.5px;font-weight:600;color:var(--dim);z-index:2}
+.can .pend{position:absolute;top:19%;left:5px;font-size:7.5px;font-weight:600;letter-spacing:.4px;
+  color:#1a0800;background:var(--warn);padding:1px 5px;border-radius:7px;z-index:2}
+.cell .meta{display:flex;align-items:center;justify-content:center;gap:5px}
+.stars{font-size:10.5px;letter-spacing:.5px;color:var(--accent);white-space:nowrap;transition:color .25s}
+.stars.dim{color:var(--dimmer)}
+
+/* avis */
+.review{padding:16px 20px;border-bottom:1px solid var(--border);transition:background .25s,opacity .3s}
+.review:hover{background:#0F0F12}
+.review.muted{opacity:.42}
+.rev-head{display:flex;align-items:center;gap:9px;margin-bottom:9px}
+.av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:600;color:#12060099;flex:0 0 auto;background-size:cover;background-position:center;
+  border:0;cursor:pointer;font-family:'Inter';transition:transform .2s var(--e),box-shadow .2s}
+.av:hover{transform:scale(1.14);box-shadow:0 0 0 2px var(--bg),0 0 0 3px var(--accent)}
+.uname{font-size:13px;font-weight:500;background:none;border:0;color:var(--text);cursor:pointer;
+  font-family:'Inter';padding:0;transition:color .2s}
+.uname:hover{color:var(--accent)}
+.rev-sub{font-size:11px;color:var(--dimmer)}
+.rev-body{display:flex;gap:12px}
+.rev-can{width:52px;flex:0 0 52px}
+.rev-text{font-size:13.5px;line-height:1.55;color:#D5D0CA}
+.rev-beer{font-family:'Space Grotesk';font-size:13px;font-weight:600;margin-bottom:3px}
+.acts{display:flex;align-items:center;gap:8px;margin-top:11px;padding-left:64px}
+.act{background:none;border:0;color:var(--dimmer);font-size:12px;font-weight:500;display:flex;
+  align-items:center;gap:6px;cursor:pointer;font-family:'Inter';padding:6px 11px;border-radius:16px;
+  transition:color .2s,background .2s,transform .14s}
+.act:hover{color:var(--text);background:var(--surface-2)}
+.act:active{transform:scale(.9)}
+.act.on{color:var(--accent);background:var(--accent-soft)}
+.act.on svg{animation:cheers .42s var(--e)}
+@keyframes cheers{0%{transform:rotate(0) scale(1)}30%{transform:rotate(-12deg) scale(1.16)}
+  60%{transform:rotate(9deg) scale(1.1)}100%{transform:rotate(0) scale(1)}}
+.act.bof{margin-left:auto;padding:6px 9px}
+.act.bof.on{color:var(--warn);background:rgba(232,176,75,.13)}
+.privcount{font-size:10.5px;color:var(--dimmer);padding:7px 0 0 64px;display:flex;align-items:center;gap:6px}
+.replies{padding:8px 0 0 64px;display:flex;flex-direction:column;gap:8px}
+.reply{font-size:12.5px;line-height:1.5;color:var(--dim);border-left:2px solid var(--border);padding-left:10px;
+  transition:border-color .25s}
+.reply:hover{border-left-color:var(--accent)}
+.reply b{color:var(--text);font-weight:500}
+
+.art{margin:12px 20px;border-radius:14px;overflow:hidden;background:var(--surface);border:1px solid var(--border);
+  cursor:pointer;transition:transform .25s var(--e),border-color .25s,box-shadow .25s}
+.art:hover{transform:translateY(-4px);border-color:#33333a;box-shadow:0 16px 30px -18px #000}
+.art .ph{height:112px;display:flex;align-items:flex-end;padding:12px;border-bottom:1px solid var(--border)}
+.art .cap{padding:13px 15px 15px}
+.art h3{font-family:'Space Grotesk';font-size:14.5px;font-weight:600;margin-bottom:5px}
+.art p{font-size:12.5px;line-height:1.5;color:var(--dim)}
+
+.row{display:flex;align-items:center;gap:13px;padding:13px 20px;border:0;border-bottom:1px solid var(--border);
+  background:none;width:100%;text-align:left;cursor:default;color:var(--text);position:relative;
+  transition:background .22s,padding-left .22s var(--e)}
+.row::before{content:'';position:absolute;left:0;top:0;bottom:0;width:0;background:var(--accent);
+  transition:width .22s var(--e);box-shadow:0 0 12px var(--glow)}
+.row.tap{cursor:pointer}
+.row.tap:hover{background:#0F0F12;padding-left:26px}
+.row.tap:hover::before{width:3px}
+.row .n{font-family:'Space Grotesk';font-size:13px;color:var(--dimmer);width:18px;flex:0 0 18px}
+.row .t{flex:1;min-width:0}
+.row .t b{display:block;font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .t span{font-size:11.5px;color:var(--dim)}
+.chev{color:var(--dimmer);transition:transform .22s var(--e),color .22s}
+.row.tap:hover .chev{transform:translateX(4px);color:var(--accent)}
+
+.chips{display:flex;flex-wrap:wrap;gap:8px;padding:12px 20px 4px}
+.chip{background:var(--surface-2);border:1px solid var(--border);color:var(--text);font-size:12.5px;
+  font-weight:500;padding:8px 13px;border-radius:20px;cursor:pointer;font-family:'Inter';
+  transition:background .2s,border-color .2s,color .2s,transform .14s}
+.chip:hover{border-color:#3a3a41;transform:translateY(-2px)}
+.chip:active{transform:scale(.95)}
+.chip.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);box-shadow:0 0 16px -6px var(--glow)}
+.searchbar{margin:14px 20px 2px;display:flex;align-items:center;gap:10px;background:var(--surface-2);
+  border:1px solid var(--border);border-radius:22px;padding:11px 15px;transition:border-color .22s,box-shadow .22s}
+.searchbar:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.searchbar input{flex:1;background:none;border:0;outline:0;color:var(--text);font-size:14px;font-family:'Inter'}
+.searchbar input::placeholder{color:var(--dimmer)}
+
+.statgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:11px;padding:14px 20px 4px}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:13px 14px;
+  transition:transform .24s var(--e),border-color .24s}
+.stat:hover{transform:translateY(-3px);border-color:#33333a}
+.stat .k{font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:var(--dimmer);font-weight:500}
+.stat .v{font-family:'Space Grotesk';font-size:22px;font-weight:600;margin-top:5px}
+.stat .v small{font-size:12px;color:var(--dim);font-weight:500}
+.histo{display:flex;align-items:flex-end;gap:5px;height:76px;padding:16px 20px 0}
+.histo .bar{flex:1;background:var(--surface-2);border-radius:3px 3px 0 0;min-height:3px;
+  transform-origin:bottom;animation:grow .5s var(--e) both;transition:background .2s}
+.histo .bar:hover{background:#3a3a41}
+.histo .bar.hi{background:var(--accent);box-shadow:0 0 12px var(--glow)}
+@keyframes grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+.histo-ax{display:flex;justify-content:space-between;padding:7px 20px 0;font-size:11px;color:var(--dimmer)}
+.barlist{padding:12px 20px 4px;display:flex;flex-direction:column;gap:11px}
+.bl-row{display:flex;align-items:center;gap:11px;font-size:12.5px}
+.bl-row .lbl{width:96px;flex:0 0 96px;color:var(--dim)}
+.bl-track{flex:1;height:7px;background:var(--surface-2);border-radius:4px;overflow:hidden}
+.bl-fill{height:100%;background:var(--accent);border-radius:4px;transform-origin:left;animation:growx .6s var(--e) both}
+@keyframes growx{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.bl-row .num{font-size:11.5px;color:var(--dimmer);width:26px;text-align:right}
+
+.counter{margin:16px 20px 0;background:linear-gradient(150deg,#1A1013,var(--surface));
+  border:1px solid #2c1d18;border-radius:18px;padding:18px;display:flex;align-items:center;gap:16px}
+.counter .big-n{font-family:'Space Grotesk';font-size:42px;font-weight:700;line-height:1;
+  color:var(--accent);text-shadow:0 0 26px var(--glow);min-width:56px}
+.counter .big-n.bump{animation:bump .42s var(--e)}
+@keyframes bump{0%{transform:scale(1)}40%{transform:scale(1.22)}100%{transform:scale(1)}}
+.counter .lbl{flex:1}
+.counter .lbl b{display:block;font-size:13px;font-weight:500}
+.counter .lbl span{font-size:11.5px;color:var(--dim);line-height:1.5}
+.cbtn{width:46px;height:46px;border-radius:50%;border:1px solid var(--accent);background:var(--accent-soft);
+  color:var(--accent);font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:transform .18s var(--e),background .2s,box-shadow .2s}
+.cbtn:hover{background:var(--accent);color:#0A0A0C;box-shadow:0 0 26px var(--glow);transform:scale(1.08)}
+.cbtn:active{transform:scale(.9)}
+
+.repere{margin:14px 20px 0;background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.rp-row{display:flex;align-items:center;justify-content:space-between;padding:12px 15px;border-bottom:1px solid var(--border)}
+.rp-row:last-child{border-bottom:0}
+.rp-row .k{font-size:12.5px;color:var(--dim)}
+.rp-row .v{font-family:'Space Grotesk';font-size:14px;font-weight:600}
+.rp-row .v small{font-size:11px;color:var(--dimmer);font-weight:400;font-family:'Inter'}
+.note{display:flex;align-items:flex-start;gap:9px;margin:12px 20px 0;padding:12px 14px;border-radius:12px;
+  background:var(--surface);border:1px solid var(--border);font-size:12px;color:var(--dim);line-height:1.55}
+.note.warn{border-color:#3a2e18;background:#17130C;color:#D8C69C}
+.note svg{flex:0 0 auto;margin-top:1px}
+
+.phead{display:flex;flex-direction:column;align-items:center;padding:22px 20px 6px;gap:9px}
+.pic{width:82px;height:82px;border-radius:50%;background:var(--accent);color:#1a0800;border:0;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk';position:relative;
+  font-size:28px;font-weight:700;box-shadow:0 0 26px var(--glow);background-size:cover;background-position:center;
+  transition:transform .24s var(--e),box-shadow .24s}
+.pic:hover{transform:scale(1.05);box-shadow:0 0 40px var(--glow)}
+.pic:active{transform:scale(.97)}
+.pic .badge{position:absolute;right:-2px;bottom:-2px;width:27px;height:27px;border-radius:50%;
+  background:var(--surface-2);border:1px solid var(--border);color:var(--text);display:flex;align-items:center;justify-content:center}
+.phead .h{font-family:'Space Grotesk';font-size:17px;font-weight:600}
+.phead .s{font-size:12px;color:var(--dim)}
+.follrow{display:flex;gap:20px;margin-top:4px}
+.follrow button,.follrow div{background:none;border:0;color:var(--text);cursor:pointer;text-align:center;
+  font-family:'Inter';padding:6px 10px;border-radius:10px;transition:background .2s,transform .14s}
+.follrow button:hover{background:var(--surface)}
+.follrow button:active{transform:scale(.94)}
+.follrow b{display:block;font-family:'Space Grotesk';font-size:16px;font-weight:600}
+.follrow span{font-size:11px;color:var(--dim)}
+.follow{background:var(--accent-soft);border:1px solid var(--accent);color:var(--accent);
+  font-size:12px;font-weight:600;padding:7px 16px;border-radius:18px;cursor:pointer;font-family:'Inter';
+  transition:transform .16s var(--e),background .2s,color .2s}
+.follow:hover{background:var(--accent);color:#0A0A0C}
+.follow:active{transform:scale(.92)}
+.follow.on{background:none;border-color:var(--border);color:var(--dim)}
+.follow.on:hover{border-color:var(--bad);color:var(--bad);background:none}
+.follow.lg{padding:10px 30px;font-size:13px;border-radius:22px}
+
+.sw{width:44px;height:25px;border-radius:14px;background:var(--surface-2);border:1px solid var(--border);
+  position:relative;cursor:pointer;flex:0 0 auto;transition:background .26s,border-color .26s}
+.sw::after{content:'';position:absolute;top:2px;left:2px;width:19px;height:19px;border-radius:50%;
+  background:var(--dimmer);transition:transform .26s var(--e),background .26s}
+.sw.on{background:var(--accent-soft);border-color:var(--accent)}
+.sw.on::after{transform:translateX(19px);background:var(--accent);box-shadow:0 0 12px var(--glow)}
+.lockrow{display:flex;align-items:center;gap:13px;padding:13px 20px;border-bottom:1px solid var(--border)}
+.lockrow .t{flex:1}
+.locked{margin:14px 20px 0;padding:30px 20px;border:1px dashed var(--border);border-radius:14px;text-align:center;
+  color:var(--dimmer);font-size:13px;line-height:1.6}
+.locked svg{margin-bottom:9px}
+
+#sheet{position:absolute;inset:0;background:rgba(0,0,0,.66);backdrop-filter:blur(4px);
+  display:none;align-items:flex-end;z-index:20;animation:bg .22s ease}
+@keyframes bg{from{opacity:0}to{opacity:1}}
+#sheet.open{display:flex}
+.sheet-in{background:var(--bg);width:100%;max-height:92%;border-radius:22px 22px 0 0;
+  border-top:1px solid var(--border);display:flex;flex-direction:column;animation:up .3s var(--e)}
+@keyframes up{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
+.sheet-bar{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 10px;
+  border-bottom:1px solid var(--border);flex:0 0 auto}
+.sheet-bar b{font-family:'Space Grotesk';font-size:15px;font-weight:600}
+.grab{width:38px;height:4px;border-radius:3px;background:var(--border);margin:9px auto 0}
+.sheet-body{overflow-y:auto;padding-bottom:22px}
+.sheet-body::-webkit-scrollbar{width:0}
+.beer-hero{display:flex;gap:15px;padding:18px 20px 4px}
+.beer-hero .can{width:84px;flex:0 0 84px}
+.beer-hero h1{font-family:'Space Grotesk';font-size:19px;font-weight:600;line-height:1.15}
+.beer-hero .br{font-size:13px;color:var(--accent);margin-top:3px}
+.beer-hero .fx{font-size:12px;color:var(--dim);margin-top:7px;line-height:1.6}
+.avgbox{display:flex;align-items:center;gap:11px;margin-top:11px}
+.avgbox .num{font-family:'Space Grotesk';font-size:26px;font-weight:600}
+.desc{padding:14px 20px 0;font-size:13.5px;line-height:1.6;color:#CFCAC4}
+.rate-zone{margin:16px 20px 0;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:15px}
+.rate-stars{display:flex;gap:9px;justify-content:center;margin:4px 0 2px}
+.rs{background:none;border:0;font-size:30px;line-height:1;color:var(--dimmer);cursor:pointer;padding:0;
+  transition:color .18s,transform .18s var(--e)}
+.rs:hover{transform:scale(1.22)}
+.rs.on{color:var(--accent);text-shadow:0 0 14px var(--glow)}
+.rs.pre{color:#7a4526}
+.hint{text-align:center;font-size:11px;color:var(--dimmer);margin-top:7px;line-height:1.5}
+textarea,input.f,select.f{width:100%;background:var(--surface-2);border:1px solid var(--border);
+  border-radius:11px;color:var(--text);font-family:'Inter';font-size:13.5px;padding:11px 13px;outline:0;resize:none;
+  transition:border-color .2s,box-shadow .2s}
+textarea:focus,input.f:focus,select.f:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.field{padding:13px 20px 0}
+.field label{display:block;font-size:11px;letter-spacing:1px;text-transform:uppercase;
+  color:var(--dimmer);font-weight:500;margin-bottom:7px}
+.two{display:flex;gap:11px}
+.two>div{flex:1}
+.cta{margin:18px 20px 0;width:calc(100% - 40px);background:var(--accent);color:#0A0A0C;border:0;
+  border-radius:13px;padding:14px;font-family:'Space Grotesk';font-size:15px;font-weight:600;
+  cursor:pointer;box-shadow:0 0 22px var(--glow);transition:transform .16s var(--e),box-shadow .2s}
+.cta:hover{transform:translateY(-2px);box-shadow:0 6px 34px var(--glow)}
+.cta:active{transform:scale(.98)}
+.ghost{margin:10px 20px 0;width:calc(100% - 40px);background:none;color:var(--dim);
+  border:1px solid var(--border);border-radius:13px;padding:12px;font-family:'Inter';font-size:13px;cursor:pointer;
+  transition:border-color .2s,color .2s,background .2s}
+.ghost:hover{border-color:#3a3a41;color:var(--text);background:var(--surface)}
+.pricebox{margin:14px 20px 0;border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.price-r{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;
+  border-bottom:1px solid var(--border);font-size:13px;transition:background .2s}
+.price-r:hover{background:var(--surface)}
+.price-r:last-child{border-bottom:0}
+.price-r.best{background:rgba(255,90,31,.07)}
+.price-r.old{opacity:.62}
+.price-r .shop{min-width:0;flex:1}
+.price-r .shop b{display:block;font-weight:500}
+.price-r .shop span{font-size:11px;color:var(--dimmer)}
+.price-r .p{font-family:'Space Grotesk';font-weight:600;color:var(--accent);flex:0 0 auto}
+.tagbest{font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:#1a0800;background:var(--accent);
+  padding:2px 7px;border-radius:9px;margin-left:7px;font-weight:600}
+.tagold{font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:#1a0800;background:var(--warn);
+  padding:2px 7px;border-radius:9px;margin-left:7px;font-weight:600}
+.confirm{background:none;border:1px solid var(--border);color:var(--dim);font-size:11px;padding:5px 10px;
+  border-radius:14px;cursor:pointer;font-family:'Inter';transition:border-color .2s,color .2s}
+.confirm:hover{border-color:var(--accent);color:var(--accent)}
+.tagline{display:flex;flex-wrap:wrap;gap:7px;padding:12px 20px 0}
+.tg{font-size:11.5px;color:var(--dim);background:var(--surface-2);padding:5px 11px;border-radius:14px}
+.empty{padding:46px 34px;text-align:center;color:var(--dimmer);font-size:13.5px;line-height:1.6}
+.toast{position:absolute;left:50%;bottom:96px;transform:translateX(-50%) translateY(14px);
+  background:var(--accent);color:#0A0A0C;font-size:13px;font-weight:600;padding:11px 20px;
+  border-radius:22px;opacity:0;transition:.28s var(--e);pointer-events:none;z-index:30;max-width:80%;
+  text-align:center;box-shadow:0 8px 30px -6px var(--glow)}
+.toast.show{opacity:1;transform:translateX(-50%)}
+.divider{height:1px;background:var(--border);margin:18px 20px 0}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div id="phone">
+  <div id="topbar"></div>
+  <div id="tabs"></div>
+  <main id="view"></main>
+  <nav id="bottombar"></nav>
+  <div id="sheet"></div>
+  <div class="toast" id="toast"></div>
+  <input type="file" accept="image/*" id="pf" hidden>
+</div>
+
+<script>
+/* =========================================================
+   ICÔNES
+   ========================================================= */
+const I={
+ can:'<svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3.5" width="10" height="17" rx="2.2"/><path d="M7 8h10"/><path d="M10.6 5.8h2.8"/></svg>',
+ clink:'<svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><g transform="rotate(-17 6.2 14)"><rect x="3" y="8" width="6.4" height="12" rx="1.6"/><path d="M3 11.4h6.4"/></g><g transform="rotate(17 17.8 14)"><rect x="14.6" y="8" width="6.4" height="12" rx="1.6"/><path d="M14.6 11.4h6.4"/></g><path d="M12 5.4V3.2M9.1 6.2 7.9 4.4M14.9 6.2l1.2-1.8"/></svg>',
+ clink_s:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><g transform="rotate(-17 6.2 14)"><rect x="3" y="8" width="6.4" height="12" rx="1.6"/><path d="M3 11.4h6.4"/></g><g transform="rotate(17 17.8 14)"><rect x="14.6" y="8" width="6.4" height="12" rx="1.6"/><path d="M14.6 11.4h6.4"/></g><path d="M12 5.4V3.2M9.1 6.2 7.9 4.4M14.9 6.2l1.2-1.8"/></svg>',
+ pass:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5h11a4 4 0 0 1 0 8H9"/><path d="M11.5 5.5 8 8.5l3.5 3"/><path d="M11.5 13.5 8 16.5l3.5 3"/></svg>',
+ flat:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4.5h8l-1 6.5H9L8 4.5Z"/><path d="M9 11h6l-.7 4.2c-.2 1.1-1.1 1.8-2.3 1.8s-2.1-.7-2.3-1.8L9 11Z"/><path d="M5.5 20.5h13"/></svg>',
+ speak:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12c0 4.1-3.8 7.4-8.5 7.4-1 0-2-.15-2.9-.43L4 20.5l1.7-4.2A6.9 6.9 0 0 1 3.5 12C3.5 7.9 7.3 4.6 12 4.6s8.5 3.3 8.5 7.4Z"/></svg>',
+ search:'<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>',
+ user:'<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6.2 8-6.2s8 2.2 8 6.2"/></svg>',
+ plus:'<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+ gear:'<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.2 14.6a1.6 1.6 0 0 0 .32 1.77l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.6 1.6 0 0 0-2.72 1.14v.16a2 2 0 1 1-4 0v-.09a1.6 1.6 0 0 0-2.77-1.1l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.6 1.6 0 0 0-1.1-2.72H3.2a2 2 0 1 1 0-4h.09a1.6 1.6 0 0 0 1.1-2.77l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.6 1.6 0 0 0 2.72-1.1V3.2a2 2 0 1 1 4 0v.09a1.6 1.6 0 0 0 2.72 1.1l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.6 1.6 0 0 0 1.1 2.72h.16a2 2 0 1 1 0 4h-.09a1.6 1.6 0 0 0-1.46.97Z"/></svg>',
+ back:'<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+ x:'<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+ chev:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>',
+ cam:'<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5h3l1.6-2.4h8.8L18 8.5h3v11H3Z"/><circle cx="12" cy="13.6" r="3.4"/></svg>',
+ lock:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10" width="15" height="10.5" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
+ lock_l:'<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10" width="15" height="10.5" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
+ bell:'<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6Z"/><path d="M10.5 19a2 2 0 0 0 3 0"/></svg>',
+ info:'<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 11.2v5M12 8.2h.01"/></svg>',
+ check:'<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5 9.5 17.5 19.5 6.5"/></svg>'
+};
+
+const SUPABASE_URL = 'https://wleilfzebdkudkteezht.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndsZWlsZnplYmRrdWRrdGVlemh0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0ODg4NjgsImV4cCI6MjEwMzA2NDg2OH0.unusUeG7zH_eebyi7TccxoXJ9D_Shp2if56-bARW3p4';   // clé anon, jamais la service_role
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+const PRICE_TTL = 21;
+
+/* cache local */
+const C = { me:null, myId:null, users:{}, beers:[], ratings:{}, counts:{},
+            reviews:[], logs:[], follows:[], watch:[], arts:[] };
+
+/* ============================ AUTHENTIFICATION ============================ */
+const Auth = {
+  async current() {
+    const { data } = await sb.auth.getUser();
+    return data.user || null;
+  },
+  async sendLink(email, handle, ageOk) {
+    if (!ageOk) throw new Error("Il faut confirmer que tu as 18 ans ou plus.");
+    const { error } = await sb.auth.signInWithOtp({
+      email,
+      options: { data: { handle, age_ok: true }, emailRedirectTo: window.location.origin }
+    });
+    if (error) throw error;
+  },
+  async signOut() { await sb.auth.signOut(); location.reload(); }
+};
+
+/* ============================ CHARGEMENT ============================ */
+async function hydrate() {
+  const user = await Auth.current();
+  if (!user) return false;
+  C.myId = user.id;
+
+  const [profiles, beers, ratings, reviews, replies, reactions, logs, prices, follows, watch] =
+    await Promise.all([
+      sb.from('profiles').select('*'),
+      sb.from('beers').select('*'),
+      sb.from('beer_ratings').select('*'),
+      sb.from('reviews').select('*').order('cheers_count', { ascending:false }),
+      sb.from('replies').select('*').order('created_at'),
+      sb.from('reactions').select('*'),                    // RLS : uniquement les miennes
+      sb.from('logs').select('*').order('drunk_at', { ascending:false }),
+      sb.from('prices').select('*'),
+      sb.from('follows').select('*'),
+      sb.from('beer_watchers').select('*')
+    ]);
+
+  /* --- profils --- */
+  const followingIds = (follows.data||[]).filter(f => f.follower_id === C.myId).map(f => f.followee_id);
+  const followerIds  = (follows.data||[]).filter(f => f.followee_id === C.myId).map(f => f.follower_id);
+  C.follows = follows.data || [];
+
+  for (const p of profiles.data || []) {
+    const u = {
+      h: p.handle, i: initials(p.handle), c: hueOf(p.id), photo: p.avatar_url,
+      priv: p.private_stats ? 1 : 0, ville: p.city || '—',
+      foll: followingIds.includes(p.id) ? 1 : 0,
+      fme:  followerIds.includes(p.id) ? 1 : 0,
+      cans: 0, avg: 0, top: '—', week: 0, act: []
+    };
+    if (p.id === C.myId) { C.me = u; C.users['me'] = u; }
+    C.users[p.id] = u;
+  }
+
+  /* --- stats publiques des autres (fonction filtrée côté serveur) --- */
+  await Promise.all(Object.keys(C.users)
+    .filter(k => k !== 'me' && k !== C.myId)
+    .map(async id => {
+      const u = C.users[id];
+      if (u.priv) return;
+      const { data } = await sb.rpc('public_stats', { target: id });
+      const s = data && data[0];
+      if (s) { u.cans = +s.cans||0; u.avg = +s.avg_rating||0;
+               u.week = +s.week_cans||0; u.top = s.top_style || '—'; }
+    }));
+
+  /* --- bières --- */
+  C.beers = (beers.data||[]).map(b => ({
+    id: b.id, n: b.name, br: b.brewery, st: b.style || 'Non précisé',
+    abv: +b.abv || 0, cl: b.volume_cl, pays: b.country || '—', c: b.color || '#FF7A2F',
+    d: b.description || '', img: b.image_url, ok: b.status === 'approved' ? 1 : 0,
+    mine: b.submitted_by === C.myId ? 1 : 0,
+    track: (watch.data||[]).some(w => w.beer_id === b.id) ? 1 : 0,
+    new: Date.now() - new Date(b.created_at) < 30*864e5 ? 1 : 0,
+    pr: (prices.data||[]).filter(p => p.beer_id === b.id).map(p => ({
+      _id: p.id, s: p.shop, v: p.city || '', p: +p.price,
+      by: p.user_id === C.myId ? 'me' : p.user_id,
+      age: Math.floor((Date.now() - new Date(p.confirmed_at)) / 864e5)
+    }))
+  }));
+
+  for (const r of ratings.data||[]) { C.ratings[r.beer_id] = +r.avg_rating; C.counts[r.beer_id] = +r.rating_count; }
+
+  /* --- avis --- */
+  C.reviews = (reviews.data||[]).map(r => ({
+    id: r.id,
+    u: r.user_id === C.myId ? 'me' : r.user_id,     // les vues testent u === 'me'
+    b: r.beer_id, r: r.rating, liked: r.liked, t: r.body,
+    ch: r.cheers_count,
+    bof: r.user_id === C.myId ? r.bofs_count : 0,   // total visible par l'auteur seul
+    mych: (reactions.data||[]).some(x => x.review_id===r.id && x.kind==='cheer') ? 1 : 0,
+    mybof:(reactions.data||[]).some(x => x.review_id===r.id && x.kind==='bof')   ? 1 : 0,
+    pass: (reactions.data||[]).some(x => x.review_id===r.id && x.kind==='pass')  ? 1 : 0,
+    rep: (replies.data||[]).filter(x => x.review_id === r.id)
+           .map(x => ({ u: x.user_id === C.myId ? 'me' : x.user_id, t: x.body }))
+  }));
+
+  /* --- mon journal --- */
+  C.logs = (logs.data||[]).map(l => ({
+    b: l.beer_id, r: l.rating, liked: l.liked, paid: l.price_paid ? +l.price_paid : 0,
+    d: frDate(l.drunk_at), at: l.drunk_at
+  }));
+
+  /* --- activité récente des gens suivis, pour l'onglet copains --- */
+  for (const id of followingIds) {
+    const { data } = await sb.from('reviews').select('beer_id, rating, created_at')
+      .eq('user_id', id).order('created_at',{ascending:false}).limit(3);
+    if (C.users[id]) C.users[id].act = (data||[])
+      .map(x => ({ b: x.beer_id, r: x.rating, d: frDate(x.created_at) }));
+  }
+
+  C.arts = await loadArticles();
+  return true;
+}
+
+async function loadArticles() {
+  const { data } = await sb.from('articles').select('*')
+    .eq('status','published').order('published_at',{ascending:false}).limit(10);
+  return (data||[]).map(a => ({ t:a.title, s:a.summary, c:a.color||'#FF5A1F', url:a.url }));
+}
+
+/* helpers */
+const initials = h => h.replace(/[^a-zA-Z]/g,'').slice(0,2).toUpperCase() || 'BB';
+const HUES = ['#FF5A1F','#FFB020','#7FD1D9','#8FD14F','#FF5D8F','#B07A4F','#C9E265','#5FC9E8'];
+const hueOf = id => HUES[[...id].reduce((s,c)=>s+c.charCodeAt(0),0) % HUES.length];
+const frDate = d => new Date(d).toLocaleDateString('fr-FR',{day:'numeric',month:'short'});
+
+/* ============================ STORE ============================ */
+const Store = {
+  myId: () => C.myId,
+  me:   () => C.me,
+  user: k => C.users[k],
+  users: () => Object.keys(C.users).filter(k => k !== 'me' && k !== C.myId),
+  following:   () => Store.users().filter(k => C.users[k].foll),
+  followers:   () => Store.users().filter(k => C.users[k].fme),
+  suggestions: () => Store.users().filter(k => !C.users[k].foll),
+
+  async toggleFollow(k) {
+    const u = C.users[k];
+    if (u.foll) await sb.from('follows').delete().eq('follower_id',C.myId).eq('followee_id',k);
+    else        await sb.from('follows').insert({ follower_id:C.myId, followee_id:k });
+    u.foll = u.foll ? 0 : 1;
+    return u.foll;
+  },
+  async setPhoto(file) {
+    const path = `${C.myId}/${Date.now()}.jpg`;
+    const { error } = await sb.storage.from('avatars').upload(path, file, { upsert:true });
+    if (error) throw error;
+    const { data } = sb.storage.from('avatars').getPublicUrl(path);
+    await sb.from('profiles').update({ avatar_url: data.publicUrl }).eq('id', C.myId);
+    C.me.photo = data.publicUrl;
+  },
+  async setPrivacy(v) {
+    await sb.from('profiles').update({ private_stats: !!v }).eq('id', C.myId);
+    C.me.priv = v ? 1 : 0;
+  },
+
+  beers:    () => C.beers.filter(b => b.ok),
+  allBeers: () => C.beers,
+  beer:     id => C.beers.find(b => b.id === id),
+  rating:   id => C.ratings[id] || 0,
+  count:    id => C.counts[id] || 0,
+  search(q, f) {
+    let l = C.beers.filter(b => b.ok || b.mine);
+    if (q) l = l.filter(b => (b.n+' '+b.br+' '+b.st).toLowerCase().includes(q.toLowerCase()));
+    if (f && f !== 'Toutes') l = l.filter(b => {
+      if (f === '< 5°') return b.abv < 5;
+      if (f === '> 8°') return b.abv > 8;
+      if (f === 'France') return b.pays === 'France';
+      if (f === 'Moins de 3 €') { const p = Store.bestPrice(b); return p && p.p < 3; }
+      return b.st.toLowerCase().includes(f.toLowerCase());
+    });
+    return l;
+  },
+  async submitBeer(d) {
+    const { data, error } = await sb.from('beers').insert({
+      name: d.n.trim(), brewery: d.br.trim(), style: d.st || 'Non précisé',
+      abv: +d.abv || null, volume_cl: +d.cl || 33, country: d.pays || 'France',
+      description: "Fiche proposée par un utilisateur, en attente de validation.",
+      submitted_by: C.myId, status: 'pending'
+    }).select().single();
+    if (error) throw error;
+    const b = { id:data.id, n:data.name, br:data.brewery, st:data.style, abv:+data.abv||0,
+      cl:data.volume_cl, pays:data.country, c:'#FF7A2F', d:data.description,
+      ok:0, mine:1, track:0, new:1, pr:[] };
+    C.beers.push(b);
+    return b;
+  },
+  dupes(n, br) {
+    const k = (n+br).toLowerCase().replace(/[^a-z0-9]/g,'');
+    return C.beers.filter(b => (b.n+b.br).toLowerCase().replace(/[^a-z0-9]/g,'') === k);
+  },
+
+  prices: id => [...Store.beer(id).pr].sort((a,b) => a.p - b.p),
+  bestPrice(b) {
+    const f = [...b.pr].filter(p => p.age <= PRICE_TTL).sort((x,y) => x.p - y.p);
+    return f[0] || null;
+  },
+  async addPrice(id, shop, price) {
+    const { data } = await sb.from('prices').insert({
+      beer_id:id, user_id:C.myId, shop, city:'relevé par toi', price
+    }).select().single();
+    Store.beer(id).pr.push({ _id:data.id, s:shop, v:'relevé par toi', p:price, by:'me', age:0 });
+  },
+  async confirmPrice(id, i) {
+    const p = Store.prices(id)[i];
+    await sb.from('prices').update({ confirmed_at:new Date().toISOString(), status:'fresh' })
+      .eq('id', p._id);
+    p.age = 0; p.v = 'confirmé par toi'; p.by = 'me';
+  },
+  async toggleTrack(id) {
+    const b = Store.beer(id);
+    if (b.track) await sb.from('beer_watchers').delete().eq('user_id',C.myId).eq('beer_id',id);
+    else         await sb.from('beer_watchers').insert({ user_id:C.myId, beer_id:id });
+    b.track = b.track ? 0 : 1;
+    return b.track;
+  },
+
+  reviews: () => C.reviews,
+  popular: () => [...C.reviews].sort((a,b) => b.ch - a.ch),
+  byBeer:  id => C.reviews.filter(r => r.b === id),
+  byUser:  k  => C.reviews.filter(r => r.u === k),
+  friendReviews() { const f = Store.following(); return C.reviews.filter(r => f.includes(r.u)); },
+  review:  id => C.reviews.find(r => r.id === id),
+
+  async cheer(id) { return react(id, 'cheer'); },
+  async bof(id)   { return react(id, 'bof'); },
+  async pass(id)  { return react(id, 'pass'); },
+
+  async addReply(id, t) {
+    await sb.from('replies').insert({ user_id:C.myId, review_id:id, body:t });
+    Store.review(id).rep.push({ u:'me', t });
+  },
+  async addReview(o) {
+    const { data } = await sb.from('reviews').insert({
+      user_id:C.myId, beer_id:o.b, rating:o.r, liked:!!o.liked, body:o.t
+    }).select().single();
+    C.reviews.unshift({ id:data.id, u:'me', b:o.b, r:o.r, liked:o.liked, t:o.t,
+      ch:0, bof:0, mych:0, mybof:0, pass:0, rep:[] });
+  },
+
+  logs: () => C.logs,
+  async addLog(l) {
+    await sb.from('logs').insert({
+      user_id:C.myId, beer_id:l.b, rating:l.r || null, liked:!!l.liked,
+      price_paid:l.paid || null, shop:l.shop || null
+    });
+    C.logs.unshift({ ...l, at:new Date().toISOString() });
+  },
+  week: () => C.logs.filter(l => Date.now() - new Date(l.at) < 7*864e5).length,
+  drunkBeerIds() { const s=[]; C.logs.forEach(l => { if(!s.includes(l.b)) s.push(l.b) }); return s; },
+  lastPaid(id) { const l = C.logs.find(x => x.b === id); return l ? l.paid : null; },
+  arts: () => C.arts,
+
+  units(b) { return +(b.cl * 10 * (b.abv/100) * 0.789 / 10).toFixed(2); },
+  stats() {
+    const L = C.logs, n = L.length, rated = L.filter(l => l.r);
+    const cl  = L.reduce((s,l) => s + (Store.beer(l.b)?.cl || 0), 0);
+    const eur = L.reduce((s,l) => s + (l.paid || 0), 0);
+    const un  = L.reduce((s,l) => { const b = Store.beer(l.b); return s + (b ? Store.units(b) : 0) }, 0);
+    const weeks = Math.max(1, Math.ceil((Date.now() - new Date(L[L.length-1]?.at || Date.now())) / (7*864e5)));
+    return { n, cl, eur, un:+un.toFixed(1),
+      avg: rated.length ? rated.reduce((s,l)=>s+l.r,0)/rated.length : 0,
+      brews: new Set(L.map(l => Store.beer(l.b)?.br)).size,
+      wkAvg: +(n/weeks).toFixed(1), eurAvg: +(eur/weeks).toFixed(2), unAvg: +(un/weeks).toFixed(1) };
+  },
+  weekUnits() {
+    return +C.logs.filter(l => Date.now() - new Date(l.at) < 7*864e5)
+      .reduce((s,l) => { const b = Store.beer(l.b); return s + (b ? Store.units(b) : 0) }, 0).toFixed(1);
+  }
+};
+
+async function react(id, kind) {
+  const r = Store.review(id);
+  const key = kind === 'cheer' ? 'mych' : kind === 'bof' ? 'mybof' : 'pass';
+  const on = !r[key];
+  if (on) {
+    await sb.from('reactions').insert({ user_id:C.myId, review_id:id, kind });
+    if (kind === 'cheer' && r.mybof) { await drop(id,'bof'); r.mybof = 0; }
+    if (kind === 'bof' && r.mych)    { await drop(id,'cheer'); r.mych = 0; }
+  } else {
+    await drop(id, kind);
+  }
+  r[key] = on ? 1 : 0;
+  return r;
+}
+const drop = (id, kind) =>
+  sb.from('reactions').delete().eq('user_id',C.myId).eq('review_id',id).eq('kind',kind);
+
+/* ============================ DÉMARRAGE ============================ */
+/* Remplacer l'appel final `render();` de la v3 par :
+
+   (async () => {
+     const ok = await hydrate();
+     if (!ok) { drawLogin(); return; }
+     render();
+   })();
+
+   Et rendre `async` les gestionnaires qui écrivent (saveLog, follow,
+   doCheer, doBof, doPass, doReply, sendBeer, togglePriv, confirmPrice,
+   trackBeer, pickPhoto) en ajoutant `await` devant l'appel Store.
+*/
+
+function drawLogin() {
+  document.querySelector('#tabs').style.display = 'none';
+  document.querySelector('#bottombar').style.display = 'none';
+  document.querySelector('#topbar').innerHTML =
+    '<span style="width:33px"></span><span class="logo">LETTERBEER</span><span style="width:33px"></span>';
+  document.querySelector('#view').innerHTML = `
+    <div class="empty" style="padding:40px 30px 20px">
+      Le carnet de canettes.<br>Entre ton adresse, tu reçois un lien de connexion.
+    </div>
+    <div class="field"><label>Pseudo</label><input class="f" id="lg-h" placeholder="ton pseudo"></div>
+    <div class="field"><label>E-mail</label><input class="f" id="lg-e" type="email" placeholder="toi@exemple.fr"></div>
+    <div class="lockrow" style="margin-top:16px">
+      <span class="t"><b style="font-size:13.5px;font-weight:500;display:block">J'ai 18 ans ou plus</b>
+      <span style="font-size:11.5px;color:var(--dim)">Obligatoire pour utiliser Letterbeer</span></span>
+      <span class="sw" id="lg-a" onclick="this.classList.toggle('on')"></span>
+    </div>
+    <button class="cta" onclick="doLogin()">Recevoir mon lien</button>
+    <div class="empty" style="padding:22px 34px;font-size:11.5px">
+      En continuant tu acceptes que ton pseudo, tes avis et tes notes soient visibles
+      par les autres membres. Ton journal et tes dépenses restent privés.
+    </div>`;
+}
+
+async function doLogin() {
+  const h = document.getElementById('lg-h').value.trim().toLowerCase().replace(/\s+/g,'_');
+  if(!/^[a-z0-9_.]{3,20}$/.test(h)) return toast('Pseudo : 3 à 20 caractères, sans espace');
+  const e = document.getElementById('lg-e').value.trim();
+  const a = document.getElementById('lg-a').classList.contains('on');
+  if (h.length < 3) return toast('Pseudo trop court');
+  if (!/.+@.+\..+/.test(e)) return toast('Adresse e-mail invalide');
+  if (!a) return toast('Il faut confirmer que tu as 18 ans ou plus');
+  try { await Auth.sendLink(e, h, a); toast('Lien envoyé, regarde tes mails'); }
+  catch (err) { toast(err.message || 'Erreur'); }
+}
+
+
+/* =========================================================
+   ÉTAT + VUES
+   ========================================================= */
+const S={tab:'home',sub:'bieres',q:'',filt:null,dir:1,user:null,back:'home'};
+const SUBS=['bieres','avis','journal'];
+const $=s=>document.querySelector(s);
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');
+  clearTimeout(t._x);t._x=setTimeout(()=>t.classList.remove('show'),2000)}
+
+function stars(n,cls){let s='';for(let i=1;i<=5;i++)s+=n>=i?'★':'☆';
+  return '<span class="stars '+(cls||'')+'">'+s+'</span>'}
+function can(b,x){return '<div class="can">'
+  +'<div class="rim"><span class="pull"></span></div>'
+  +(x?'<span class="abv">'+(b.abv||'?')+'°</span>':'')
+  +(b.ok?'':'<span class="pend">en attente</span>')
+  +'<div class="body"><div class="band" style="background:'+b.c+'">'
+  +'<div class="bname">'+b.n+'</div><div class="bstyle">'+b.br+'</div></div></div></div>'}
+function cell(b,r){return '<button class="cell" onclick="openBeer(\''+b.id+'\')">'+can(b,1)
+  +'<span class="meta">'+stars(r!==undefined?r:Store.rating(b.id),r===undefined?'dim':'')+'</span></button>'}
+function av(k,sz){const u=Store.user(k)||Store.me();
+  const st=u.photo?'background-image:url('+u.photo+')':'background:'+u.c;
+  return '<button class="av" style="'+st+(sz?';width:'+sz+'px;height:'+sz+'px':'')
+    +'" onclick="event.stopPropagation();openUser(\''+k+'\')">'+(u.photo?'':u.i)+'</button>'}
+function uname(k){return '<button class="uname" onclick="event.stopPropagation();openUser(\''+k+'\')">'
+  +(Store.user(k)||Store.me()).h+'</button>'}
+
+/* ---------- chrome ---------- */
+function chrome(){
+  const T=$('#topbar'),TB=$('#tabs');
+  const titles={search:'Rechercher',friends:'Les copains',me:'Ton profil',account:'Compte',
+    user:S.user?Store.user(S.user).h:''};
+  if(S.tab==='home'){
+    T.innerHTML='<span style="width:33px"></span><span class="logo">LETTERBEER</span><span style="width:33px"></span>';
+    TB.style.display='block';
+    TB.innerHTML='<div class="tabwrap">'+SUBS.map(k=>'<button class="tab'+(S.sub===k?' on':'')
+      +'" onclick="setSub(\''+k+'\')">'+({bieres:'Bières',avis:'Avis',journal:'Journal'})[k]+'</button>').join('')
+      +'<span id="ind"></span></div>';
+    requestAnimationFrame(moveInd);
+  }else{
+    TB.style.display='none';
+    const hasBack=(S.tab==='account'||S.tab==='user');
+    const left=hasBack?'<button class="icon-btn" onclick="go(\''+(S.tab==='account'?'me':S.back)+'\')">'+I.back+'</button>'
+      :'<span style="width:33px"></span>';
+    const right=S.tab==='me'?'<button class="icon-btn" onclick="go(\'account\')">'+I.gear+'</button>'
+      :'<span style="width:33px"></span>';
+    T.innerHTML=left+'<span class="screen-title">'+titles[S.tab]+'</span>'+right;
+  }
+  $('#bottombar').innerHTML=
+     '<button class="nav'+(S.tab==='home'?' on':'')+'" onclick="go(\'home\')" aria-label="Accueil">'+I.can+'</button>'
+    +'<button class="nav'+(S.tab==='search'?' on':'')+'" onclick="go(\'search\')" aria-label="Rechercher">'+I.search+'</button>'
+    +'<button class="add" onclick="openLog()" aria-label="Ajouter une canette">'+I.plus+'</button>'
+    +'<button class="nav'+(S.tab==='friends'?' on':'')+'" onclick="go(\'friends\')" aria-label="Les copains">'+I.clink+'</button>'
+    +'<button class="nav'+(S.tab==='me'||S.tab==='account'?' on':'')+'" onclick="go(\'me\')" aria-label="Ton profil">'+I.user+'</button>';
+}
+function moveInd(){const a=document.querySelector('.tab.on'),i=document.getElementById('ind');
+  if(a&&i){i.style.left=a.offsetLeft+'px';i.style.width=a.offsetWidth+'px'}}
+function setSub(k){if(k===S.sub)return;
+  S.dir=SUBS.indexOf(k)>SUBS.indexOf(S.sub)?1:-1;S.sub=k;$('#view').scrollTop=0;render(1)}
+function go(t){S.dir=1;S.tab=t;$('#view').scrollTop=0;render(1)}
+function openUser(k){
+  closeSheet();
+  if(k==='me'){go('me');return}
+  if(S.tab!=='user')S.back=S.tab;
+  S.user=k;S.tab='user';$('#view').scrollTop=0;render(1);
+}
+
+/* ---------- accueil ---------- */
+function vHome(){
+  if(S.sub==='bieres'){
+    const V=Store.beers();
+    const pop=[...V].sort((a,b)=>Store.count(b.id)-Store.count(a.id)).slice(0,6);
+    const nv=V.filter(b=>b.new);
+    const top=[...V].sort((a,b)=>Store.rating(b.id)-Store.rating(a.id)).slice(0,5);
+    return '<div class="sec"><h2>Populaires cette semaine</h2></div>'
+      +'<div class="grid">'+pop.map(b=>cell(b)).join('')+'</div>'
+      +'<div class="sec"><h2>Nouvelles canettes</h2><span class="eyebrow">août 2026</span></div>'
+      +'<div class="rail">'+nv.map(b=>cell(b)).join('')+'</div>'
+      +'<div class="sec"><h2>Top de l\'année</h2></div>'
+      +top.map((b,i)=>'<button class="row tap" onclick="openBeer(\''+b.id+'\')"><span class="n">'+(i+1)+'</span>'
+        +'<span style="width:34px;flex:0 0 34px">'+can(b)+'</span>'
+        +'<span class="t"><b>'+b.n+'</b><span>'+b.br+' · '+b.st+'</span></span>'
+        +'<span style="text-align:right">'+stars(Store.rating(b.id))
+        +'<br><span style="font-size:10.5px;color:var(--dimmer)">'+Store.rating(b.id).toFixed(1)+'</span></span></button>').join('');
+  }
+  if(S.sub==='avis') return '<div class="sec"><h2>Avis populaires</h2><span class="eyebrow">tout le monde</span></div>'
+    +Store.popular().map(revHTML).join('');
+  return '<div class="sec"><h2>Le journal</h2></div>'
+    +Store.arts().map(a=>'<article class="art" onclick="toast(\'Article à brancher\')">'
+      +'<div class="ph" style="background:'+a.c+'22"><span class="eyebrow" style="color:'+a.c+'">lecture · 4 min</span></div>'
+      +'<div class="cap"><h3>'+a.t+'</h3><p>'+a.s+'</p></div></article>').join('');
+}
+
+/* ---------- avis ---------- */
+function revHTML(r){
+  const b=Store.beer(r.b),mine=r.u==='me';
+  return '<div class="review'+(r.mybof?' muted':'')+'" id="rev-'+r.id+'">'
+   +'<div class="rev-head">'+av(r.u)+'<span>'+uname(r.u)+'<span class="rev-sub"> a noté</span></span></div>'
+   +'<div class="rev-body"><button class="cell rev-can" onclick="openBeer(\''+b.id+'\')">'+can(b)+'</button>'
+   +'<div style="flex:1"><div class="rev-beer">'+b.n
+     +' <span style="font-weight:400;color:var(--dimmer);font-size:11.5px">'+b.br+'</span></div>'
+   +'<div style="margin-bottom:7px">'+stars(r.r)+(r.liked?' <span style="color:var(--accent);font-size:11px">♥</span>':'')+'</div>'
+   +'<div class="rev-text">'+r.t+'</div></div></div>'
+   +'<div class="acts">'
+     +'<button class="act'+(r.mych?' on':'')+'" onclick="doCheer(\''+r.id+'\')">'+I.clink_s
+       +'<span>'+(r.ch+(r.mych?1:0))+'</span></button>'
+     +'<button class="act" onclick="doReply(\''+r.id+'\')">'+I.speak+'<span>'+r.rep.length+'</span></button>'
+     +'<button class="act'+(r.pass?' on':'')+'" onclick="doPass(\''+r.id+'\')">'+I.pass+'</button>'
+     +'<button class="act bof'+(r.mybof?' on':'')+'" onclick="doBof(\''+r.id+'\')" '
+       +'aria-label="Bof, moins d\'avis comme celui-ci">'+I.flat+'</button>'
+   +'</div>'
+   +(r.mybof?'<div class="privcount">'+I.lock+'Bof enregistré — personne d\'autre ne le voit</div>':'')
+   +(mine&&r.bof?'<div class="privcount">'+I.lock+r.bof+' bof sur ton avis — visible par toi seul</div>':'')
+   +(r.rep.length?'<div class="replies">'+r.rep.map(x=>'<div class="reply"><b>'+(Store.user(x.u)||Store.me()).h+'</b> '+x.t+'</div>').join('')+'</div>':'')
+   +'</div>';
+}
+function repaint(id){const r=Store.review(id);const el=document.getElementById('rev-'+id);if(el)el.outerHTML=revHTML(r)}
+async function doCheer(id){ const r = await Store.cheer(id); repaint(id); if(r.mych) toast('Tu as trinqué à cet avis') }
+async function doBof(id){ const r = await Store.bof(id); repaint(id); toast(r.mybof?'Noté, tu en verras moins comme ça':'Bof retiré') }
+async function doPass(id){ const r = await Store.pass(id); repaint(id); toast(r.pass?'Avis passé à tes abonnés':'Retiré de ton profil') }
+async function doReply(id){ const t = prompt('Ta réponse :'); if(!t) return; await Store.addReply(id,t); repaint(id) }
+
+/* ---------- recherche ---------- */
+function vSearch(){
+  const cats=['Toutes','IPA','Lager','Stout','Sour','Saison','Blanche','< 5°','> 8°','France','Moins de 3 €'];
+  const list=Store.search(S.q,S.filt);
+  return '<div class="searchbar">'+I.search
+    +'<input id="q" placeholder="Bière, brasserie, style…" value="'+S.q+'" oninput="S.q=this.value;live()">'
+    +(S.q?'<button class="icon-btn" style="padding:2px" onclick="S.q=\'\';render()">'+I.x+'</button>':'')+'</div>'
+    +'<div class="chips">'+cats.map(c=>'<button class="chip'+((S.filt||'Toutes')===c?' on':'')
+      +'" onclick="S.filt=\''+c+'\';render()">'+c+'</button>').join('')+'</div>'
+    +'<div class="sec"><h2>'+list.length+' canette'+(list.length>1?'s':'')+'</h2><span class="eyebrow">trié par note</span></div>'
+    +(list.length?'<div class="grid">'+[...list].sort((a,b)=>Store.rating(b.id)-Store.rating(a.id)).map(b=>cell(b)).join('')+'</div>'
+      :'<div class="empty">Rien ne correspond.<br><br>'
+       +'<button class="chip" onclick="openNewBeer(S.q)">Proposer cette bière</button></div>');
+}
+function live(){const el=document.getElementById('q'),p=el.selectionStart;
+  render();const n=document.getElementById('q');n.focus();n.setSelectionRange(p,p)}
+
+/* ---------- copains ---------- */
+function vFriends(){
+  const foll=Store.following();
+  const revs=Store.friendReviews();
+  const feed=[];foll.forEach(k=>Store.user(k).act.forEach(a=>feed.push({u:k,...a})));
+  return '<div class="sec"><h2>Leurs avis</h2><span class="eyebrow">'+revs.length+'</span></div>'
+   +(revs.length?revs.map(revHTML).join('')
+     :'<div class="empty">Tes copains n\'ont encore rien écrit.</div>')
+   +'<div class="sec" style="padding-top:26px"><h2>Ce qu\'ils ont bu</h2></div>'
+   +feed.map(a=>'<button class="row tap" onclick="openBeer(\''+a.b+'\')">'+av(a.u)
+     +'<span style="width:32px;flex:0 0 32px">'+can(Store.beer(a.b))+'</span>'
+     +'<span class="t"><b>'+Store.beer(a.b).n+'</b><span>'+Store.user(a.u).h+' · '+a.d+'</span></span>'
+     +stars(a.r)+'</button>').join('')
+   +'<div class="sec" style="padding-top:26px"><h2>Leur semaine</h2><span class="eyebrow">7 jours</span></div>'
+   +foll.map(k=>{const u=Store.user(k);
+     return '<div class="row">'+av(k)+'<span class="t"><b>'+u.h+'</b><span>'
+       +(u.priv?'stats privées':u.week+' canette'+(u.week>1?'s':'')+' cette semaine')+'</span></span>'
+       +(u.priv?'<span style="color:var(--dimmer)">'+I.lock+'</span>':'')+'</div>'}).join('')
+   +'<div class="note">'+I.info+'<span>Pas de classement ici : voir la semaine des autres sert à se situer, pas à gagner.</span></div>'
+   +'<div class="sec" style="padding-top:26px"><h2>À découvrir</h2></div>'
+   +Store.suggestions().map(userRow).join('');
+}
+function userRow(k){const u=Store.user(k);
+  return '<div class="row tap" onclick="openUser(\''+k+'\')">'+av(k)
+   +'<span class="t"><b>'+u.h+'</b><span>'+(u.priv?'stats privées · '+u.ville:u.cans+' canettes · '+u.top+' · '+u.ville)+'</span></span>'
+   +'<button class="follow'+(u.foll?' on':'')+'" onclick="event.stopPropagation();follow(\''+k+'\')">'
+   +(u.foll?'Suivi':'Suivre')+'</button></div>'}
+async function follow(k){
+  const on = await Store.toggleFollow(k);
+  toast(on ? 'Tu suis '+Store.user(k).h : 'Tu ne suis plus '+Store.user(k).h);
+  if($('#sheet').classList.contains('open')) drawFoll(FT); else render();
+}
+
+/* ---------- profil d'un autre ---------- */
+function vUser(){
+  const k=S.user,u=Store.user(k),revs=Store.byUser(k);
+  const pst=u.photo?'background-image:url('+u.photo+')':'background:'+u.c;
+  return '<div class="phead">'
+    +'<div class="pic" style="cursor:default;'+pst+'">'+(u.photo?'':u.i)+'</div>'
+    +'<span class="h">'+u.h+'</span><span class="s">'+u.ville+'</span>'
+    +'<button class="follow lg'+(u.foll?' on':'')+'" onclick="follow(\''+k+'\')">'
+      +(u.foll?'Abonné':'S\'abonner')+'</button></div>'
+   +(u.priv
+     ? '<div class="locked">'+I.lock_l+'<br>'+u.h+' garde ses stats privées.<br>Ses avis restent publics.</div>'
+     : '<div class="statgrid">'
+        +'<div class="stat"><div class="k">Canettes</div><div class="v">'+u.cans+'</div></div>'
+        +'<div class="stat"><div class="k">Note moyenne</div><div class="v">'+u.avg.toFixed(1)+' <small>/5</small></div></div>'
+        +'<div class="stat"><div class="k">Cette semaine</div><div class="v">'+u.week+' <small>canettes</small></div></div>'
+        +'<div class="stat"><div class="k">Style dominant</div><div class="v" style="font-size:16px">'+u.top+'</div></div>'
+       +'</div>')
+   +'<div class="sec" style="padding-top:24px"><h2>Ses avis</h2><span class="eyebrow">'+revs.length+'</span></div>'
+   +(revs.length?revs.map(revHTML).join(''):'<div class="empty">Aucun avis publié.</div>')
+   +'<div class="sec" style="padding-top:24px"><h2>Ses dernières canettes</h2></div>'
+   +u.act.map(a=>'<button class="row tap" onclick="openBeer(\''+a.b+'\')">'
+     +'<span style="width:32px;flex:0 0 32px">'+can(Store.beer(a.b))+'</span>'
+     +'<span class="t"><b>'+Store.beer(a.b).n+'</b><span>'+Store.beer(a.b).br+' · '+a.d+'</span></span>'
+     +stars(a.r)+'</button>').join('');
+}
+
+/* ---------- mon profil ---------- */
+function vMe(){
+  const me=Store.me(),s=Store.stats(),L=Store.logs(),w=Store.week(),wu=Store.weekUnits();
+  const h=[0,0,0,0,0];L.forEach(l=>{if(l.r)h[l.r-1]++});const mx=Math.max(...h,1);
+  const st={};L.forEach(l=>{const x=Store.beer(l.b).st;st[x]=(st[x]||0)+1});
+  const top=Object.entries(st).sort((a,b)=>b[1]-a[1]).slice(0,5);const smx=top.length?top[0][1]:1;
+  const above=w>s.wkAvg*1.3;
+  const pst=me.photo?'background-image:url('+me.photo+')':'';
+  return '<div class="phead">'
+    +'<button class="pic" style="'+pst+'" onclick="pickPhoto()">'+(me.photo?'':me.i)
+      +'<span class="badge">'+I.cam+'</span></button>'
+    +'<span class="h">'+me.h+'</span><span class="s">'+s.n+' canettes · '+s.brews+' brasseries · '+me.ville+'</span>'
+    +'<div class="follrow">'
+      +'<button onclick="openFoll(\'ers\')"><b>'+Store.followers().length+'</b><span>abonnés</span></button>'
+      +'<button onclick="openFoll(\'ing\')"><b>'+Store.following().length+'</b><span>abonnements</span></button>'
+    +'</div></div>'
+   +'<div class="counter"><span class="big-n" id="bign">'+w+'</span>'
+     +'<span class="lbl"><b>canettes cette semaine</b>'
+     +'<span>'+wu+' unités d\'alcool · ta moyenne : '+s.wkAvg+' canettes/semaine</span></span>'
+     +'<button class="cbtn" onclick="openLog()" aria-label="Ajouter une canette">+</button></div>'
+   +(above?'<div class="note warn">'+I.info+'<span>Semaine au-dessus de ta moyenne habituelle. Rien d\'alarmant en soi, c\'est juste bon à savoir.</span></div>':'')
+   +'<div class="sec" style="padding-top:22px"><h2>Tes repères</h2><span class="eyebrow">suivi perso</span></div>'
+   +'<div class="repere">'
+     +'<div class="rp-row"><span class="k">Volume total</span><span class="v">'+(s.cl/100).toFixed(1)+' <small>L</small></span></div>'
+     +'<div class="rp-row"><span class="k">Unités d\'alcool</span><span class="v">'+s.un+' <small>· '+s.unAvg+'/semaine</small></span></div>'
+     +'<div class="rp-row"><span class="k">Dépenses</span><span class="v">'+s.eur.toFixed(0)+' € <small>· '+s.eurAvg+' €/semaine</small></span></div>'
+     +'<div class="rp-row"><span class="k">Prix moyen la canette</span><span class="v">'+(s.eur/Math.max(s.n,1)).toFixed(2)+' €</span></div>'
+   +'</div>'
+   +'<div class="note">'+I.info+'<span>Repère de Santé publique France : pas plus de 10 verres par semaine, pas plus de 2 par jour, et des jours sans. Un verre standard = 1 unité.</span></div>'
+   +'<div class="lockrow" style="margin-top:16px"><span class="t">'
+     +'<b style="font-size:13.5px;font-weight:500;display:block">Stats privées</b>'
+     +'<span style="font-size:11.5px;color:var(--dim)">'+(me.priv?'Personne ne voit ta conso ni tes dépenses':'Tes abonnés voient ta conso de la semaine')+'</span></span>'
+     +'<span class="sw'+(me.priv?' on':'')+'" onclick="togglePriv()"></span></div>'
+   +'<div class="statgrid">'
+    +'<div class="stat"><div class="k">Total</div><div class="v">'+s.n+' <small>canettes</small></div></div>'
+    +'<div class="stat"><div class="k">Note moyenne</div><div class="v">'+s.avg.toFixed(1)+' <small>/5</small></div></div>'
+   +'</div>'
+   +'<div class="sec" style="padding-top:24px"><h2>Répartition de tes notes</h2></div>'
+   +'<div class="histo">'+h.map((v,i)=>'<div class="bar'+(v===mx?' hi':'')+'" style="height:'+(v/mx*100)+'%;animation-delay:'+(i*.05)+'s"></div>').join('')+'</div>'
+   +'<div class="histo-ax"><span>★</span><span>★★★★★</span></div>'
+   +'<div class="sec" style="padding-top:24px"><h2>Tes styles</h2></div>'
+   +'<div class="barlist">'+top.map(([k,v],i)=>'<div class="bl-row"><span class="lbl">'+k+'</span>'
+     +'<span class="bl-track"><span class="bl-fill" style="width:'+(v/smx*100)+'%;animation-delay:'+(i*.06)+'s"></span></span>'
+     +'<span class="num">'+v+'</span></div>').join('')+'</div>'
+   +'<div class="sec" style="padding-top:24px"><h2>Ton journal</h2><span class="eyebrow">'+s.n+' entrées</span></div>'
+   +L.slice(0,8).map(l=>'<button class="row tap" onclick="openBeer(\''+l.b+'\')">'
+     +'<span class="n" style="width:44px;flex:0 0 44px;font-size:11px">'+l.d+'</span>'
+     +'<span style="width:30px;flex:0 0 30px">'+can(Store.beer(l.b))+'</span>'
+     +'<span class="t"><b>'+Store.beer(l.b).n+'</b><span>'+Store.beer(l.b).br
+       +(l.paid?' · '+l.paid.toFixed(2)+' €':'')+'</span></span>'
+     +stars(l.r)+(l.liked?'<span style="color:var(--accent);font-size:12px;margin-left:6px">♥</span>':'')+'</button>').join('');
+}
+async function togglePriv(){
+  await Store.setPrivacy(!Store.me().priv);
+  toast(Store.me().priv ? 'Stats masquées pour tout le monde' : 'Stats visibles par tes abonnés');
+  render();
+}
+
+function pickPhoto(){
+  const inp = $('#pf');
+  inp.onchange = async e => {
+    const f = e.target.files[0]; if(!f) return;
+    try { await Store.setPhoto(f); render(); toast('Photo de profil mise à jour') }
+    catch(err){ toast('Envoi impossible') }
+  };
+  inp.click();
+}
+
+/* ---------- compte ---------- */
+function vAccount(){
+  const me=Store.me();
+  const rows=[['Infos perso','Pseudo, e-mail, ville'],['Confidentialité','Qui voit ton journal et tes dépenses'],
+    ['Devise et unités','€ · cl'],['Notifications','Réponses, mentions, baisses de prix'],
+    ['Mes propositions de bières','Fiches envoyées à la validation'],['Exporter tes données','CSV de ton journal'],
+    ['Vérification d\'âge','Confirmée'],['Aide et modération','Signaler une fiche, un prix, un avis'],
+    ['À propos','Letterbeer v3 · Données bières © Open Food Facts (ODbL) · Photos CC-BY-SA']];
+  const pst=me.photo?'background-image:url('+me.photo+')':'';
+  return '<div class="phead" style="padding-bottom:14px">'
+    +'<button class="pic" style="width:64px;height:64px;font-size:22px;'+pst+'" onclick="pickPhoto()">'
+      +(me.photo?'':me.i)+'<span class="badge" style="width:23px;height:23px">'+I.cam+'</span></button>'
+    +'<span class="h">'+me.h+'</span><span class="s">owen@exemple.fr</span></div>'
+   +'<div class="lockrow" style="margin-top:10px"><span class="t">'
+     +'<b style="font-size:13.5px;font-weight:500;display:block">Stats privées</b>'
+     +'<span style="font-size:11.5px;color:var(--dim)">Masque ta conso et tes dépenses</span></span>'
+     +'<span class="sw'+(me.priv?' on':'')+'" onclick="togglePriv()"></span></div>'
+   +rows.map(r=>'<button class="row tap" onclick="toast(\'Écran à construire\')">'
+     +'<span class="t"><b>'+r[0]+'</b><span>'+r[1]+'</span></span><span class="chev">'+I.chev+'</span></button>').join('')
+   +'<button class="ghost" style="margin-top:20px;color:var(--bad);border-color:#3a1f1f" onclick="toast(\'Déconnexion\')">Se déconnecter</button>';
+}
+
+/* ---------- abonnés / abonnements ---------- */
+let FT='ers';
+function openFoll(t){FT=t;drawFoll(t)}
+function drawFoll(t){
+  FT=t;const ers=Store.followers(),ing=Store.following(),list=t==='ers'?ers:ing;
+  const sh=$('#sheet');sh.classList.add('open');
+  sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
+   +'<div class="sheet-bar"><b>'+Store.me().h+'</b><button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
+   +'<div style="border-bottom:1px solid var(--border);padding-top:12px"><div class="tabwrap">'
+     +'<button class="tab'+(t==='ers'?' on':'')+'" onclick="drawFoll(\'ers\')">Abonnés · '+ers.length+'</button>'
+     +'<button class="tab'+(t==='ing'?' on':'')+'" onclick="drawFoll(\'ing\')">Abonnements · '+ing.length+'</button>'
+   +'</div></div><div class="sheet-body page slide" style="--d:1">'
+   +(list.length?list.map(userRow).join('')
+     :'<div class="empty">'+(t==='ers'?'Personne ne te suit encore.':'Tu ne suis personne pour le moment.')+'</div>')
+   +'</div></div>';
+}
+
+/* ---------- fiche bière ---------- */
+let SH={beer:null,rate:0,liked:0,txt:'',shop:'',paid:''};
+function openBeer(id){SH={beer:id,rate:0,liked:0,txt:'',shop:'',paid:''};
+  const last=Store.logs().find(l=>l.b===id);if(last){SH.rate=last.r;SH.liked=last.liked}
+  drawSheet()}
+function drawSheet(){
+  const b=Store.beer(SH.beer),revs=Store.byBeer(b.id),pr=Store.prices(b.id),bp=Store.bestPrice(b);
+  const sh=$('#sheet');sh.classList.add('open');
+  sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
+   +'<div class="sheet-bar"><b>'+b.st+'</b><button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
+   +'<div class="sheet-body">'
+   +'<div class="beer-hero">'+can(b)+'<div style="flex:1"><h1>'+b.n+'</h1><div class="br">'+b.br+'</div>'
+     +'<div class="fx">'+(b.abv||'?')+'° · '+b.cl+' cl · '+b.pays+' · '+Store.units(b)+' unité'+(Store.units(b)>1?'s':'')+'</div>'
+     +'<div class="avgbox"><span class="num">'+(Store.count(b.id)?Store.rating(b.id).toFixed(1):'—')+'</span><span>'
+     +stars(Store.rating(b.id))+'<br><span style="font-size:11px;color:var(--dimmer)">'
+     +(Store.count(b.id)?Store.count(b.id).toLocaleString('fr-FR')+' notes':'pas encore notée')+'</span></span></div></div></div>'
+   +(b.ok?'':'<div class="note warn">'+I.info+'<span>Fiche proposée par un utilisateur, en attente de validation. '
+     +'Tu peux déjà la noter, elle restera privée tant qu\'elle n\'est pas validée.</span></div>')
+   +'<div class="desc">'+b.d+'</div>'
+   +'<div class="rate-zone">'
+     +'<div class="eyebrow" style="text-align:center">Ta note</div>'
+     +'<div class="rate-stars" onmouseleave="preview(0)">'+[1,2,3,4,5].map(i=>'<button class="rs'+(SH.rate>=i?' on':'')
+       +'" data-i="'+i+'" onmouseenter="preview('+i+')" onclick="setRate('+i+')">'+(SH.rate>=i?'★':'☆')+'</button>').join('')+'</div>'
+     +'<div class="hint">Une note, c\'est tout. Le reste est optionnel.</div>'
+     +'<div style="display:flex;gap:9px;margin-top:13px">'
+       +'<button class="chip'+(SH.liked?' on':'')+'" style="flex:1;text-align:center" onclick="SH.liked=SH.liked?0:1;drawSheet()">♥ Coup de cœur</button>'
+       +'<button class="chip" style="flex:1;text-align:center" onclick="toast(\'Ajoutée à ta liste d\\\'envies\')">+ À goûter</button>'
+     +'</div>'
+     +'<div style="margin-top:11px"><textarea rows="2" placeholder="Ton avis (optionnel)…" oninput="SH.txt=this.value">'+SH.txt+'</textarea></div>'
+     +'<div class="two" style="margin-top:9px">'
+       +'<div><input class="f" placeholder="Achetée où ?" value="'+SH.shop+'" oninput="SH.shop=this.value"></div>'
+       +'<div><input class="f" inputmode="decimal" placeholder="Prix payé €" value="'+SH.paid+'" oninput="SH.paid=this.value"></div>'
+     +'</div>'
+     +'<div class="hint" style="margin-top:8px">Le prix payé alimente le suivi communautaire et tes dépenses. Laisse vide si tu ne veux pas.</div>'
+   +'</div>'
+   +'<button class="cta" onclick="saveLog()">Enregistrer</button>'
+   +'<div class="sec" style="padding-top:24px"><h2>Où la trouver</h2>'
+     +'<span class="eyebrow">'+(bp?'dès '+bp.p.toFixed(2)+' €':'à confirmer')+'</span></div>'
+   +(pr.length?'<div class="pricebox">'+pr.map((p,i)=>{
+       const old=p.age>PRICE_TTL;
+       return '<div class="price-r'+(bp&&p===bp?' best':'')+(old?' old':'')+'">'
+        +'<span class="shop"><b>'+p.s+(bp&&p===bp?'<span class="tagbest">meilleur prix</span>':'')
+          +(old?'<span class="tagold">à confirmer</span>':'')+'</b>'
+        +'<span>'+p.v+' · '+(p.by==='me'?'toi':(Store.user(p.by)?Store.user(p.by).h:'anonyme'))+' · il y a '+p.age+' j</span></span>'
+        +(old?'<button class="confirm" onclick="confirmPrice('+i+')">Toujours ce prix</button>':'')
+        +'<span class="p">'+p.p.toFixed(2)+' €</span></div>'}).join('')+'</div>'
+     :'<div class="empty" style="padding:24px 34px">Personne n\'a encore dit où on la trouve.</div>')
+   +'<div class="note">'+I.info+'<span>Un relevé de plus de '+PRICE_TTL+' jours passe en « à confirmer » '
+     +'et sort du meilleur prix tant que personne ne l\'a revu.</span></div>'
+   +'<button class="ghost" onclick="trackBeer()" style="display:flex;align-items:center;justify-content:center;gap:9px;'
+     +(b.track?'border-color:var(--accent);color:var(--accent)':'')+'">'+I.bell
+     +(b.track?' Suivi de prix activé':' Prévenez-moi si le prix baisse')+'</button>'
+   +'<div class="tagline">'+[b.st,b.pays,(b.abv||'?')+'°','canette '+b.cl+' cl'].map(t=>'<span class="tg">'+t+'</span>').join('')+'</div>'
+   +'<div class="sec" style="padding-top:22px"><h2>Les avis</h2><span class="eyebrow">'+revs.length+'</span></div>'
+   +(revs.length?revs.map(revHTML).join(''):'<div class="empty" style="padding:26px 34px">Personne n\'a encore écrit sur celle-ci. À toi de jouer.</div>')
+   +'</div></div>';
+}
+function preview(i){document.querySelectorAll('.rs').forEach(b=>{
+  const n=+b.dataset.i;b.classList.toggle('pre',i>0&&n<=i&&SH.rate<n)})}
+function setRate(i){SH.rate=SH.rate===i?0:i;drawSheet()}
+async function trackBeer(){
+  const on = await Store.toggleTrack(SH.beer);
+  drawSheet();
+  toast(on ? 'Tu seras prévenu si le prix baisse' : 'Suivi désactivé');
+}
+async function confirmPrice(i){ await Store.confirmPrice(SH.beer,i); drawSheet(); toast('Merci, relevé confirmé') }
+function closeSheet(){$('#sheet').classList.remove('open');$('#sheet').innerHTML=''}
+async function saveLog(){
+  const b = Store.beer(SH.beer), paid = parseFloat((SH.paid||'').replace(',','.')) || null;
+  if(!SH.rate && !paid){ toast('Mets au moins une note pour enregistrer'); return }
+  const bp = Store.bestPrice(b);
+  await Store.addLog({ b:b.id, r:SH.rate, d:"aujourd'hui", liked:SH.liked,
+                       paid: paid || (bp?bp.p:0), shop: SH.shop || null });
+  if(SH.shop && paid) await Store.addPrice(b.id, SH.shop, paid);
+  if(SH.txt.trim()) await Store.addReview({ b:b.id, r:SH.rate, liked:SH.liked, t:SH.txt.trim() });
+  closeSheet();
+  toast(b.n + (SH.rate?' · '+SH.rate+'★':'') + ' enregistrée');
+  render(); bump();
+}
+function bump(){const el=document.getElementById('bign');if(el){el.classList.add('bump');
+  setTimeout(()=>el.classList.remove('bump'),450)}}
+
+/* ---------- ajout : déjà bue / nouvelle ---------- */
+let LQ='',LTAB='deja';
+function openLog(){LQ='';LTAB='deja';drawLog()}
+function drawLog(){
+  const deja=Store.drunkBeerIds().map(Store.beer);
+  const nouv=[...Store.beers()].filter(b=>!Store.drunkBeerIds().includes(b.id));
+  let list=LTAB==='deja'?deja:nouv;
+  if(LQ)list=Store.search(LQ,null);
+  const sh=$('#sheet');sh.classList.add('open');
+  sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
+   +'<div class="sheet-bar"><b>J\'ai bu…</b><button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
+   +'<div style="border-bottom:1px solid var(--border);padding-top:12px"><div class="tabwrap">'
+     +'<button class="tab'+(LTAB==='deja'?' on':'')+'" onclick="LTAB=\'deja\';drawLog()">Déjà bues</button>'
+     +'<button class="tab'+(LTAB==='new'?' on':'')+'" onclick="LTAB=\'new\';drawLog()">Nouvelles</button>'
+   +'</div></div>'
+   +'<div class="sheet-body">'
+   +'<div class="searchbar">'+I.search+'<input id="lq" placeholder="Cherche ta canette…" value="'+LQ
+     +'" oninput="LQ=this.value;drawLog();const e=document.getElementById(\'lq\');e.focus();e.setSelectionRange(e.value.length,e.value.length)"></div>'
+   +(list.length?'<div class="grid" style="padding-top:16px">'+list.slice(0,9).map(b=>cell(b)).join('')+'</div>'
+     :'<div class="empty">Aucune canette ici.</div>')
+   +'<div class="divider"></div>'
+   +'<button class="ghost" style="margin-top:16px;display:flex;align-items:center;justify-content:center;gap:9px" '
+     +'onclick="openNewBeer(LQ)">'+I.cam+' Elle n\'est pas dans la base — la proposer</button>'
+   +'<div class="empty" style="padding:20px 34px">Chaque entrée porte un volume et un prix : c\'est ce qui rend '
+     +'tes stats justes. Pas d\'ajout à l\'aveugle.</div>'
+   +'</div></div>';
+}
+
+/* ---------- proposer une bière ---------- */
+let NB={n:'',br:'',st:'',abv:'',cl:'33',pays:'France',photo:null};
+function openNewBeer(pref){NB={n:pref||'',br:'',st:'',abv:'',cl:'33',pays:'France',photo:null};drawNewBeer()}
+function drawNewBeer(){
+  const dup=NB.n&&NB.br?Store.dupes(NB.n,NB.br):[];
+  const sh=$('#sheet');sh.classList.add('open');
+  sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
+   +'<div class="sheet-bar"><b>Proposer une canette</b><button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
+   +'<div class="sheet-body">'
+   +'<div class="note">'+I.info+'<span>Ta fiche part en validation. Elle est visible par toi tout de suite, '
+     +'par les autres une fois vérifiée : doublons, champs cohérents, photo de la canette.</span></div>'
+   +'<div class="field"><label>Nom de la bière</label><input class="f" value="'+NB.n+'" oninput="NB.n=this.value"></div>'
+   +'<div class="field"><label>Brasserie</label><input class="f" value="'+NB.br+'" oninput="NB.br=this.value"></div>'
+   +(dup.length?'<div class="note warn" style="margin-top:12px">'+I.info
+     +'<span>Une fiche « '+dup[0].n+' · '+dup[0].br+' » existe déjà. Vérifie que ce n\'est pas la même.</span></div>':'')
+   +'<div class="field"><label>Style</label><input class="f" placeholder="IPA, Lager, Stout…" value="'+NB.st+'" oninput="NB.st=this.value"></div>'
+   +'<div class="field"><div class="two">'
+     +'<div><label>Degré</label><input class="f" inputmode="decimal" placeholder="5.5" value="'+NB.abv+'" oninput="NB.abv=this.value"></div>'
+     +'<div><label>Format cl</label><input class="f" inputmode="numeric" value="'+NB.cl+'" oninput="NB.cl=this.value"></div>'
+   +'</div></div>'
+   +'<div class="field"><label>Pays</label><input class="f" value="'+NB.pays+'" oninput="NB.pays=this.value"></div>'
+   +'<button class="ghost" style="display:flex;align-items:center;justify-content:center;gap:9px" onclick="toast(\'Appareil photo à brancher\')">'
+     +I.cam+' Photo de la canette (recommandée)</button>'
+   +'<button class="cta" onclick="sendBeer()">Envoyer à la validation</button>'
+   +'<div class="empty" style="padding:20px 34px">Les fiches incomplètes ou fantaisistes sont rejetées, '
+     +'et les propositions comptent dans ta réputation de contributeur.</div>'
+   +'</div></div>';
+}
+async function sendBeer(){
+  if(!NB.n.trim() || !NB.br.trim()){ toast('Il faut au moins un nom et une brasserie'); return }
+  if(!NB.cl || +NB.cl<10 || +NB.cl>200){ toast('Format en cl invalide'); return }
+  if(NB.abv && (+NB.abv<0 || +NB.abv>20)){ toast('Degré invalide'); return }
+  try { const b = await Store.submitBeer(NB); toast('Fiche envoyée en validation'); openBeer(b.id) }
+  catch(err){ toast('Cette bière existe peut-être déjà') }
+}
+
+/* ---------- routeur ---------- */
+function render(anim){
+  chrome();
+  const v={home:vHome,search:vSearch,friends:vFriends,me:vMe,account:vAccount,user:vUser}[S.tab];
+  $('#view').innerHTML='<div class="page'+(anim?' slide':'')+'" style="--d:'+S.dir+'">'+v()+'</div>';
+}
+(async () => {
+  const ok = await hydrate();
+  if (!ok) { drawLogin(); return; }
+  render();
+})();;
+</script>
+</body>
+</html>
