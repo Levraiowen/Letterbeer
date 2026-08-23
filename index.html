@@ -683,42 +683,59 @@ const drop = (id, kind) =>
    doCheer, doBof, doPass, doReply, sendBeer, togglePriv, confirmPrice,
    trackBeer, pickPhoto) en ajoutant `await` devant l'appel Store.
 */
+let LGMODE = 'in';   // 'in' = connexion, 'up' = création
 
-function drawLogin() {
-  document.querySelector('#tabs').style.display = 'none';
-  document.querySelector('#bottombar').style.display = 'none';
+function drawLogin(){
+  document.querySelector('#tabs').style.display='none';
+  document.querySelector('#bottombar').style.display='none';
   document.querySelector('#topbar').innerHTML =
     '<span style="width:33px"></span><span class="logo">LETTERBEER</span><span style="width:33px"></span>';
+  const up = LGMODE === 'up';
   document.querySelector('#view').innerHTML = `
-    <div class="empty" style="padding:40px 30px 20px">
-      Le carnet de canettes.<br>Entre ton adresse, tu reçois un lien de connexion.
+    <div class="empty" style="padding:36px 30px 14px">
+      Le carnet de canettes.<br>${up?'Crée ton compte en dix secondes.':'Content de te revoir.'}
     </div>
-    <div class="field"><label>Pseudo</label><input class="f" id="lg-h" placeholder="ton pseudo"></div>
-    <div class="field"><label>E-mail</label><input class="f" id="lg-e" type="email" placeholder="toi@exemple.fr"></div>
-    <div class="lockrow" style="margin-top:16px">
+    ${up?`<div class="field"><label>Pseudo</label>
+      <input class="f" id="lg-h" placeholder="ton pseudo" autocomplete="username"></div>`:''}
+    <div class="field"><label>E-mail</label>
+      <input class="f" id="lg-e" type="email" placeholder="toi@exemple.fr" autocomplete="email"></div>
+    <div class="field"><label>Mot de passe</label>
+      <input class="f" id="lg-p" type="password" placeholder="8 caractères minimum"
+        autocomplete="${up?'new-password':'current-password'}"
+        onkeydown="if(event.key==='Enter')doAuth()"></div>
+    ${up?`<div class="lockrow" style="margin-top:16px">
       <span class="t"><b style="font-size:13.5px;font-weight:500;display:block">J'ai 18 ans ou plus</b>
       <span style="font-size:11.5px;color:var(--dim)">Obligatoire pour utiliser Letterbeer</span></span>
-      <span class="sw" id="lg-a" onclick="this.classList.toggle('on')"></span>
-    </div>
-    <button class="cta" onclick="doLogin()">Recevoir mon lien</button>
-    <div class="empty" style="padding:22px 34px;font-size:11.5px">
-      En continuant tu acceptes que ton pseudo, tes avis et tes notes soient visibles
-      par les autres membres. Ton journal et tes dépenses restent privés.
-    </div>`;
+      <span class="sw" id="lg-a" onclick="this.classList.toggle('on')"></span></div>`:''}
+    <button class="cta" onclick="doAuth()">${up?'Créer mon compte':'Se connecter'}</button>
+    <button class="ghost" onclick="LGMODE='${up?'in':'up'}';drawLogin()">
+      ${up?"J'ai déjà un compte":"Créer un compte"}</button>
+    ${up?`<div class="empty" style="padding:22px 34px;font-size:11.5px">
+      Ton pseudo, tes avis et tes notes sont visibles par les autres membres.
+      Ton journal et tes dépenses restent privés.</div>`:''}`;
 }
 
-async function doLogin() {
-  const h = document.getElementById('lg-h').value.trim().toLowerCase().replace(/\s+/g,'_');
-  if(!/^[a-z0-9_.]{3,20}$/.test(h)) return toast('Pseudo : 3 à 20 caractères, sans espace');
+async function doAuth(){
   const e = document.getElementById('lg-e').value.trim();
-  const a = document.getElementById('lg-a').classList.contains('on');
-  if (h.length < 3) return toast('Pseudo trop court');
-  if (!/.+@.+\..+/.test(e)) return toast('Adresse e-mail invalide');
-  if (!a) return toast('Il faut confirmer que tu as 18 ans ou plus');
-  try { await Auth.sendLink(e, h, a); toast('Lien envoyé, regarde tes mails'); }
-  catch (err) { toast(err.message || 'Erreur'); }
-}
+  const p = document.getElementById('lg-p').value;
+  if(!/.+@.+\..+/.test(e)) return toast('Adresse e-mail invalide');
+  if(p.length < 8) return toast('Mot de passe : 8 caractères minimum');
 
+  if(LGMODE === 'up'){
+    const h = document.getElementById('lg-h').value.trim().toLowerCase().replace(/\s+/g,'_');
+    if(!/^[a-z0-9_.]{3,20}$/.test(h)) return toast('Pseudo : 3 à 20 caractères, sans espace');
+    if(!document.getElementById('lg-a').classList.contains('on'))
+      return toast('Il faut confirmer que tu as 18 ans ou plus');
+    const { error } = await sb.auth.signUp({
+      email:e, password:p, options:{ data:{ handle:h, age_ok:true } }
+    });
+    if(error) return toast(error.message.includes('already') ? 'Cette adresse a déjà un compte' : error.message);
+  } else {
+    const { error } = await sb.auth.signInWithPassword({ email:e, password:p });
+    if(error) return toast('E-mail ou mot de passe incorrect');
+  }
+  location.reload();
+}
 
 /* =========================================================
    ÉTAT + VUES
