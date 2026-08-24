@@ -597,10 +597,13 @@ textarea:focus,input.f:focus,select.f:focus{border-color:var(--accent);box-shado
 .plus1:hover{transform:scale(1.06);box-shadow:0 4px 18px var(--glow)}
 .plus1:active{transform:scale(.97)}
 /* bandeau hors ligne */
-.offline{position:absolute;left:0;right:0;bottom:0;z-index:40;padding:9px 20px;
-  background:var(--warn);color:#1a1206;font-size:12px;font-weight:600;text-align:center;
-  transform:translateY(100%);transition:transform .28s var(--e);pointer-events:none}
-.offline.show{transform:translateY(0)}
+/* Dans le flux, juste au-dessus de la barre de navigation : en position
+   absolue au bas de l'écran, le bandeau la recouvrait — perdre le réseau
+   faisait donc perdre la navigation. */
+.offline{flex:0 0 auto;height:0;overflow:hidden;background:var(--warn);color:#1a1206;
+  font-size:12px;font-weight:600;text-align:center;line-height:32px;
+  transition:height .26s var(--e)}
+.offline.show{height:32px}
 /* mention sanitaire — obligatoire en France sur la promotion d'alcool */
 .evin{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--dimmer);
   text-align:center;line-height:1.5;padding:18px 24px 4px}
@@ -713,9 +716,9 @@ select.f{appearance:none;-webkit-appearance:none;
     <div id="tabs"></div>
   </div>
   <main id="view"></main>
+  <div class="offline" id="offline">Hors ligne — tu peux consulter, pas enregistrer</div>
   <nav id="bottombar"></nav>
   <div id="sheet"></div>
-  <div class="offline" id="offline">Hors ligne — tu peux consulter, pas enregistrer</div>
   <div class="toast" id="toast"></div>
   <input type="file" accept="image/*" id="pf" hidden>
 </div>
@@ -795,6 +798,21 @@ const I={
 
 const SUPABASE_URL = 'https://wleilfzebdkudkteezht.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndsZWlsZnplYmRrdWRrdGVlemh0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0ODg4NjgsImV4cCI6MjEwMzA2NDg2OH0.unusUeG7zH_eebyi7TccxoXJ9D_Shp2if56-bARW3p4';   // clé anon, jamais la service_role
+/* La bibliothèque vient d'un CDN. Si elle manque — hors ligne au tout
+   premier lancement, ou CDN injoignable — tout le script mourrait sur la
+   ligne suivante et l'écran resterait noir. Mieux vaut le dire. */
+if (typeof supabase === 'undefined' || !supabase.createClient) {
+  document.body.innerHTML =
+    '<div style="max-width:340px;margin:auto;padding:34px;text-align:center;'
+    + 'font-family:system-ui,sans-serif;color:#F4EFE8">'
+    + '<div style="font-size:19px;font-weight:600;margin-bottom:10px">Chargement incomplet</div>'
+    + '<div style="font-size:14px;line-height:1.6;color:#8D8D93">Une ressource nécessaire '
+    + 'n\'a pas pu être téléchargée. Vérifie ta connexion et recharge la page.</div>'
+    + '<button onclick="location.reload()" style="margin-top:22px;background:#FF5A1F;'
+    + 'color:#0A0A0C;border:0;border-radius:13px;padding:12px 22px;font-size:14px;'
+    + 'font-weight:600;cursor:pointer">Recharger</button></div>';
+  throw new Error('supabase-js indisponible');
+}
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const PRICE_TTL = 21;
@@ -2777,6 +2795,8 @@ function closeSheet(){$('#sheet').classList.remove('open');$('#sheet').innerHTML
 
   document.addEventListener('touchmove', e => {
     if(!feuille) return;
+    // un second doigt (pincement, zoom) : on rend la main proprement
+    if (e.touches.length !== 1) { annuler(); return }
     const y = e.touches[0].clientY, dy = y - depart;
     dernier = y;
     if (dy <= 0) {                       // vers le haut : on rend la main
@@ -2801,13 +2821,22 @@ function closeSheet(){$('#sheet').classList.remove('open');$('#sheet').innerHTML
     if (dy > SEUIL || vitesse > VITESSE) {
       f.classList.add('snap');
       f.style.transform = 'translateY(100%)';
-      setTimeout(closeSheet, 220);
+      // on ne referme que si c'est toujours cette feuille : en ouvrir une
+      // autre pendant l'animation ne doit pas la faire disparaître
+      setTimeout(() => { if (document.body.contains(f)) closeSheet() }, 220);
     } else {
       f.classList.add('snap');
       f.style.transform = '';
-      setTimeout(()=>f.classList.remove('snap'), 280);
+      setTimeout(() => { if (document.body.contains(f)) f.classList.remove('snap') }, 280);
     }
     actif=false;
+  }
+
+  /* Remet la feuille en place sans la fermer, et oublie le geste. */
+  function annuler(){
+    if(!feuille) return;
+    feuille.style.transform=''; feuille.classList.remove('drag');
+    feuille=null; actif=false;
   }
   document.addEventListener('touchend', relacher, {passive:true});
   document.addEventListener('touchcancel', relacher, {passive:true});
@@ -3045,6 +3074,8 @@ function majReseau(){
 }
 window.addEventListener('online',  () => { majReseau(); toast('Connexion rétablie') });
 window.addEventListener('offline', majReseau);
+// une app ouverte alors qu'on est déjà hors ligne doit le dire tout de suite
+majReseau();
 
 (async () => {
   try {

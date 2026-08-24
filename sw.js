@@ -12,7 +12,7 @@
  *   API/auth   → réseau uniquement, jamais de données périmées ni de jeton en cache
  */
 
-const VERSION = 'lb-v3.3.0';
+const VERSION = 'lb-v3.4.0';
 const COQUE   = VERSION + '-coque';
 const PHOTOS  = VERSION + '-photos';
 
@@ -23,7 +23,10 @@ const COQUE_FICHIERS = [
   './logo.svg',
   './icon-192.png',
   './icon-512.png',
-  './manifest.webmanifest'
+  './manifest.webmanifest',
+  // sans la bibliothèque Supabase, le script ne démarre pas du tout :
+  // elle doit être disponible hors ligne comme le reste de la coque
+  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2'
 ];
 
 const MAX_PHOTOS = 400;   // ~25 Mo, largement sous les quotas navigateur
@@ -106,14 +109,29 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Le reste (polices, script Supabase) : cache d'abord, réseau en secours.
+  // Le reste : cache d'abord, réseau en secours.
+  //
+  // La version précédente ne mettait en cache que les fichiers de notre
+  // propre domaine. Or la bibliothèque Supabase et les polices viennent
+  // de CDN externes : hors ligne, elles ne se chargeaient pas, la
+  // bibliothèque manquait, et le script mourait sur une page blanche.
+  // Ces adresses sont figées et versionnées : les garder est sans risque.
   e.respondWith(
-    caches.match(request).then(hit => hit || fetch(request).then(res => {
-      if (res.ok && url.origin === self.location.origin) {
-        const copie = res.clone();
-        caches.open(COQUE).then(c => c.put(request, copie));
-      }
-      return res;
-    }))
+    caches.match(request).then(hit => {
+      if (hit) return hit;
+      return fetch(request).then(res => {
+        // opaque = réponse sans en-têtes CORS ; on la garde quand même,
+        // elle reste rejouable telle quelle
+        if (res && (res.ok || res.type === 'opaque')) {
+          const copie = res.clone();
+          caches.open(COQUE).then(c => c.put(request, copie)).catch(()=>{});
+        }
+        return res;
+      }).catch(() => {
+        // hors ligne et pas en cache : on rend une réponse vide plutôt
+        // qu'une promesse rejetée, qui remonterait en erreur réseau brute
+        return new Response('', { status: 504, statusText: 'hors ligne' });
+      });
+    })
   );
 });
