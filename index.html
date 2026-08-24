@@ -882,7 +882,6 @@ const Store = {
     if (f && f !== 'Toutes') l = l.filter(b => {
       if (f === '< 5°') return b.abv < 5;
       if (f === '> 8°') return b.abv > 8;
-      if (f === 'Canettes') return b.cont === 'canette';
       if (f === 'France') return b.pays === 'France';
       if (f === 'Moins de 3 €') { const p = Store.bestPrice(b); return p && p.p < 3; }
       return b.st.toLowerCase().includes(f.toLowerCase());
@@ -1449,7 +1448,7 @@ async function doReply(id){ const t = prompt('Ta réponse :'); if(!t) return;
 
 /* ---------- recherche ---------- */
 function vSearch(){
-  const cats=['Toutes','Canettes','IPA','Lager','Stout','Sour','Saison','Blanche','< 5°','> 8°','France','Moins de 3 €'];
+  const cats=['Toutes','IPA','Lager','Stout','Sour','Saison','Blanche','< 5°','> 8°','France','Moins de 3 €'];
   const list=Store.search(S.q,S.filt);
   return '<div class="searchbar">'+I.search
     +'<input id="q" placeholder="Bière, brasserie, style…" value="'+esc(S.q)+'" oninput="S.q=this.value;live()">'
@@ -2093,7 +2092,7 @@ function drawSheet(){
    +(img?'<button class="zoomable" onclick="zoomPhoto(\''+img+'\')" aria-label="Agrandir la photo">'
          +can(b)+'<span class="zoomcue">'+I.zoom+'</span></button>':can(b))
    +'<div style="flex:1"><h1>'+esc(b.n)+'</h1><div class="br">'+esc(b.br)+'</div>'
-     +'<div class="fx">'+(b.abv||'?')+'° · '+(b.cont?esc(b.cont)+' ':'')+b.cl+' cl · '+esc(b.pays)+' · '+Store.units(b)+' unité'+(Store.units(b)>1?'s':'')
+     +'<div class="fx">'+(b.abv||'?')+'° · canette '+b.cl+' cl · '+esc(b.pays)+' · '+Store.units(b)+' unité'+(Store.units(b)>1?'s':'')
      +'<br>'+Store.kcal(b)+' kcal'+(Store.kcalIsReal(b)?'':' <span class="est" title="Estimé depuis le degré et le volume">estimé</span>')+'</div>'
      +'<div class="avgbox"><span class="num">'+(Store.count(b.id)?Store.rating(b.id).toFixed(1):'—')+'</span><span>'
      +stars(Store.rating(b.id))+'<br><span style="font-size:11px;color:var(--dimmer)">'
@@ -2158,7 +2157,7 @@ function drawSheet(){
    +(b.allerg?'<div class="sec" style="padding-top:22px"><h2>Allergènes</h2><span class="eyebrow">source Open Food Facts</span></div>'
      +'<div class="tagline" style="padding-top:10px">'+b.allerg.split(',').map(a=>'<span class="tg alrg">'+esc(a.trim())+'</span>').join('')+'</div>'
      +(b.ingr?'<div class="ab-p dim">Ingrédients : '+esc(b.ingr)+'</div>':''):'')
-   +'<div class="tagline">'+[b.st,b.pays,(b.abv||'?')+'°',(b.cont||'format')+' '+b.cl+' cl',Store.kcal(b)+' kcal'].map(t=>'<span class="tg">'+esc(t)+'</span>').join('')+'</div>'
+   +'<div class="tagline">'+[b.st,b.pays,(b.abv||'?')+'°','canette '+b.cl+' cl',Store.kcal(b)+' kcal'].map(t=>'<span class="tg">'+esc(t)+'</span>').join('')+'</div>'
    +'<button class="reportlink" onclick="openReport(\'beer\',\''+esc(b.id)+'\',\'la fiche '
      +esc(b.n).replace(/'/g,"\\'")+'\')">'+I.flag+' Signaler un problème sur cette fiche</button>'
    +'<div class="sec" style="padding-top:22px"><h2>Les avis</h2><span class="eyebrow">'+revs.length+'</span></div>'

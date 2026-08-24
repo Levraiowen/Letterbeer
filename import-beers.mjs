@@ -1,52 +1,86 @@
 /**
- * LETTERBEER — import des bières en canette depuis Open Food Facts
+ * LETTERBEER — import des bières EN CANETTE depuis Open Food Facts
  *
  *   npm install @supabase/supabase-js
+ *   export SUPABASE_URL="https://ton-projet.supabase.co"
+ *   export SUPABASE_SERVICE_KEY="ta-cle-service-role"
  *   node import-beers.mjs
  *
- * Données sous licence ODbL, photos en CC-BY-SA : l'attribution
- * « Données © Open Food Facts, sous licence ODbL » est obligatoire dans l'app.
+ * Stratégie, après mesure du fonds réel d'Open Food Facts :
  *
- * Open Food Facts demande un User-Agent explicite et de ne pas marteler
- * l'API. Ce script pagine doucement. Pour plus de quelques centaines de
- * produits, passer par les exports JSONL plutôt que par l'API live.
+ *   12 151  bières dans le monde
+ *      559  avec un emballage « canette » renseigné
+ *      634  avec un matériau « aluminium »
+ *      407  avec une forme « canette »
+ *
+ * Autrement dit, le champ emballage n'est rempli que sur environ 5 % des
+ * fiches. S'y fier seul plafonnerait la base bien en dessous de 500 après
+ * les filtres qualité. On procède donc en deux temps :
+ *
+ *   1. les facettes emballage donnent des canettes CERTAINES  → approved
+ *   2. un balayage large donne des candidates AMBIGUËS        → pending
+ *
+ * Les ambiguës atterrissent dans l'écran « Fiches à valider » de l'app :
+ * une bière douteuse se tranche à l'œil en deux secondes sur sa photo,
+ * là où aucune règle automatique ne s'en sortirait. Tout ce qui porte un
+ * signal bouteille, ou dépasse 56 cl, est écarté sans passer par la case
+ * modération — c'est ce laxisme qui avait rempli la base de 75 cl.
+ *
+ * Données sous licence ODbL, photos en CC-BY-SA : l'attribution
+ * « Données © Open Food Facts, sous licence ODbL » figure dans l'app.
  */
 
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY; // clé service_role, jamais côté navigateur
-const UA = 'Letterbeer/0.1 (contact: ton.email@exemple.fr)';
+const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
+const UA = 'Letterbeer/0.2 (contact: ton.email@exemple.fr)';
+
+if (!SUPABASE_URL || !SERVICE_KEY) {
+  console.error("Il manque SUPABASE_URL ou SUPABASE_SERVICE_KEY dans l'environnement.");
+  process.exit(1);
+}
 
 const sb = createClient(SUPABASE_URL, SERVICE_KEY);
-
-const PAGES = 8;          // 8 x 100 = 800 produits balayés
-const PAUSE = 1500;       // ms entre deux appels, on reste poli
+const PAUSE = 1500;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const FIELDS = [
-  'code','product_name','brands','quantity','packaging_tags','categories_tags',
-  'countries_tags','image_front_url','image_front_small_url','nutriments','labels_tags'
+  'code','product_name','brands','quantity','packaging_tags','packaging_materials_tags',
+  'packaging_shapes_tags','categories_tags','countries_tags','image_front_url',
+  'image_front_small_url','nutriments','labels_tags'
 ].join(',');
 
-/* ---------- déduction du style à partir des catégories et du nom ---------- */
+/* Les trois facettes d'abord : elles rapportent des canettes sûres.
+   Le balayage large ensuite, pour les candidates à trancher à la main. */
+const RECHERCHES = [
+  { nom:'emballage canette',  q:'packaging_tags=en:can',                  pages:8,  sur:true  },
+  { nom:'matériau aluminium', q:'packaging_materials_tags=en:aluminium',  pages:8,  sur:true  },
+  { nom:'forme canette',      q:'packaging_shapes_tags=en:can',           pages:6,  sur:true  },
+  { nom:'France, large',      q:'countries_tags_en=france',               pages:25, sur:false },
+  { nom:'Belgique, large',    q:'countries_tags_en=belgium',              pages:8,  sur:false },
+  { nom:'Monde, large',       q:'',                                       pages:25, sur:false }
+];
+
+/* ---------- style ---------- */
 const STYLES = [
-  [/neipa|hazy|new.?england/i,        'NEIPA'],
-  [/session.?ipa/i,                    'Session IPA'],
-  [/\bipa\b|india.?pale/i,             'IPA'],
-  [/imperial.?stout|russian.?imperial/i,'Imperial Stout'],
-  [/\bstout\b/i,                       'Stout'],
-  [/\bporter\b/i,                      'Porter'],
-  [/gose/i,                            'Gose'],
-  [/sour|berliner|lambic|gueuze|kriek/i,'Sour'],
-  [/saison|farmhouse/i,                'Saison'],
-  [/pils|pilsner|pilsener/i,           'Pils'],
+  [/neipa|hazy|new.?england/i,          'NEIPA'],
+  [/session.?ipa/i,                      'Session IPA'],
+  [/\bipa\b|india.?pale/i,               'IPA'],
+  [/imperial.?stout|russian.?imperial/i, 'Imperial Stout'],
+  [/\bstout\b/i,                         'Stout'],
+  [/\bporter\b/i,                        'Porter'],
+  [/gose/i,                              'Gose'],
+  [/sour|berliner|lambic|gueuze|kriek/i, 'Sour'],
+  [/saison|farmhouse/i,                  'Saison'],
+  [/pils|pilsner|pilsener/i,             'Pils'],
   [/blanche|witbier|weizen|weisse|wheat/i,'Blanche'],
-  [/triple|tripel/i,                   'Triple'],
-  [/double|dubbel/i,                   'Double'],
-  [/ambree|amber|rousse/i,             'Ambrée'],
-  [/brune|brown|dunkel/i,              'Brune'],
-  [/blonde|helles|lager|biere.?blonde/i,'Blonde'],
-  [/sans.?alcool|alcohol.?free|0[.,]0/i,'Sans alcool']
+  [/triple|tripel/i,                     'Triple'],
+  [/double|dubbel/i,                     'Double'],
+  [/ambree|amber|rousse/i,               'Ambrée'],
+  [/brune|brown|dunkel/i,                'Brune'],
+  [/blonde|helles|lager|biere.?blonde/i, 'Blonde'],
+  [/sans.?alcool|alcohol.?free|0[.,]0/i, 'Sans alcool']
 ];
 const guessStyle = (name, cats) => {
   const hay = `${name} ${cats.join(' ')}`;
@@ -54,7 +88,6 @@ const guessStyle = (name, cats) => {
   return 'Non précisé';
 };
 
-/* ---------- couleur du bandeau, dérivée du style ---------- */
 const COLORS = {
   'NEIPA':'#FF7A2F','IPA':'#FFB020','Session IPA':'#5FC9E8','Imperial Stout':'#8A6244',
   'Stout':'#9B8B7A','Porter':'#A08670','Gose':'#7FD1D9','Sour':'#FF5D8F','Saison':'#C9E265',
@@ -62,63 +95,68 @@ const COLORS = {
   'Brune':'#8C6A4F','Blonde':'#F2D06B','Sans alcool':'#9FD8C0','Non précisé':'#B0B0B8'
 };
 
-/* ---------- volume : on ne garde que les canettes ---------- */
+/* ---------- volume ---------- */
 const parseCl = q => {
   if (!q) return null;
   const s = q.toLowerCase().replace(',', '.');
-  let m = s.match(/([\d.]+)\s*cl/);        if (m) return Math.round(+m[1]);
-  m = s.match(/([\d.]+)\s*ml/);            if (m) return Math.round(+m[1] / 10);
-  m = s.match(/([\d.]+)\s*l\b/);           if (m) return Math.round(+m[1] * 100);
+  let m = s.match(/([\d.]+)\s*cl/);  if (m) return Math.round(+m[1]);
+  m = s.match(/([\d.]+)\s*ml/);      if (m) return Math.round(+m[1] / 10);
+  m = s.match(/([\d.]+)\s*l\b/);     if (m) return Math.round(+m[1] * 100);
   return null;
 };
-/* ---------- canette ou bouteille ? ----------
- *
- * L'ancien filtre cherchait « metal » dans les emballages. Or une capsule
- * de bouteille est en métal : toutes les bouteilles passaient, d'où les
- * 75 cl et 150 cl arrivés dans une base censée ne contenir que des canettes.
- *
- * On classe désormais explicitement, et on garde les deux : refuser les
- * bouteilles amputerait la base de l'essentiel du catalogue français.
- */
-const CANETTE  = /canette|cannette|\bcan\b|boite-boisson|boite-metal|aluminium|\baluminium\b/i;
-const BOUTEILLE = /bouteille|bottle|\bverre\b|\bglass\b/i;
 
-function container(p) {
-  const tags = (p.packaging_tags || []).join(' ');
-  const cl   = parseCl(p.quantity);
+/* ---------- canette, bouteille, ou à trancher ? ----------
+ *
+ * L'ancienne version cherchait « metal » dans les emballages. Une capsule
+ * de bouteille est en métal : toutes les bouteilles passaient. D'où les
+ * 75 cl et 150 cl arrivés dans une base censée n'avoir que des canettes.
+ */
+const SIGNAL_CANETTE   = /\bcanette\b|\bcannette\b|\bcan\b|boite-boisson|\baluminium\b|\balu\b/i;
+const SIGNAL_BOUTEILLE = /bouteille|bottle|\bverre\b|\bglass\b|\bbottiglia\b/i;
+
+function classer(p) {
+  const cl = parseCl(p.quantity);
 
   // aucune canette n'existe au-delà de 56 cl : le volume tranche seul
   if (cl && cl > 56) return 'bouteille';
 
-  const bouteille = BOUTEILLE.test(tags);
-  const canette   = CANETTE.test(tags);
+  const tags = [
+    ...(p.packaging_tags || []),
+    ...(p.packaging_materials_tags || []),
+    ...(p.packaging_shapes_tags || [])
+  ].join(' ');
+  const quantite = (p.quantity || '');
 
-  if (canette && !bouteille) return 'canette';
+  const canette   = SIGNAL_CANETTE.test(tags)   || SIGNAL_CANETTE.test(quantite);
+  const bouteille = SIGNAL_BOUTEILLE.test(tags) || SIGNAL_BOUTEILLE.test(quantite);
+
   if (bouteille && !canette) return 'bouteille';
-  // les deux, ou aucun des deux : OFF est trop imprécis pour trancher
-  return null;
+  if (canette && !bouteille) return 'canette';
+  return null;                                   // à trancher à l'œil
 }
 
-/* ---------- filtre qualité : on rejette les fiches creuses ---------- */
+/* ---------- filtre qualité ---------- */
 function clean(p) {
-  const name = (p.product_name || '').trim();
+  const name  = (p.product_name || '').trim();
   const brand = (p.brands || '').split(',')[0].trim();
-  const cl = parseCl(p.quantity);
-  const abv = p.nutriments?.alcohol_value ?? p.nutriments?.alcohol_100g ?? null;
-  const img = p.image_front_url || p.image_front_small_url || null;
+  const cl    = parseCl(p.quantity);
+  const abv   = p.nutriments?.alcohol_value ?? p.nutriments?.alcohol_100g ?? null;
+  const img   = p.image_front_url || p.image_front_small_url || null;
 
   if (name.length < 2 || name.length > 80) return null;
   if (!brand) return null;
-  if (!cl || cl < 10 || cl > 200) return null;
+  if (!cl || cl < 10 || cl > 56) return null;    // au-delà, ce n'est plus une canette
   if (abv === null || abv < 0 || abv > 20) return null;
-  if (!img) return null;                       // pas de photo, pas de fiche
-  if (/^\d+$/.test(name)) return null;         // noms bidons
+  if (!img) return null;
+  if (/^\d+$/.test(name)) return null;
 
-  const cats = p.categories_tags || [];
-  const style = guessStyle(name, cats);
+  const verdict = classer(p);
+  if (verdict === 'bouteille') return null;      // écartée, sans discussion
+
+  const cats    = p.categories_tags || [];
+  const style   = guessStyle(name, cats);
   const country = (p.countries_tags || []).some(t => /france/.test(t)) ? 'France' : 'Autre';
-  const cont = container(p);
-  const format = cont === 'bouteille' ? 'bouteille' : cont === 'canette' ? 'canette' : 'format';
+  const sure    = verdict === 'canette';
 
   return {
     barcode: p.code,
@@ -127,69 +165,84 @@ function clean(p) {
     style,
     abv: Math.round(abv * 10) / 10,
     volume_cl: cl,
-    container: cont,
+    container: sure ? 'canette' : null,
     country,
     image_url: img,
     color: COLORS[style] || '#B0B0B8',
-    description: `${style} de ${brand}, ${abv}°, ${format} ${cl} cl. Fiche importée d'Open Food Facts — complète-la si tu en sais plus.`,
-    status: 'approved'          // source fiable : validé d'office
+    description: `${style} de ${brand}, ${abv}°, canette ${cl} cl. `
+      + (sure ? "Fiche importée d'Open Food Facts — complète-la si tu en sais plus."
+              : "Contenant non confirmé par Open Food Facts : à vérifier sur la photo."),
+    // certaine → visible tout de suite ; douteuse → écran de modération
+    status: sure ? 'approved' : 'pending'
   };
 }
 
-/* ---------- boucle d'import ---------- */
-async function run() {
-  const seen = new Set();
-  const batch = [];
-
-  for (let page = 1; page <= PAGES; page++) {
-    const url = 'https://world.openfoodfacts.org/api/v2/search'
-      + '?categories_tags_en=beers'
-      + '&countries_tags_en=france'
-      + '&fields=' + FIELDS
-      + '&page_size=100&page=' + page;
-
-    process.stdout.write(`Page ${page}… `);
-    const res = await fetch(url, { headers: { 'User-Agent': UA } });
-
-    if (res.status === 503) { console.log('rate-limité, on attend 30 s'); await sleep(30000); page--; continue; }
-    if (!res.ok) { console.log('erreur HTTP ' + res.status); break; }
-
-    const { products = [] } = await res.json();
-    if (!products.length) { console.log('plus rien'); break; }
-
-    let kept = 0;
-    for (const p of products) {
-      const b = clean(p);
-      if (!b) continue;
-      const key = (b.name + b.brewery).toLowerCase().replace(/[^a-z0-9]/g, '');
-      if (seen.has(key)) continue;
-      seen.add(key);
-      batch.push(b);
-      kept++;
+/* ---------- API, avec reprise sur 503 ---------- */
+async function page(q, n) {
+  const url = 'https://world.openfoodfacts.org/api/v2/search'
+            + '?categories_tags_en=beers' + (q ? '&' + q : '')
+            + '&fields=' + FIELDS + '&page_size=100&page=' + n;
+  for (let essai = 1; essai <= 4; essai++) {
+    try {
+      const res = await fetch(url, { headers: { 'User-Agent': UA, 'Accept': 'application/json' } });
+      if (res.ok) return (await res.json()).products || [];
+      if (res.status === 503 || res.status === 429) {
+        process.stdout.write(`(serveur occupé, pause) `);
+        await sleep(6000 * essai);
+        continue;
+      }
+      console.warn(`  ! HTTP ${res.status}`);
+      return [];
+    } catch (e) {
+      await sleep(3000 * essai);
     }
-    console.log(`${products.length} produits, ${kept} canettes retenues`);
-    await sleep(PAUSE);
   }
-
-  console.log(`\n${batch.length} bières prêtes à insérer.`);
-  if (!batch.length) return;
-
-  // Insertion par paquets de 50, en n'ajoutant QUE les codes-barres absents.
-  //
-  // ignoreDuplicates est essentiel : sans lui, l'upsert réécrivait les
-  // fiches existantes avec les valeurs brutes d'Open Food Facts, et une
-  // seconde exécution annulait tout le nettoyage des noms fait à la main.
-  for (let i = 0; i < batch.length; i += 50) {
-    const chunk = batch.slice(i, i + 50);
-    const { error } = await sb.from('beers')
-      .upsert(chunk, { onConflict: 'barcode', ignoreDuplicates: true });
-    if (error) console.error('Erreur insertion :', error.message);
-    else console.log(`Traitées ${i + chunk.length}/${batch.length}`);
-  }
-  console.log('Les fiches déjà présentes n\'ont pas été touchées.');
-
-  console.log('\nTerminé. Pense à afficher l\'attribution Open Food Facts dans l\'app.');
+  return [];
 }
 
-const sleep = ms => new Promise(r => setTimeout(r, ms));
+/* ---------- boucle ---------- */
+async function run() {
+  const vus = new Set();     // codes-barres déjà traités
+  const gardees = new Map(); // barcode -> fiche
+
+  for (const r of RECHERCHES) {
+    console.log(`\n▸ ${r.nom}`);
+    for (let n = 1; n <= r.pages; n++) {
+      const produits = await page(r.q, n);
+      if (!produits.length) { console.log(`  page ${n} : plus rien`); break; }
+
+      let neufs = 0;
+      for (const p of produits) {
+        if (!p.code || vus.has(p.code)) continue;
+        vus.add(p.code);
+        const b = clean(p);
+        if (b) { gardees.set(p.code, b); neufs++; }
+      }
+      const sures = [...gardees.values()].filter(b => b.status === 'approved').length;
+      console.log(`  page ${n} : +${neufs} retenues · total ${gardees.size} (${sures} sûres)`);
+      await sleep(PAUSE);
+    }
+  }
+
+  const lot = [...gardees.values()];
+  const sures  = lot.filter(b => b.status === 'approved');
+  const douteuses = lot.filter(b => b.status === 'pending');
+  console.log(`\n${lot.length} fiches prêtes : ${sures.length} canettes confirmées, `
+            + `${douteuses.length} à valider à la main.`);
+  if (!lot.length) return;
+
+  // ignoreDuplicates : on n'écrase jamais une fiche déjà nettoyée à la main
+  for (let i = 0; i < lot.length; i += 50) {
+    const paquet = lot.slice(i, i + 50);
+    const { error } = await sb.from('beers')
+      .upsert(paquet, { onConflict: 'barcode', ignoreDuplicates: true });
+    if (error) console.error('Erreur insertion :', error.message);
+    else console.log(`  traitées ${i + paquet.length}/${lot.length}`);
+  }
+
+  console.log(`\nTerminé. Les fiches déjà présentes n'ont pas été touchées.`);
+  console.log(`Ouvre « Fiches à valider » dans l'app pour trancher les ${douteuses.length} douteuses.`);
+  console.log(`Puis lance enrich-beers.mjs pour les calories et les allergènes.`);
+}
+
 run().catch(console.error);
