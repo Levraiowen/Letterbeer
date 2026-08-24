@@ -3,7 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Letterbeer — v3</title>
+<title>Letterbeer — le carnet de canettes</title>
+<meta name="description" content="Le carnet de canettes : note tes bières, suis tes repères, partage avec tes potes.">
+<meta name="theme-color" content="#0A0A0C">
+<link rel="icon" type="image/svg+xml" href="logo.svg">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -26,8 +31,13 @@ body{background:#000;font-family:'Inter',system-ui,sans-serif;color:var(--text);
   box-shadow:0 40px 100px -30px rgba(255,90,31,.2)}}
 
 #topbar{padding:18px 20px 0;display:flex;align-items:center;justify-content:space-between;flex:0 0 auto;gap:8px}
-.logo{font-family:'Space Grotesk';font-weight:700;font-size:20px;letter-spacing:2.5px;
-  color:var(--accent);text-shadow:0 0 18px var(--glow)}
+.lockup{display:flex;align-items:center;gap:9px;min-width:0}
+.lockup .lgmk{flex:0 0 auto;display:block}
+.logo{font-family:'Space Grotesk';font-weight:700;font-size:19px;letter-spacing:2.2px;
+  color:var(--text);white-space:nowrap}
+.logo i{font-style:normal;color:var(--accent);text-shadow:0 0 18px var(--glow)}
+.login-mark{display:flex;justify-content:center;padding:30px 0 4px}
+.login-mark svg{filter:drop-shadow(0 10px 26px rgba(0,0,0,.6))}
 .screen-title{font-family:'Space Grotesk';font-weight:600;font-size:19px;flex:1;text-align:center;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .icon-btn{background:none;border:0;color:var(--dim);display:flex;padding:6px;cursor:pointer;
@@ -428,6 +438,30 @@ textarea:focus,input.f:focus,select.f:focus{border-color:var(--accent);box-shado
 /* =========================================================
    ICÔNES
    ========================================================= */
+/* ---------- marque ----------
+   Le clipPath a besoin d'un identifiant unique : la marque peut être
+   présente plusieurs fois dans le DOM en même temps. */
+let _lgId = 0;
+function logoMark(px){
+  const id = 'lbcan' + (++_lgId);
+  return '<svg class="lgmk" width="'+px+'" height="'+px+'" viewBox="0 0 100 100" aria-hidden="true">'
+   + '<defs><clipPath id="'+id+'"><path d="M36 14 L64 14 L64 19 C68.5 21 70 24 70 28 L70 79 '
+   + 'C70 83.5 67 87 63 87 L37 87 C33 87 30 83.5 30 79 L30 28 C30 24 31.5 21 36 19 Z"/></clipPath></defs>'
+   + '<circle cx="50" cy="50" r="48" fill="#F4EFE8"/>'
+   + '<g clip-path="url(#'+id+')">'
+     + '<rect x="26" y="12" width="48" height="43" fill="#141417"/>'
+     + '<rect x="26" y="55" width="48" height="34" fill="#FF5A1F"/>'
+     + '<rect x="33" y="12" width="7" height="77" fill="#F4EFE8" opacity=".15"/>'
+     + '<rect x="26" y="19.4" width="48" height="1.7" fill="#F4EFE8" opacity=".92"/>'
+   + '</g>'
+   + '<g fill="#F4EFE8"><circle cx="39" cy="67" r="2.15"/><circle cx="44.5" cy="67" r="2.15"/>'
+     + '<circle cx="50" cy="67" r="2.15"/><circle cx="55.5" cy="67" r="2.15"/></g>'
+   + '<circle cx="61" cy="67" r="1.75" fill="none" stroke="#F4EFE8" stroke-width="1.15" opacity=".8"/>'
+   + '</svg>';
+}
+const logoLockup = (px) =>
+  '<span class="lockup">'+logoMark(px||21)+'<span class="logo">LETTER<i>BEER</i></span></span>';
+
 const I={
  can:'<svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3.5" width="10" height="17" rx="2.2"/><path d="M7 8h10"/><path d="M10.6 5.8h2.8"/></svg>',
  clink:'<svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><g transform="rotate(-17 6.2 14)"><rect x="3" y="8" width="6.4" height="12" rx="1.6"/><path d="M3 11.4h6.4"/></g><g transform="rotate(17 17.8 14)"><rect x="14.6" y="8" width="6.4" height="12" rx="1.6"/><path d="M14.6 11.4h6.4"/></g><path d="M12 5.4V3.2M9.1 6.2 7.9 4.4M14.9 6.2l1.2-1.8"/></svg>',
@@ -780,10 +814,11 @@ function drawLogin(){
   document.querySelector('#tabs').style.display='none';
   document.querySelector('#bottombar').style.display='none';
   document.querySelector('#topbar').innerHTML =
-    '<span style="width:33px"></span><span class="logo">LETTERBEER</span><span style="width:33px"></span>';
+    '<span style="width:33px"></span>'+logoLockup(21)+'<span style="width:33px"></span>';
   const up = LGMODE === 'up';
   document.querySelector('#view').innerHTML = `
-    <div class="empty" style="padding:36px 30px 14px">
+    <div class="login-mark">${logoMark(66)}</div>
+    <div class="empty" style="padding:18px 30px 14px">
       Le carnet de canettes.<br>${up?'Crée ton compte en dix secondes.':'Content de te revoir.'}
     </div>
     ${up?`<div class="field"><label>Pseudo</label>
@@ -871,7 +906,7 @@ function chrome(){
   const titles={search:'Rechercher',friends:'Les copains',me:'Ton profil',account:'Compte',
     user:S.user?Store.user(S.user).h:''};
   if(S.tab==='home'){
-    T.innerHTML='<span style="width:33px"></span><span class="logo">LETTERBEER</span><span style="width:33px"></span>';
+    T.innerHTML='<span style="width:33px"></span>'+logoLockup(21)+'<span style="width:33px"></span>';
     TB.style.display='block';
     TB.innerHTML='<div class="tabwrap">'+SUBS.map(k=>'<button class="tab'+(S.sub===k?' on':'')
       +'" onclick="setSub(\''+k+'\')">'+({bieres:'Bières',avis:'Avis',journal:'Journal'})[k]+'</button>').join('')
