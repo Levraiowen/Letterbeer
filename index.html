@@ -434,6 +434,23 @@ textarea:focus,input.f:focus,select.f:focus{border-color:var(--accent);box-shado
   cursor:pointer;transition:.2s var(--e)}
 .plus1:hover{transform:scale(1.06);box-shadow:0 4px 18px var(--glow)}
 .plus1:active{transform:scale(.97)}
+.linkbtn{display:block;margin:14px auto 0;background:none;border:0;cursor:pointer;
+  font-size:12.5px;color:var(--dim);text-decoration:underline;text-underline-offset:3px;
+  font-family:inherit;padding:6px}
+.linkbtn:hover{color:var(--accent)}
+/* --- modération --- */
+.modrow{display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--border)}
+.modinfo{flex:1;min-width:0}
+.modinfo b{display:block;font-size:13.5px;font-weight:600;color:var(--text);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.modinfo span{display:block;font-size:11.5px;color:var(--dim);margin-top:3px}
+.modacts{display:flex;gap:7px;flex:0 0 auto}
+.modbtn{border:1px solid var(--border);background:none;border-radius:16px;padding:6px 12px;
+  font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:.2s var(--e)}
+.modbtn.yes{color:var(--ok);border-color:rgba(63,217,139,.35)}
+.modbtn.yes:hover{background:rgba(63,217,139,.12)}
+.modbtn.no{color:var(--bad);border-color:#3a1f1f}
+.modbtn.no:hover{background:rgba(255,77,77,.1)}
 .tg.alrg{background:rgba(232,176,75,.13);color:var(--warn)}
 </style>
 </head>
@@ -523,7 +540,17 @@ const Auth = {
     });
     if (error) throw error;
   },
-  async signOut() { await sb.auth.signOut(); location.reload(); }
+  async signOut() { await sb.auth.signOut(); location.reload(); },
+  async resetPassword(email) {
+    const { error } = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + window.location.pathname
+    });
+    if (error) throw error;
+  },
+  async setPassword(pw) {
+    const { error } = await sb.auth.updateUser({ password: pw });
+    if (error) throw error;
+  }
 };
 
 /* ============================ CHARGEMENT ============================ */
@@ -560,21 +587,21 @@ async function hydrate() {
       fme:  followerIds.includes(p.id) ? 1 : 0,
       cans: 0, avg: 0, top: '—', week: 0, act: []
     };
-    if (p.id === C.myId) { C.me = u; C.users['me'] = u; }
+    if (p.id === C.myId) { C.me = u; C.users['me'] = u; C.isAdmin = !!p.is_admin; }
     C.users[p.id] = u;
   }
 
-  /* --- stats publiques des autres (fonction filtrée côté serveur) --- */
-  await Promise.all(Object.keys(C.users)
-    .filter(k => k !== 'me' && k !== C.myId)
-    .map(async id => {
-      const u = C.users[id];
-      if (u.priv) return;
-      const { data } = await sb.rpc('public_stats', { target: id });
-      const s = data && data[0];
-      if (s) { u.cans = +s.cans||0; u.avg = +s.avg_rating||0;
-               u.week = +s.week_cans||0; u.top = s.top_style || '—'; }
-    }));
+  /* --- stats publiques des autres, en une seule requête ---
+     Une fonction par profil faisait autant d'allers-retours que de
+     membres. all_public_stats les renvoie d'un coup, en appliquant les
+     mêmes filtres côté serveur. */
+  const { data: allStats, error: statsErr } = await sb.rpc('all_public_stats');
+  if (!statsErr) for (const s of allStats || []) {
+    const u = C.users[s.user_id];
+    if (!u) continue;
+    u.cans = +s.cans||0; u.avg = +s.avg_rating||0;
+    u.week = +s.week_cans||0; u.top = s.top_style || '—';
+  }
 
   /* --- bières --- */
   C.beers = (beers.data||[]).map(b => ({
@@ -835,6 +862,22 @@ const Store = {
       brews: new Set(L.map(l => Store.beer(l.b)?.br)).size,
       wkAvg: +(n/weeks).toFixed(1), eurAvg: +(eur/weeks).toFixed(2), unAvg: +(un/weeks).toFixed(1) };
   },
+  /* ---- modération (administrateurs) ---- */
+  isAdmin: () => !!C.isAdmin,
+  async pendingBeers() {
+    const { data, error } = await sb.from('beers').select('*')
+      .eq('status','pending').order('created_at',{ ascending:true });
+    if (error) throw error;
+    return data || [];
+  },
+  async moderate(id, ok) {
+    const { error } = await sb.from('beers')
+      .update({ status: ok ? 'approved' : 'rejected' }).eq('id', id);
+    if (error) throw error;
+    const b = Store.beer(id);
+    if (b) b.ok = ok ? 1 : 0;
+  },
+
   /* ---- RGPD : portabilité et effacement ---- */
   async deleteAccount() {
     // on vide le bucket d'abord : Storage ne cascade pas, et une fois le
@@ -918,9 +961,50 @@ function drawLogin(){
     <button class="cta" onclick="doAuth()">${up?'Créer mon compte':'Se connecter'}</button>
     <button class="ghost" onclick="LGMODE='${up?'in':'up'}';drawLogin()">
       ${up?"J'ai déjà un compte":"Créer un compte"}</button>
+    ${up?'':`<button class="linkbtn" onclick="doForgot()">Mot de passe oublié ?</button>`}
     ${up?`<div class="empty" style="padding:22px 34px;font-size:11.5px">
       Ton pseudo, tes avis et tes notes sont visibles par les autres membres.
       Ton journal et tes dépenses restent privés.</div>`:''}`;
+}
+
+async function doForgot(){
+  const e = document.getElementById('lg-e').value.trim();
+  if(!/.+@.+\..+/.test(e)) return toast('Entre d\'abord ton adresse e-mail');
+  try {
+    await Auth.resetPassword(e);
+    // on ne dit jamais si l'adresse existe : ça révélerait qui a un compte
+    toast('Si un compte existe, un lien vient de partir');
+  } catch(err){ console.error(err); toast('Envoi impossible — réessaie') }
+}
+
+/* Écran affiché au retour du lien de réinitialisation. Supabase a déjà
+   ouvert une session de récupération : il ne reste qu'à choisir le mot
+   de passe. */
+function drawReset(){
+  document.querySelector('#tabs').style.display='none';
+  document.querySelector('#bottombar').style.display='none';
+  document.querySelector('#topbar').innerHTML =
+    '<span style="width:33px"></span>'+logoLockup(21)+'<span style="width:33px"></span>';
+  document.querySelector('#view').innerHTML = `
+    <div class="login-mark">${logoMark(58)}</div>
+    <div class="empty" style="padding:16px 30px 10px">
+      <b style="color:var(--text);display:block;margin-bottom:6px">Nouveau mot de passe</b>
+      Choisis-en un nouveau, tu seras connecté dans la foulée.</div>
+    <div class="field"><label>Mot de passe</label>
+      <input class="f" id="rs-p" type="password" placeholder="8 caractères minimum"
+        autocomplete="new-password" onkeydown="if(event.key==='Enter')doReset()"></div>
+    <button class="cta" onclick="doReset()">Enregistrer et continuer</button>`;
+}
+
+async function doReset(){
+  const p = document.getElementById('rs-p').value;
+  if(p.length < 8) return toast('Mot de passe : 8 caractères minimum');
+  try {
+    await Auth.setPassword(p);
+    toast('Mot de passe modifié');
+    history.replaceState(null,'',window.location.pathname);
+    location.reload();
+  } catch(err){ console.error(err); toast('Modification impossible — réessaie') }
 }
 
 async function doAuth(){
@@ -949,7 +1033,10 @@ async function doAuth(){
    ÉTAT + VUES
    ========================================================= */
 const S={tab:'home',sub:'bieres',q:'',filt:null,dir:1,user:null,back:'home'};
-const SUBS=['bieres','avis','journal'];
+/* L'onglet Journal ne s'affiche que s'il y a des articles publiés. Un
+   onglet vide coûte plus cher qu'un onglet en moins, et celui-ci
+   s'allumera tout seul le jour où l'agrégateur publiera. */
+const subs = () => C.arts.length ? ['bieres','avis','journal'] : ['bieres','avis'];
 const $=s=>document.querySelector(s);
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');
   clearTimeout(t._x);t._x=setTimeout(()=>t.classList.remove('show'),2000)}
@@ -993,7 +1080,7 @@ function chrome(){
   if(S.tab==='home'){
     T.innerHTML='<span style="width:33px"></span>'+logoLockup(21)+'<span style="width:33px"></span>';
     TB.style.display='block';
-    TB.innerHTML='<div class="tabwrap">'+SUBS.map(k=>'<button class="tab'+(S.sub===k?' on':'')
+    TB.innerHTML='<div class="tabwrap">'+subs().map(k=>'<button class="tab'+(S.sub===k?' on':'')
       +'" onclick="setSub(\''+k+'\')">'+({bieres:'Bières',avis:'Avis',journal:'Journal'})[k]+'</button>').join('')
       +'<span id="ind"></span></div>';
     requestAnimationFrame(moveInd);
@@ -1016,7 +1103,7 @@ function chrome(){
 function moveInd(){const a=document.querySelector('.tab.on'),i=document.getElementById('ind');
   if(a&&i){i.style.left=a.offsetLeft+'px';i.style.width=a.offsetWidth+'px'}}
 function setSub(k){if(k===S.sub)return;
-  S.dir=SUBS.indexOf(k)>SUBS.indexOf(S.sub)?1:-1;S.sub=k;$('#view').scrollTop=0;render(1)}
+  const L=subs();S.dir=L.indexOf(k)>L.indexOf(S.sub)?1:-1;S.sub=k;$('#view').scrollTop=0;render(1)}
 function go(t){S.dir=1;S.tab=t;$('#view').scrollTop=0;render(1)}
 function openUser(k){
   closeSheet();
@@ -1107,8 +1194,19 @@ function vSearch(){
       :'<div class="empty">Rien ne correspond.<br><br>'
        +'<button class="chip" onclick="openNewBeer(S.q)">Proposer cette bière</button></div>');
 }
-function live(){const el=document.getElementById('q'),p=el.selectionStart;
-  render();const n=document.getElementById('q');n.focus();n.setSelectionRange(p,p)}
+/* La recherche redessine tout l'écran : on attend la fin de la frappe
+   plutôt que de le faire à chaque caractère. */
+let _liveT;
+function live(){
+  clearTimeout(_liveT);
+  _liveT = setTimeout(() => {
+    const el=document.getElementById('q'); if(!el) return;
+    const p=el.selectionStart;
+    render();
+    const n=document.getElementById('q');
+    if(n){ n.focus(); n.setSelectionRange(p,p) }
+  }, 160);
+}
 
 /* ---------- copains ---------- */
 function vFriends(){
@@ -1278,6 +1376,8 @@ function vAccount(){
     ['Exporter tes données','Ton journal en CSV, ouvrable dans Excel','exportData()'],
     ['Vérification d\'âge','Confirmée'],['Aide et modération','Signaler une fiche, un prix, un avis'],
     ['À propos','Version, licences et prévention','openAbout()']];
+  if(Store.isAdmin()) rows.splice(4,0,
+    ['Fiches à valider','Propositions en attente de modération','openModeration()']);
   const mph=safeUrl(me.photo);
   const pst=mph?'background-image:url('+mph+')':'';
   return '<div class="phead" style="padding-bottom:14px">'
@@ -1292,6 +1392,44 @@ function vAccount(){
      +'<span class="t"><b>'+r[0]+'</b><span>'+r[1]+'</span></span><span class="chev">'+I.chev+'</span></button>').join('')
    +'<button class="ghost" style="margin-top:20px" onclick="Auth.signOut()">Se déconnecter</button>'
    +'<button class="ghost" style="margin-top:10px;color:var(--bad);border-color:#3a1f1f" onclick="confirmDelete()">Supprimer mon compte</button>';
+}
+
+/* ---------- modération des fiches proposées ---------- */
+async function openModeration(){
+  const sh=$('#sheet'); sh.classList.add('open');
+  sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
+   +'<div class="sheet-bar"><b>Fiches à valider</b><button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
+   +'<div class="sheet-body"><div class="empty">Chargement…</div></div></div>';
+  let list;
+  try { list = await Store.pendingBeers(); }
+  catch(e){ console.error(e); closeSheet(); toast('Liste indisponible'); return }
+  drawModeration(list);
+}
+function drawModeration(list){
+  const body=document.querySelector('#sheet .sheet-body'); if(!body) return;
+  body.innerHTML =
+    '<div class="note">'+I.info+'<span>Vérifie le nom, la brasserie et la cohérence du degré '
+   +'et du format. Une fiche rejetée reste visible de son auteur seul.</span></div>'
+   +(list.length
+     ? list.map(b=>'<div class="modrow" id="mod-'+esc(b.id)+'">'
+        +'<div class="modinfo"><b>'+esc(b.name)+'</b>'
+          +'<span>'+esc(b.brewery)+' · '+esc(b.style||'style non précisé')+' · '
+          +(b.abv||'?')+'° · '+(b.volume_cl||'?')+' cl · '+esc(b.country||'—')+'</span></div>'
+        +'<div class="modacts">'
+          +'<button class="modbtn no" onclick="doModerate(\''+esc(b.id)+'\',0)">Rejeter</button>'
+          +'<button class="modbtn yes" onclick="doModerate(\''+esc(b.id)+'\',1)">Valider</button>'
+        +'</div></div>').join('')
+     : '<div class="empty">Aucune fiche en attente. Tout est à jour.</div>');
+}
+async function doModerate(id, ok){
+  const r = await act(()=>Store.moderate(id, ok), 'Décision non enregistrée — réessaie');
+  if(r===null) return;
+  const row=document.getElementById('mod-'+id);
+  if(row) row.remove();
+  toast(ok ? 'Fiche validée' : 'Fiche rejetée');
+  if(!document.querySelector('.modrow'))
+    document.querySelector('#sheet .sheet-body').innerHTML =
+      '<div class="empty">Aucune fiche en attente. Tout est à jour.</div>';
 }
 
 /* ---------- RGPD : exporter et supprimer ---------- */
@@ -1478,15 +1616,17 @@ function drawFoll(t){
 }
 
 /* ---------- fiche bière ---------- */
-let SH={beer:null,rate:0,liked:0,txt:'',shop:'',paid:'',logId:null,already:0};
+let SH={beer:null,rate:0,liked:0,txt:'',shop:'',paid:'',logId:null,already:0,rate0:0,liked0:0,txt0:''};
 function openBeer(id){
-  SH={beer:id,rate:0,liked:0,txt:'',shop:'',paid:'',logId:null,already:0};
+  SH={beer:id,rate:0,liked:0,txt:'',shop:'',paid:'',logId:null,already:0,rate0:0,liked0:0,txt0:''};
   // une seule note par bière : si elle existe déjà, on la charge pour
   // que le geste suivant soit une modification, pas un doublon
   const rated = Store.myRatedLog(id);
   if(rated){ SH.rate=rated.r; SH.liked=rated.liked?1:0; SH.logId=rated.id; SH.already=1 }
   const mine = Store.myReview(id);
   if(mine) SH.txt = mine.t;
+  // valeurs d'origine, pour savoir plus tard ce qui a été touché
+  SH.rate0=SH.rate; SH.liked0=SH.liked; SH.txt0=SH.txt;
   drawSheet();
 }
 function drawSheet(){
@@ -1618,22 +1758,30 @@ async function saveLog(){
   render(); bump();
 }
 
-/* +1 : une canette de plus au journal, sans nouvelle note. Elle compte
-   dans le volume, les unités, les calories et les dépenses, mais pas
-   dans la moyenne publique de la bière. */
+/* +1 : une canette de plus au journal. Elle compte dans le volume, les
+   unités, les calories et les dépenses, mais pas dans la moyenne publique.
+   Si la note ou l'avis ont été modifiés avant le clic, on enregistre aussi
+   la correction — sinon le geste ferait perdre ce qui vient d'être saisi. */
 async function addOne(){
   const b = Store.beer(SH.beer);
   const bp = Store.bestPrice(b);
+  const paid = parseFloat((SH.paid||'').replace(',','.')) || null;
+  const noteModifiee = SH.rate !== SH.rate0 || SH.liked !== SH.liked0;
+  const avisModifie  = SH.txt.trim() !== SH.txt0.trim();
   try {
     await Store.addLog({ b:b.id, r:0, d:"aujourd'hui", liked:0,
-                         paid: bp?bp.p:0, shop:null });
+                         paid: paid || (bp?bp.p:0), shop: SH.shop || null });
+    if (noteModifiee && SH.logId) await Store.updateLog(SH.logId, { r:SH.rate, liked:SH.liked });
+    if (SH.shop && paid) await Store.addPrice(b.id, SH.shop, paid);
+    if (avisModifie && SH.txt.trim())
+      await Store.addReview({ b:b.id, r:SH.rate, liked:SH.liked, t:SH.txt.trim() });
   } catch(e){
     console.error(e);
     toast('Impossible d\'ajouter — réessaie');
     return;
   }
   closeSheet();
-  toast('+1 ' + b.n);
+  toast('+1 ' + b.n + (noteModifiee ? ' · note mise à jour' : ''));
   render(); bump();
 }
 function bump(){const el=document.getElementById('bign');if(el){el.classList.add('bump');
@@ -1726,8 +1874,15 @@ function drawError(){
    +'<button class="cta" onclick="location.reload()">Réessayer</button>';
 }
 
+/* Le lien de réinitialisation revient avec type=recovery dans le fragment
+   d'URL. Il faut l'intercepter avant l'hydratation : la session existe,
+   donc sans ça l'app démarrerait normalement et le mot de passe ne serait
+   jamais changé. */
+const isRecovery = () => /[#&]type=recovery/.test(window.location.hash || '');
+
 (async () => {
   try {
+    if (isRecovery()) { drawReset(); return; }
     const ok = await hydrate();
     if (!ok) { drawLogin(); return; }
     render();

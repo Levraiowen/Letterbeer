@@ -149,13 +149,19 @@ async function run() {
   console.log(`\n${batch.length} bières prêtes à insérer.`);
   if (!batch.length) return;
 
-  // insertion par paquets de 50, on ignore les doublons de code-barres
+  // Insertion par paquets de 50, en n'ajoutant QUE les codes-barres absents.
+  //
+  // ignoreDuplicates est essentiel : sans lui, l'upsert réécrivait les
+  // fiches existantes avec les valeurs brutes d'Open Food Facts, et une
+  // seconde exécution annulait tout le nettoyage des noms fait à la main.
   for (let i = 0; i < batch.length; i += 50) {
     const chunk = batch.slice(i, i + 50);
-    const { error } = await sb.from('beers').upsert(chunk, { onConflict: 'barcode' });
+    const { error } = await sb.from('beers')
+      .upsert(chunk, { onConflict: 'barcode', ignoreDuplicates: true });
     if (error) console.error('Erreur insertion :', error.message);
-    else console.log(`Insérées ${i + chunk.length}/${batch.length}`);
+    else console.log(`Traitées ${i + chunk.length}/${batch.length}`);
   }
+  console.log('Les fiches déjà présentes n\'ont pas été touchées.');
 
   console.log('\nTerminé. Pense à afficher l\'attribution Open Food Facts dans l\'app.');
 }
