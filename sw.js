@@ -12,7 +12,7 @@
  *   API/auth   → réseau uniquement, jamais de données périmées ni de jeton en cache
  */
 
-const VERSION = 'lb-v3.2.1';
+const VERSION = 'lb-v3.3.0';
 const COQUE   = VERSION + '-coque';
 const PHOTOS  = VERSION + '-photos';
 
@@ -84,17 +84,24 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Navigation : on sert la coque en cache immédiatement, et on rafraîchit
-  // en arrière-plan pour que la version suivante soit à jour.
+  // Navigation : réseau d'abord, cache en secours.
+  //
+  // La version précédente servait le cache en premier. Sur une app qui
+  // change tous les jours, ça bloquait les gens sur une version périmée
+  // pendant un ou deux rechargements — avec des symptômes déroutants,
+  // du genre mise en page cassée par un CSS d'une autre version.
+  // Le cache reste là pour le hors-ligne, mais il ne passe plus devant.
   if (request.mode === 'navigate') {
     e.respondWith(
-      caches.match('./index.html').then(hit => {
-        const reseau = fetch(request).then(res => {
-          if (res.ok) caches.open(COQUE).then(c => c.put('./index.html', res.clone()));
+      fetch(request)
+        .then(res => {
+          if (res.ok) {
+            const copie = res.clone();
+            caches.open(COQUE).then(c => c.put('./index.html', copie));
+          }
           return res;
-        }).catch(() => hit);
-        return hit || reseau;
-      })
+        })
+        .catch(() => caches.match('./index.html').then(hit => hit || caches.match('./')))
     );
     return;
   }
