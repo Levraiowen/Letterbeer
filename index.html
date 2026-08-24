@@ -89,14 +89,19 @@ body{background:#000;font-family:'Inter',system-ui,sans-serif;color:var(--text);
   transition:transform .26s var(--e),box-shadow .26s,border-color .26s}
 .can::after{content:'';position:absolute;inset:0;background:linear-gradient(115deg,rgba(255,255,255,.11),transparent 44%);
   opacity:0;transition:opacity .3s}
-.cell:hover .can{transform:translateY(-6px) scale(1.035);border-color:#3a3a41;
-  box-shadow:0 14px 26px -12px rgba(0,0,0,.9),0 0 22px -6px var(--glow)}
-.cell:hover .can::after{opacity:1}
+/* Sur un écran tactile, :hover reste collé sur le dernier élément touché :
+   la carte tapée resterait agrandie et surélevée, comme si elle buguait.
+   On réserve donc l'effet aux appareils qui survolent vraiment. */
+@media (hover:hover){
+  .cell:hover .can{transform:translateY(-6px) scale(1.035);border-color:#3a3a41;
+    box-shadow:0 14px 26px -12px rgba(0,0,0,.9),0 0 22px -6px var(--glow)}
+  .cell:hover .can::after{opacity:1}
+  .cell:hover .stars{color:var(--accent)}
+  .cell:hover .pull{background:var(--accent)}
+}
 .cell:active .can{transform:translateY(-2px) scale(.99)}
-.cell:hover .stars{color:var(--accent)}
 .can .rim{height:15%;background:#2C2C31;border-bottom:1px solid #0f0f11;display:flex;align-items:center;justify-content:center}
 .can .pull{width:15px;height:6px;border-radius:5px;background:#45454c;transition:background .3s}
-.cell:hover .pull{background:var(--accent)}
 .can .body{flex:1;display:flex;flex-direction:column;justify-content:flex-end}
 .can .band{padding:7px 7px 8px}
 .can .bname{font-family:'Space Grotesk';font-weight:600;font-size:10.5px;line-height:1.2;color:#1a0800}
@@ -358,10 +363,16 @@ textarea:focus,input.f:focus,select.f:focus{border-color:var(--accent);box-shado
 .toast.show{opacity:1;transform:translateX(-50%)}
 .divider{height:1px;background:var(--border);margin:18px 20px 0}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-.can .ph{position:absolute;inset:0;background-size:cover;background-repeat:no-repeat;
-  background-position:center;background-color:#0E0E11;filter:saturate(1.05) brightness(.96)}
-.can.hasph .ph::before{content:'';position:absolute;inset:0;pointer-events:none;
-  background:linear-gradient(to bottom,rgba(14,14,17,.4),transparent 34%)}
+.can .ph{position:absolute;inset:0;background:#0E0E11;overflow:hidden}
+/* fond : la photo agrandie et floutée, pour qu'aucune bande vide n'apparaisse */
+.can .ph-bg{position:absolute;inset:-12%;background-size:cover;background-position:center;
+  filter:blur(15px) saturate(1.35) brightness(.5);transform:scale(1.08)}
+/* premier plan : la photo entière, jamais rognée, donc un cadrage
+   identique d'une bière à l'autre quel que soit le format d'origine */
+.can .ph-fg{position:absolute;inset:0;background-size:contain;background-repeat:no-repeat;
+  background-position:center 42%;padding:6% 8% 22%;background-origin:content-box}
+.can.hasph .ph::after{content:'';position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(to bottom,rgba(14,14,17,.45),transparent 30%)}
 .can.hasph .band{background:linear-gradient(to top,rgba(0,0,0,.94),rgba(0,0,0,.6) 72%,transparent)!important;
   position:relative;z-index:2}
 .can.hasph .bname{color:#F4EFE8}
@@ -376,7 +387,7 @@ textarea:focus,input.f:focus,select.f:focus{border-color:var(--accent);box-shado
 .stars .stf{position:absolute;left:0;top:0;overflow:hidden;white-space:nowrap;
   color:var(--accent);transition:width .18s var(--e)}
 .stars.dim .stf{color:var(--dimmer)}
-.cell:hover .stars .stf{color:var(--accent)}
+@media (hover:hover){.cell:hover .stars .stf{color:var(--accent)}}
 /* --- saisie de la note, demi-étoile au tap --- */
 .rsw{position:relative;display:inline-block;font-size:30px;line-height:1}
 .rss{position:relative;display:block;color:var(--dimmer)}
@@ -473,6 +484,22 @@ textarea:focus,input.f:focus,select.f:focus{border-color:var(--accent);box-shado
   color:var(--dimmer);width:32px;height:32px;display:flex;align-items:center;
   justify-content:center;cursor:pointer;transition:.2s var(--e)}
 .jdel:hover{color:var(--bad);border-color:#3a1f1f;background:rgba(255,77,77,.08)}
+/* --- propositions et signalement --- */
+.stbadge{flex:0 0 auto;font-size:10.5px;font-weight:600;letter-spacing:.03em;
+  padding:4px 9px;border-radius:14px;white-space:nowrap}
+.stbadge.ok{color:var(--ok);background:rgba(63,217,139,.12)}
+.stbadge.wait{color:var(--warn);background:rgba(232,176,75,.13)}
+.act.flag{margin-left:auto;color:var(--dimmer)}
+.act.flag:hover{color:var(--warn)}
+.reportlink{display:flex;align-items:center;justify-content:center;gap:7px;width:calc(100% - 40px);
+  margin:16px 20px 0;background:none;border:0;cursor:pointer;font-family:inherit;
+  font-size:11.5px;color:var(--dimmer);padding:8px}
+.reportlink:hover{color:var(--warn)}
+select.f{appearance:none;-webkit-appearance:none;
+  background-image:linear-gradient(45deg,transparent 50%,var(--dim) 50%),
+    linear-gradient(135deg,var(--dim) 50%,transparent 50%);
+  background-position:calc(100% - 18px) 50%,calc(100% - 13px) 50%;
+  background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:36px}
 .tg.alrg{background:rgba(232,176,75,.13);color:var(--warn)}
 </style>
 </head>
@@ -531,6 +558,7 @@ const I={
  zoom:'<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.6-4.6M10.5 7.8v5.4M7.8 10.5h5.4"/></svg>',
  ext:'<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path d="M14 4h6v6M20 4l-8.5 8.5"/><path d="M18 14v5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 19V8a1.5 1.5 0 0 1 1.5-1.5H10"/></svg>',
  trash:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 4.5h4M9.5 11v6M14.5 11v6"/><path d="M6 7l.9 12.2A1.5 1.5 0 0 0 8.4 20.5h7.2a1.5 1.5 0 0 0 1.5-1.3L18 7"/></svg>',
+ flag:'<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 21V4"/><path d="M5.5 5.2h11l-1.8 3.6 1.8 3.6h-11"/></svg>',
  chev:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>',
  cam:'<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5h3l1.6-2.4h8.8L18 8.5h3v11H3Z"/><circle cx="12" cy="13.6" r="3.4"/></svg>',
  lock:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10" width="15" height="10.5" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
@@ -547,8 +575,8 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 const PRICE_TTL = 21;
 
 /* cache local */
-const C = { me:null, myId:null, email:'', users:{}, beers:[], ratings:{}, counts:{},
-            reviews:[], logs:[], follows:[], watch:[], arts:[] };
+const C = { me:null, myId:null, email:'', isAdmin:false, users:{}, beers:[], ratings:{}, counts:{},
+            reviews:[], logs:[], follows:[], watch:[], wish:[], arts:[] };
 
 /* ============================ AUTHENTIFICATION ============================ */
 const Auth = {
@@ -584,7 +612,7 @@ async function hydrate() {
   C.myId = user.id;
   C.email = user.email || '';
 
-  const [profiles, beers, ratings, reviews, replies, reactions, logs, prices, follows, watch] =
+  const [profiles, beers, ratings, reviews, replies, reactions, logs, prices, follows, watch, wish] =
     await Promise.all([
       sb.from('profiles').select('*'),
       sb.from('beers').select('*'),
@@ -595,8 +623,10 @@ async function hydrate() {
       sb.from('logs').select('*').order('drunk_at', { ascending:false }),
       sb.from('prices').select('*'),
       sb.from('follows').select('*'),
-      sb.from('beer_watchers').select('*')
+      sb.from('beer_watchers').select('*'),
+      sb.from('wishlist').select('beer_id')
     ]);
+  C.wish = (wish.data||[]).map(w => w.beer_id);
 
   /* --- profils --- */
   const followingIds = (follows.data||[]).filter(f => f.follower_id === C.myId).map(f => f.followee_id);
@@ -911,6 +941,41 @@ const Store = {
       brews: new Set(L.map(l => Store.beer(l.b)?.br)).size,
       wkAvg: +(n/weeks).toFixed(1), eurAvg: +(eur/weeks).toFixed(2), unAvg: +(un/weeks).toFixed(1) };
   },
+  /* ---- infos perso ---- */
+  async saveProfile(p) {
+    const patch = {};
+    if (p.h != null)     patch.handle = p.h.trim().toLowerCase();
+    if (p.ville != null) patch.city   = p.ville.trim() || null;
+    const { error } = await sb.from('profiles').update(patch).eq('id', C.myId);
+    if (error) throw error;
+    if (patch.handle) { C.me.h = patch.handle; C.me.i = initials(patch.handle) }
+    if ('city' in patch) C.me.ville = patch.city || '—';
+  },
+
+  /* ---- liste d'envies ---- */
+  wished:   id => C.wish.includes(id),
+  wishlist: () => C.wish.map(Store.beer).filter(Boolean),
+  async toggleWish(id) {
+    const on = !C.wish.includes(id);
+    const { error } = on
+      ? await sb.from('wishlist').insert({ user_id:C.myId, beer_id:id })
+      : await sb.from('wishlist').delete().eq('user_id',C.myId).eq('beer_id',id);
+    if (error) throw error;
+    C.wish = on ? [...C.wish, id] : C.wish.filter(x => x !== id);
+    return on;
+  },
+
+  /* ---- mes propositions ---- */
+  myBeers: () => C.beers.filter(b => b.mine),
+
+  /* ---- signalements ---- */
+  async report(type, id, reason) {
+    const { error } = await sb.from('reports').insert({
+      reporter_id:C.myId, target_type:type, target_id:id, reason: reason || null
+    });
+    if (error) throw error;
+  },
+
   /* ---- modération (administrateurs) ---- */
   isAdmin: () => !!C.isAdmin,
   async pendingBeers() {
@@ -1101,8 +1166,13 @@ function shortName(n){ return n.length > 42 ? n.slice(0,40).trim()+'…' : n }
 function can(b,x){
   if(!b) return '<div class="can"><div class="rim"><span class="pull"></span></div></div>';
   const img = safeUrl(b.img);
+  // Deux couches : la photo entière au premier plan, et la même en fond
+  // flouté pour remplir la case. Les photos d'Open Food Facts ont des
+  // cadrages très variables — sans ça, l'une montre la canette entière
+  // et la voisine un gros plan sur trois lettres.
   return '<div class="can'+(img?' hasph':'')+'">'
-   + (img ? '<div class="ph" style="background-image:url('+img+')"></div>'
+   + (img ? '<div class="ph"><div class="ph-bg" style="background-image:url('+img+')"></div>'
+            +'<div class="ph-fg" style="background-image:url('+img+')"></div></div>'
           : '<div class="rim"><span class="pull"></span></div>')
    + (b.ok ? '' : '<span class="pend">en attente</span>')
    + '<div class="body"><div class="band" style="background:'+safeColor(b.c)+'"><div class="brow">'
@@ -1221,6 +1291,8 @@ function revHTML(r){
      +'<button class="act'+(r.pass?' on':'')+'" onclick="doPass(\''+id+'\')">'+I.pass+'</button>'
      +'<button class="act bof'+(r.mybof?' on':'')+'" onclick="doBof(\''+id+'\')" '
        +'aria-label="Bof, moins d\'avis comme celui-ci">'+I.flat+'</button>'
+     +(mine?'':'<button class="act flag" onclick="openReport(\'review\',\''+id+'\',\'l\\\'avis de '
+       +esc((Store.user(r.u)||Store.me()).h).replace(/'/g,"\\'")+'\')" aria-label="Signaler cet avis">'+I.flag+'</button>')
    +'</div>'
    +(r.mybof?'<div class="privcount">'+I.lock+'Bof enregistré — personne d\'autre ne le voit</div>':'')
    +(mine&&r.bof?'<div class="privcount">'+I.lock+r.bof+' bof sur ton avis — visible par toi seul</div>':'')
@@ -1431,12 +1503,13 @@ function shrink(file, max){
 /* ---------- compte ---------- */
 function vAccount(){
   const me=Store.me();
-  const rows=[['Infos perso','Pseudo, e-mail, ville'],
+  const nWish=Store.wishlist().length, nMine=Store.myBeers().length;
+  const rows=[
+    ['Infos perso','Pseudo, ville et adresse e-mail','openProfileEdit()'],
     ['Confidentialité','Ce qui est collecté, où c\'est hébergé, tes droits','openAbout(\'data\')'],
-    ['Devise et unités','€ · cl'],['Notifications','Réponses, mentions, baisses de prix'],
-    ['Mes propositions de bières','Fiches envoyées à la validation'],
+    ['À goûter', nWish?nWish+' canette'+(nWish>1?'s':'')+' sur ta liste':'Ta liste d\'envies est vide','openWishlist()'],
+    ['Mes propositions de bières', nMine?nMine+' fiche'+(nMine>1?'s':'')+' proposée'+(nMine>1?'s':''):'Aucune fiche proposée','openMyBeers()'],
     ['Exporter tes données','Ton journal en CSV, ouvrable dans Excel','exportData()'],
-    ['Vérification d\'âge','Confirmée'],['Aide et modération','Signaler une fiche, un prix, un avis'],
     ['À propos','Version, licences et prévention','openAbout()']];
   if(Store.isAdmin()) rows.splice(4,0,
     ['Fiches à valider','Propositions en attente de modération','openModeration()']);
@@ -1454,6 +1527,114 @@ function vAccount(){
      +'<span class="t"><b>'+r[0]+'</b><span>'+r[1]+'</span></span><span class="chev">'+I.chev+'</span></button>').join('')
    +'<button class="ghost" style="margin-top:20px" onclick="Auth.signOut()">Se déconnecter</button>'
    +'<button class="ghost" style="margin-top:10px;color:var(--bad);border-color:#3a1f1f" onclick="confirmDelete()">Supprimer mon compte</button>';
+}
+
+/* ---------- infos perso ---------- */
+let PF={h:'',ville:''};
+function openProfileEdit(){
+  const me=Store.me();
+  PF={h:me.h,ville:me.ville==='—'?'':me.ville};
+  const sh=$('#sheet'); sh.classList.add('open');
+  sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
+   +'<div class="sheet-bar"><b>Infos perso</b><button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
+   +'<div class="sheet-body">'
+   +'<div class="field"><label>Pseudo</label>'
+     +'<input class="f" id="pf-h" maxlength="20" value="'+esc(PF.h)+'" oninput="PF.h=this.value"></div>'
+   +'<div class="hint">3 à 20 caractères, minuscules, chiffres, tiret bas ou point. C\'est ce que voient les autres.</div>'
+   +'<div class="field" style="margin-top:16px"><label>Ville <span style="color:var(--dimmer)">— facultative</span></label>'
+     +'<input class="f" id="pf-v" maxlength="60" value="'+esc(PF.ville)+'" oninput="PF.ville=this.value"></div>'
+   +'<div class="hint">Elle apparaît sur ton profil. Laisse vide si tu préfères.</div>'
+   +'<div class="ab-card" style="margin-top:22px"><div class="ab-k">Adresse e-mail</div>'
+     +'<div class="ab-v">'+esc(C.email||'—')+'</div>'
+     +'<div class="ab-p dim" style="margin-top:6px">Elle sert uniquement à te connecter et n\'est jamais montrée '
+     +'aux autres. Pour en changer, écris-moi.</div></div>'
+   +'<div class="ab-card"><div class="ab-k">Vérification d\'âge</div>'
+     +'<div class="ab-v">'+I.check+' Majorité confirmée à l\'inscription</div>'
+     +'<div class="ab-p dim" style="margin-top:6px">Déclaration sur l\'honneur, comme sur la plupart des services. '
+     +'Elle ne peut plus être modifiée depuis l\'app.</div></div>'
+   +'<button class="cta" onclick="saveProfileEdit()">Enregistrer</button>'
+   +'</div></div>';
+}
+async function saveProfileEdit(){
+  const h=(PF.h||'').trim().toLowerCase().replace(/\s+/g,'_');
+  if(!/^[a-z0-9_.]{3,20}$/.test(h)) return toast('Pseudo : 3 à 20 caractères, sans espace ni accent');
+  const r = await act(()=>Store.saveProfile({h, ville:PF.ville}),
+                      'Ce pseudo est peut-être déjà pris');
+  if(r===null) return;
+  closeSheet(); toast('Profil mis à jour'); render();
+}
+
+/* ---------- liste d'envies ---------- */
+function openWishlist(){
+  const sh=$('#sheet'); sh.classList.add('open');
+  sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
+   +'<div class="sheet-bar"><b>À goûter</b><button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
+   +'<div class="sheet-body" id="wl"></div></div>';
+  drawWishlist();
+}
+function drawWishlist(){
+  const el=document.getElementById('wl'); if(!el) return;
+  const L=Store.wishlist();
+  el.innerHTML = L.length
+    ? '<div class="grid" style="padding-top:16px">'+L.map(b=>cell(b)).join('')+'</div>'
+    : '<div class="empty">Rien pour l\'instant.<br><br>Sur une fiche bière, « + À goûter » '
+      +'ajoute la canette ici. Pratique pour ne pas oublier une envie devant le rayon.</div>';
+}
+async function toggleWish(){
+  const on = await act(()=>Store.toggleWish(SH.beer), 'Impossible pour le moment — réessaie');
+  if(on===null) return;
+  drawSheet();
+  toast(on ? 'Ajoutée à ta liste d\'envies' : 'Retirée de ta liste');
+}
+
+/* ---------- mes propositions ---------- */
+function openMyBeers(){
+  const L=Store.myBeers();
+  const sh=$('#sheet'); sh.classList.add('open');
+  const badge = b => b.ok
+    ? '<span class="stbadge ok">Validée</span>'
+    : '<span class="stbadge wait">En attente</span>';
+  sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
+   +'<div class="sheet-bar"><b>Mes propositions</b><button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
+   +'<div class="sheet-body">'
+   +'<div class="note">'+I.info+'<span>Une fiche que tu proposes est visible par toi tout de suite, '
+     +'et par les autres une fois vérifiée.</span></div>'
+   +(L.length
+     ? L.map(b=>'<div class="jrow">'
+        +'<span style="width:30px;flex:0 0 30px">'+can(b)+'</span>'
+        +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(b.br)+' · '+(b.abv||'?')+'° · '+b.cl+' cl</span></span>'
+        +badge(b)+'</div>').join('')
+     : '<div class="empty">Tu n\'as encore proposé aucune bière.<br><br>'
+       +'Le bouton + puis « Elle n\'est pas dans la base » si tu en trouves une qui manque.</div>')
+   +'</div></div>';
+}
+
+/* ---------- signalement ---------- */
+function openReport(type, id, quoi){
+  const sh=$('#sheet'); sh.classList.add('open');
+  const motifs = type==='review'
+    ? ['Propos haineux ou insultants','Hors sujet ou publicité','Faux avis','Autre']
+    : ['Informations fausses','Doublon d\'une fiche existante','Photo inappropriée','Autre'];
+  sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
+   +'<div class="sheet-bar"><b>Signaler</b><button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
+   +'<div class="sheet-body">'
+   +'<div class="ab-p">Tu signales : <b>'+esc(quoi)+'</b></div>'
+   +'<div class="field" style="margin-top:16px"><label>Motif</label>'
+     +'<select class="f" id="rp-m">'+motifs.map(m=>'<option>'+esc(m)+'</option>').join('')+'</select></div>'
+   +'<div class="field" style="margin-top:14px"><label>Précision <span style="color:var(--dimmer)">— facultative</span></label>'
+     +'<textarea id="rp-t" rows="3" placeholder="Ce qui te dérange, en deux mots…"></textarea></div>'
+   +'<div class="hint">On est peu nombreux : un signalement me remonte directement, '
+     +'je regarde et je te réponds si besoin.</div>'
+   +'<button class="cta" onclick="sendReport(\''+esc(type)+'\',\''+esc(id)+'\')">Envoyer le signalement</button>'
+   +'</div></div>';
+}
+async function sendReport(type, id){
+  const m=document.getElementById('rp-m').value;
+  const t=document.getElementById('rp-t').value.trim();
+  const r = await act(()=>Store.report(type, id, t ? m+' — '+t : m),
+                      'Signalement non envoyé — réessaie');
+  if(r===null) return;
+  closeSheet(); toast('Signalement envoyé, merci');
 }
 
 /* ---------- journal complet, corrigeable ---------- */
@@ -1776,6 +1957,8 @@ function drawSheet(){
      +'<div class="hint">Une note, c\'est tout. Le reste est optionnel. Touche la moitié gauche d\'une étoile pour une demi-note.</div>'
      +'<div style="display:flex;gap:9px;margin-top:13px">'
        +'<button class="chip'+(SH.liked?' on':'')+'" style="flex:1;text-align:center" onclick="SH.liked=SH.liked?0:1;drawSheet()">♥ Coup de cœur</button>'
+       +'<button class="chip'+(Store.wished(b.id)?' on':'')+'" style="flex:1;text-align:center" onclick="toggleWish()">'
+         +(Store.wished(b.id)?'✓ Sur ta liste':'+ À goûter')+'</button>'
      +'</div>'
      // noter n'est pas toujours boire : on laisse le choix, coché par défaut
      +(SH.already?'':'<div class="lockrow" style="margin-top:13px"><span class="t">'
@@ -1815,6 +1998,8 @@ function drawSheet(){
      +'<div class="tagline" style="padding-top:10px">'+b.allerg.split(',').map(a=>'<span class="tg alrg">'+esc(a.trim())+'</span>').join('')+'</div>'
      +(b.ingr?'<div class="ab-p dim" style="padding:0 20px">Ingrédients : '+esc(b.ingr)+'</div>':''):'')
    +'<div class="tagline">'+[b.st,b.pays,(b.abv||'?')+'°','canette '+b.cl+' cl',Store.kcal(b)+' kcal'].map(t=>'<span class="tg">'+esc(t)+'</span>').join('')+'</div>'
+   +'<button class="reportlink" onclick="openReport(\'beer\',\''+esc(b.id)+'\',\'la fiche '
+     +esc(b.n).replace(/'/g,"\\'")+'\')">'+I.flag+' Signaler un problème sur cette fiche</button>'
    +'<div class="sec" style="padding-top:22px"><h2>Les avis</h2><span class="eyebrow">'+revs.length+'</span></div>'
    +(revs.length?revs.map(revHTML).join(''):'<div class="empty" style="padding:26px 34px">Personne n\'a encore écrit sur celle-ci. À toi de jouer.</div>')
    +'</div></div>';
