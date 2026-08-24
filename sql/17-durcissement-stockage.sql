@@ -36,14 +36,29 @@ create policy "delete_beers" on storage.objects for delete to authenticated
 
 
 -- ------------------------------------------------------------
--- ⚠️ À FAIRE DANS L'INTERFACE, ces réglages ne sont pas accessibles
---    en SQL : Storage → chaque bucket → Configuration
+-- Taille et types de fichiers acceptés
 --
---    Taille maximale par fichier : 2 MB
---    Types MIME autorisés        : image/jpeg, image/png, image/webp
+-- Ces limites vivent dans storage.buckets et se posent donc en SQL,
+-- inutile de les chercher dans l'interface.
 --
--- Sans cette limite, rien n'empêche d'envoyer un fichier de plusieurs
--- centaines de mégaoctets, ni un fichier qui n'est pas une image.
--- Le redimensionnement côté navigateur ne protège pas : il suffit
--- d'appeler l'API directement pour le contourner.
+-- Sans elles, rien n'empêche d'envoyer un fichier de plusieurs centaines
+-- de mégaoctets, ni un fichier qui n'est pas une image. Le
+-- redimensionnement côté navigateur ne protège pas : il suffit d'appeler
+-- l'API directement pour le contourner.
+--
+-- 2 Mo est large : une photo redimensionnée par l'app pèse autour de
+-- cent kilooctets.
 -- ------------------------------------------------------------
+update storage.buckets
+   set file_size_limit    = 2097152,                                  -- 2 Mo
+       allowed_mime_types = array['image/jpeg','image/png','image/webp']
+ where id in ('avatars','beers');
+
+
+-- ------------------------------------------------------------
+-- Contrôle : deux lignes, chacune à 2097152 et trois types autorisés.
+-- ------------------------------------------------------------
+select id, file_size_limit, allowed_mime_types
+from storage.buckets
+where id in ('avatars','beers')
+order by id;
