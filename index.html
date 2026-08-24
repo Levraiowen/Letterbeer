@@ -216,6 +216,27 @@ button.lockup:active{transform:scale(.96)}
 .act.bof{margin-left:auto;padding:6px 9px}
 .act.bof.on{color:var(--warn);background:rgba(232,176,75,.13)}
 .privcount{font-size:10.5px;color:var(--dimmer);padding:7px 0 0 64px;display:flex;align-items:center;gap:6px}
+/* --- fil de conversation --- */
+.fil{display:flex;flex-direction:column;gap:14px;padding:14px 20px 0}
+.msg{display:flex;gap:11px;align-items:flex-start}
+.msg-b{flex:1;min-width:0;background:var(--surface);border:1px solid var(--border);
+  border-radius:13px;padding:10px 13px 8px}
+.msg-h{display:flex;align-items:center;gap:8px}
+.msg-h b{font-size:12.5px;font-weight:600;color:var(--text)}
+.msg-h span{font-size:10.5px;color:var(--dimmer)}
+.msg-x{margin-left:auto;background:none;border:0;padding:2px;cursor:pointer;
+  color:var(--dimmer);display:flex;line-height:0;border-radius:5px}
+.msg-x svg{width:14px;height:14px}
+.msg-x:hover{color:var(--bad)}
+.msg-t{font-size:13px;line-height:1.55;color:var(--dim);margin-top:4px;
+  overflow-wrap:anywhere}
+.msg-r{background:none;border:0;padding:5px 0 0;cursor:pointer;font-family:inherit;
+  font-size:11px;font-weight:600;color:var(--dimmer);letter-spacing:.02em}
+.msg-r:hover{color:var(--accent)}
+/* le lien qui remplace la pile de réponses dans une carte */
+.voirtout{background:none;border:0;padding:4px 0 0;cursor:pointer;font-family:inherit;
+  font-size:11.5px;font-weight:600;color:var(--accent);letter-spacing:.01em}
+.voirtout:hover{text-decoration:underline;text-underline-offset:3px}
 /* --- répondre à un avis --- */
 .rep-src{display:flex;gap:12px;align-items:flex-start;margin:16px 20px 0;padding:13px 15px;
   background:var(--surface);border:1px solid var(--border);border-radius:13px}
@@ -906,7 +927,8 @@ async function hydrate() {
     mybof:(reactions.data||[]).some(x => x.review_id===r.id && x.kind==='bof')   ? 1 : 0,
     pass: (reactions.data||[]).some(x => x.review_id===r.id && x.kind==='pass')  ? 1 : 0,
     rep: (replies.data||[]).filter(x => x.review_id === r.id)
-           .map(x => ({ u: x.user_id === C.myId ? 'me' : x.user_id, t: x.body }))
+           .map(x => ({ id:x.id, u: x.user_id === C.myId ? 'me' : x.user_id,
+                        t: x.body, at: x.created_at }))
   }));
 
   /* --- mon journal --- */
@@ -1077,9 +1099,16 @@ const Store = {
   async pass(id)  { return react(id, 'pass'); },
 
   async addReply(id, t) {
-    const { error } = await sb.from('replies').insert({ user_id:C.myId, review_id:id, body:t });
+    const { data, error } = await sb.from('replies')
+      .insert({ user_id:C.myId, review_id:id, body:t }).select().single();
     if (error) throw error;
-    Store.review(id).rep.push({ u:'me', t });
+    Store.review(id).rep.push({ id:data.id, u:'me', t, at:data.created_at });
+  },
+  async deleteReply(revId, repId) {
+    const { error } = await sb.from('replies').delete().eq('id', repId);
+    if (error) throw error;
+    const r = Store.review(revId);
+    if (r) r.rep = r.rep.filter(x => x.id !== repId);
   },
   /* Un seul avis par personne et par bière (contrainte unique en base).
      En upsert, réécrire son avis le remplace au lieu d'échouer. */
@@ -1613,8 +1642,19 @@ function revHTML(r){
    +'</div>'
    +(r.mybof?'<div class="privcount">'+I.lock+'Bof enregistré — personne d\'autre ne le voit</div>':'')
    +(mine&&r.bof?'<div class="privcount">'+I.lock+r.bof+' bof sur ton avis — visible par toi seul</div>':'')
-   +(r.rep.length?'<div class="replies">'+r.rep.map(x=>'<div class="reply"><b>'
-     +esc((Store.user(x.u)||Store.me()).h)+'</b> '+esc(x.t)+'</div>').join('')+'</div>':'')
+   // On n'affiche que les deux premières : une conversation de vingt
+   // réponses rendrait la carte interminable dans un fil. Le reste se lit
+   // dans la feuille, qui est faite pour ça.
+   +(r.rep.length
+     ? '<div class="replies">'
+       +r.rep.slice(0,2).map(x=>'<div class="reply"><b>'
+         +esc((Store.user(x.u)||Store.me()).h)+'</b> '+esc(x.t)+'</div>').join('')
+       +(r.rep.length>2
+         ? '<button class="voirtout" onclick="doReply(\''+id+'\')">Voir les '
+           +r.rep.length+' réponses</button>'
+         : '')
+       +'</div>'
+     : '')
    +'</div>';
 }
 function repaint(id){const r=Store.review(id);const el=document.getElementById('rev-'+id);if(el)el.outerHTML=revHTML(r)}
@@ -1657,11 +1697,23 @@ function drawReply(){
        +(b?'<span>'+esc(b.n)+'</span>':'')
        +'<div class="rep-srcq">'+esc(r.t)+'</div></div></div>'
    +(r.rep.length
-     ? '<div class="sec" style="padding-top:18px"><h2>Réponses</h2>'
-       +'<span class="eyebrow">'+r.rep.length+'</span></div>'
-       +'<div class="replies" style="padding-left:20px">'+r.rep.map(x=>'<div class="reply"><b>'
-         +esc((Store.user(x.u)||Store.me()).h)+'</b> '+esc(x.t)+'</div>').join('')+'</div>'
-     : '')
+     ? '<div class="sec" style="padding-top:18px"><h2>La conversation</h2>'
+       +'<span class="eyebrow">'+r.rep.length+' réponse'+(r.rep.length>1?'s':'')+'</span></div>'
+       +'<div class="fil">'+r.rep.map(x=>{
+          const u = Store.user(x.u)||Store.me();
+          // on peut retirer sa propre réponse, et l'auteur de l'avis
+          // peut faire le ménage sous le sien
+          const effacable = x.u==='me' || r.u==='me';
+          return '<div class="msg" id="msg-'+esc(x.id||'')+'">'+av(x.u,26)
+           +'<div class="msg-b"><div class="msg-h"><b>'+esc(u.h)+'</b>'
+             +(x.at?'<span>'+esc(frDate(x.at))+'</span>':'')
+             +(effacable&&x.id
+               ? '<button class="msg-x" onclick="supprimerReponse(\''+esc(r.id)+'\',\''+esc(x.id)+'\')"'
+                 +' aria-label="Supprimer cette réponse">'+I.x+'</button>' : '')
+           +'</div><div class="msg-t">'+esc(x.t)+'</div>'
+           +'<button class="msg-r" onclick="repondreA(\''+esc(u.h)+'\')">Répondre</button>'
+           +'</div></div>'}).join('')+'</div>'
+     : '<div class="empty" style="padding:26px 34px">Personne n\'a encore répondu.</div>')
    +'<div class="field" style="margin-top:20px"><label>Ta réponse</label>'
      +'<textarea id="rep-t" rows="4" maxlength="'+MAX_REPONSE+'" placeholder="Reste sympa, vous vous connaissez…"'
      +' oninput="REP.txt=this.value;majCompteurReponse()">'+esc(REP.txt)+'</textarea></div>'
@@ -1671,6 +1723,25 @@ function drawReply(){
   const z = document.getElementById('rep-t');
   if(z){ z.focus(); z.setSelectionRange(z.value.length, z.value.length) }
   majCompteurReponse();
+}
+
+/* S'adresser à quelqu'un sans imbriquer : on préfixe la saisie de son
+   pseudo. Le fil reste plat — donc lisible sur un téléphone — et la
+   conversation reste suivable. */
+function repondreA(pseudo){
+  const marque = '@' + pseudo + ' ';
+  if (!REP.txt.startsWith(marque)) REP.txt = marque + REP.txt.replace(/^@\S+\s*/, '');
+  drawReply();
+  const z = document.getElementById('rep-t');
+  if(z){ z.focus(); z.setSelectionRange(z.value.length, z.value.length) }
+}
+
+async function supprimerReponse(revId, repId){
+  if(!confirm('Supprimer cette réponse ? C\'est définitif.')) return;
+  const r = await act(()=>Store.deleteReply(revId, repId), 'Suppression impossible — réessaie');
+  if(r===null) return;
+  drawReply();
+  toast('Réponse supprimée');
 }
 
 function majCompteurReponse(){

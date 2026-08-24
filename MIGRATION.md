@@ -99,6 +99,11 @@ sort de France.
 
 ## Dette technique à solder au passage
 
+- **Réponses imbriquées** — le fil est volontairement plat, avec des
+  mentions plutôt que des niveaux. À rediscuter seulement si des
+  conversations à plus de vingt messages apparaissent, ce qui est peu
+  probable entre amis.
+
 - **Pagination** — l'app charge tout d'un bloc. Supabase plafonne
   silencieusement à mille lignes par requête. Sans effet aujourd'hui, bloquant
   au-delà.
@@ -127,3 +132,5 @@ Pour mémoire, afin de ne pas le refaire :
 - Invitation d'un ami par lien, sans envoi d'e-mail
 - Premier lancement en deux questions, avec tri du catalogue
 - Récap de semaine partageable en image
+- Conversation sous un avis : fil à plat, mentions, suppression de sa
+  propre réponse
