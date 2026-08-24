@@ -41,7 +41,8 @@ body{background:#000;font-family:'Inter',system-ui,sans-serif;color:var(--text);
     rgba(10,10,12,.82) 15px,
     var(--bg) 22px)}
 #chrome > *{pointer-events:auto}
-#topbar{padding:18px 20px 0;display:flex;align-items:center;justify-content:space-between;flex:0 0 auto;gap:8px}
+#topbar{padding:16px 20px 10px;display:flex;align-items:center;justify-content:space-between;
+  flex:0 0 auto;gap:8px;min-height:52px}
 .lockup{display:flex;align-items:center;gap:9px;min-width:0}
 button.lockup{background:none;border:0;padding:4px 6px;margin:-4px -6px;cursor:pointer;
   border-radius:10px;transition:.2s var(--e)}
@@ -59,15 +60,15 @@ button.lockup:active{transform:scale(.96)}
 .logo i{font-style:normal;color:var(--accent);text-shadow:0 0 18px var(--glow)}
 .login-mark{display:flex;justify-content:center;padding:30px 0 4px}
 .login-mark svg{filter:drop-shadow(0 10px 26px rgba(0,0,0,.6))}
-.screen-title{font-family:'Space Grotesk';font-weight:600;font-size:19px;flex:1;text-align:center;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.screen-title{font-family:'Space Grotesk';font-weight:600;font-size:18px;letter-spacing:-.01em;
+  flex:1;min-width:0;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .icon-btn{background:none;border:0;color:var(--dim);display:flex;padding:6px;cursor:pointer;
   border-radius:50%;transition:color .18s,background .18s,transform .12s;flex:0 0 auto}
 .icon-btn:hover{color:var(--text);background:var(--surface-2)}
 .icon-btn:active{transform:scale(.9);color:var(--accent)}
 
 /* plus de filet sous les onglets : c'est le dégradé qui sépare désormais */
-#tabs{flex:0 0 auto;padding-top:14px}
+#tabs{flex:0 0 auto;padding-top:6px}
 .tabwrap{position:relative;display:flex;justify-content:center;gap:30px}
 .tab{background:none;border:0;font-family:'Inter';font-size:14px;font-weight:500;color:var(--dim);
   padding:0 4px 12px;cursor:pointer;transition:color .22s,transform .14s}
@@ -104,7 +105,10 @@ button.lockup:active{transform:scale(.96)}
 .sec{padding:20px 20px 4px;display:flex;align-items:baseline;justify-content:space-between}
 .sec h2{font-family:'Space Grotesk';font-size:15px;font-weight:600;letter-spacing:.2px}
 .eyebrow{font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--dimmer);font-weight:500}
-.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:13px;padding:10px 20px 6px}
+/* minmax(0,1fr) et non 1fr : sinon une piste refuse de descendre sous la
+   largeur mini de son contenu, et un nom de bière un peu long élargit la
+   colonne jusqu'à faire déborder la grille. */
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px;padding:10px 20px 6px}
 .rail{display:flex;gap:13px;padding:10px 20px 6px;overflow-x:auto;scrollbar-width:none}
 .rail::-webkit-scrollbar{display:none}
 .rail .cell{flex:0 0 96px}
@@ -224,7 +228,7 @@ button.lockup:active{transform:scale(.96)}
 .searchbar input{flex:1;background:none;border:0;outline:0;color:var(--text);font-size:14px;font-family:'Inter'}
 .searchbar input::placeholder{color:var(--dimmer)}
 
-.statgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:11px;padding:14px 20px 4px}
+.statgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;padding:14px 20px 4px}
 .stat{background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:13px 14px;
   transition:transform .24s var(--e),border-color .24s}
 .stat:hover{transform:translateY(-3px);border-color:#33333a}
@@ -454,7 +458,7 @@ textarea:focus,input.f:focus,select.f:focus{border-color:var(--accent);box-shado
 .ab-sec{display:flex;align-items:center;gap:9px;margin:30px 20px 4px;
   padding-bottom:10px;border-bottom:1px solid var(--border);color:var(--accent)}
 .ab-sec h2{font-family:'Space Grotesk';font-size:16px;font-weight:600;color:var(--text);letter-spacing:-.01em}
-.ab-split{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:14px 20px 0}
+.ab-split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;margin:14px 20px 0}
 .ab-colhead{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
   font-weight:600;margin-bottom:9px}
 .ab-colhead.ok{color:var(--ok)}
