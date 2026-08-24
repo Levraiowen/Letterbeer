@@ -504,6 +504,15 @@ textarea:focus,input.f:focus,select.f:focus{border-color:var(--accent);box-shado
   cursor:pointer;transition:.2s var(--e)}
 .plus1:hover{transform:scale(1.06);box-shadow:0 4px 18px var(--glow)}
 .plus1:active{transform:scale(.97)}
+/* bandeau hors ligne */
+.offline{position:absolute;left:0;right:0;bottom:0;z-index:40;padding:9px 20px;
+  background:var(--warn);color:#1a1206;font-size:12px;font-weight:600;text-align:center;
+  transform:translateY(100%);transition:transform .28s var(--e);pointer-events:none}
+.offline.show{transform:translateY(0)}
+/* mention sanitaire — obligatoire en France sur la promotion d'alcool */
+.evin{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--dimmer);
+  text-align:center;line-height:1.5;padding:18px 24px 4px}
+.evin.strong{color:var(--dim);border-top:1px solid var(--border);margin-top:10px;padding-top:16px}
 /* champ mot de passe avec bouton œil */
 .pwwrap{position:relative;display:block}
 .pwwrap .f{width:100%;padding-right:46px}
@@ -571,6 +580,7 @@ select.f{appearance:none;-webkit-appearance:none;
   <main id="view"></main>
   <nav id="bottombar"></nav>
   <div id="sheet"></div>
+  <div class="offline" id="offline">Hors ligne — tu peux consulter, pas enregistrer</div>
   <div class="toast" id="toast"></div>
   <input type="file" accept="image/*" id="pf" hidden>
 </div>
@@ -741,6 +751,7 @@ async function hydrate() {
     id: b.id, n: b.name, br: b.brewery, st: b.style || 'Non précisé',
     abv: +b.abv || 0, cl: b.volume_cl, pays: b.country || '—', c: b.color || '#FF7A2F',
     d: b.description || '', img: b.image_url, ok: b.status === 'approved' ? 1 : 0,
+    cont: b.container || null,
     kcal: b.kcal_100ml != null ? +b.kcal_100ml : null, kcalSrc: b.kcal_source || null,
     allerg: b.allergens || '', ingr: b.ingredients || '',
     mine: b.submitted_by === C.myId ? 1 : 0,
@@ -871,6 +882,7 @@ const Store = {
     if (f && f !== 'Toutes') l = l.filter(b => {
       if (f === '< 5°') return b.abv < 5;
       if (f === '> 8°') return b.abv > 8;
+      if (f === 'Canettes') return b.cont === 'canette';
       if (f === 'France') return b.pays === 'France';
       if (f === 'Moins de 3 €') { const p = Store.bestPrice(b); return p && p.p < 3; }
       return b.st.toLowerCase().includes(f.toLowerCase());
@@ -1177,9 +1189,10 @@ function drawLogin(){
     <button class="ghost" onclick="LGMODE='${up?'in':'up'}';drawLogin()">
       ${up?"J'ai déjà un compte":"Créer un compte"}</button>
     ${up?'':`<button class="linkbtn" onclick="doForgot()">Mot de passe oublié ?</button>`}
-    ${up?`<div class="empty" style="padding:22px 34px;font-size:11.5px">
+    ${up?`<div class="empty" style="padding:22px 34px 4px;font-size:11.5px">
       Ton pseudo, tes avis et tes notes sont visibles par les autres membres.
-      Ton journal et tes dépenses restent privés.</div>`:''}`;
+      Ton journal et tes dépenses restent privés.</div>`:''}
+    <div class="evin">${EVIN}</div>`;
 }
 
 function togglePw(id, btn){
@@ -1386,7 +1399,8 @@ function vHome(){
          +(url?'<div class="artlink">Lire sur '+esc(a.src)+' '+I.ext+'</div>':'')
        +'</div></article>'}).join('')
     +'<div class="note">'+I.info+'<span>Résumés écrits pour Letterbeer. Les articles complets '
-    +'appartiennent à leurs auteurs : le lien t\'envoie chez eux.</span></div>';
+    +'appartiennent à leurs auteurs : le lien t\'envoie chez eux.</span></div>'
+    +'<div class="evin strong">'+EVIN+'</div>';
 }
 
 /* ---------- avis ---------- */
@@ -1435,7 +1449,7 @@ async function doReply(id){ const t = prompt('Ta réponse :'); if(!t) return;
 
 /* ---------- recherche ---------- */
 function vSearch(){
-  const cats=['Toutes','IPA','Lager','Stout','Sour','Saison','Blanche','< 5°','> 8°','France','Moins de 3 €'];
+  const cats=['Toutes','Canettes','IPA','Lager','Stout','Sour','Saison','Blanche','< 5°','> 8°','France','Moins de 3 €'];
   const list=Store.search(S.q,S.filt);
   return '<div class="searchbar">'+I.search
     +'<input id="q" placeholder="Bière, brasserie, style…" value="'+esc(S.q)+'" oninput="S.q=this.value;live()">'
@@ -1939,7 +1953,11 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v3.2';
+const APP_VERSION = 'v3.3';
+/* Mention imposée par la loi Évin sur toute promotion de boissons
+   alcoolisées. L'onglet Journal relaie des lancements de brasseries :
+   elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
+const EVIN = "L'abus d'alcool est dangereux pour la santé. À consommer avec modération.";
 function openAbout(tab){
   const sh=$('#sheet'); sh.classList.add('open');
   const oui = t => `<li class="ab-li ok">${t}</li>`;
@@ -1998,6 +2016,7 @@ function openAbout(tab){
     </a>
     <div class="ab-p dim">Letterbeer compte ce que tu bois. Il ne te juge pas, et ne remplace
       pas un professionnel de santé.</div>
+    <div class="evin strong">${EVIN}</div>
 
     <div class="ab-sec">${I.can}<h2>Sources</h2></div>
     <div class="ab-p">Les fiches bières viennent d'<b>Open Food Facts</b>, base ouverte et
@@ -2074,7 +2093,7 @@ function drawSheet(){
    +(img?'<button class="zoomable" onclick="zoomPhoto(\''+img+'\')" aria-label="Agrandir la photo">'
          +can(b)+'<span class="zoomcue">'+I.zoom+'</span></button>':can(b))
    +'<div style="flex:1"><h1>'+esc(b.n)+'</h1><div class="br">'+esc(b.br)+'</div>'
-     +'<div class="fx">'+(b.abv||'?')+'° · '+b.cl+' cl · '+esc(b.pays)+' · '+Store.units(b)+' unité'+(Store.units(b)>1?'s':'')
+     +'<div class="fx">'+(b.abv||'?')+'° · '+(b.cont?esc(b.cont)+' ':'')+b.cl+' cl · '+esc(b.pays)+' · '+Store.units(b)+' unité'+(Store.units(b)>1?'s':'')
      +'<br>'+Store.kcal(b)+' kcal'+(Store.kcalIsReal(b)?'':' <span class="est" title="Estimé depuis le degré et le volume">estimé</span>')+'</div>'
      +'<div class="avgbox"><span class="num">'+(Store.count(b.id)?Store.rating(b.id).toFixed(1):'—')+'</span><span>'
      +stars(Store.rating(b.id))+'<br><span style="font-size:11px;color:var(--dimmer)">'
@@ -2139,7 +2158,7 @@ function drawSheet(){
    +(b.allerg?'<div class="sec" style="padding-top:22px"><h2>Allergènes</h2><span class="eyebrow">source Open Food Facts</span></div>'
      +'<div class="tagline" style="padding-top:10px">'+b.allerg.split(',').map(a=>'<span class="tg alrg">'+esc(a.trim())+'</span>').join('')+'</div>'
      +(b.ingr?'<div class="ab-p dim">Ingrédients : '+esc(b.ingr)+'</div>':''):'')
-   +'<div class="tagline">'+[b.st,b.pays,(b.abv||'?')+'°','canette '+b.cl+' cl',Store.kcal(b)+' kcal'].map(t=>'<span class="tg">'+esc(t)+'</span>').join('')+'</div>'
+   +'<div class="tagline">'+[b.st,b.pays,(b.abv||'?')+'°',(b.cont||'format')+' '+b.cl+' cl',Store.kcal(b)+' kcal'].map(t=>'<span class="tg">'+esc(t)+'</span>').join('')+'</div>'
    +'<button class="reportlink" onclick="openReport(\'beer\',\''+esc(b.id)+'\',\'la fiche '
      +esc(b.n).replace(/'/g,"\\'")+'\')">'+I.flag+' Signaler un problème sur cette fiche</button>'
    +'<div class="sec" style="padding-top:22px"><h2>Les avis</h2><span class="eyebrow">'+revs.length+'</span></div>'
@@ -2326,6 +2345,25 @@ function drawError(){
    donc sans ça l'app démarrerait normalement et le mot de passe ne serait
    jamais changé. */
 const isRecovery = () => /[#&]type=recovery/.test(window.location.hash || '');
+
+/* Service worker : la coque et les photos survivent à une perte de réseau.
+   Il ne s'enregistre qu'en HTTPS — en ouvrant le fichier en local, il est
+   simplement absent, ce qui n'empêche rien. */
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .catch(err => console.warn('service worker non enregistré', err));
+  });
+}
+
+/* Une app installée peut tourner sans réseau : on le dit au lieu de laisser
+   les actions échouer une par une. */
+function majReseau(){
+  const el = document.getElementById('offline');
+  if (el) el.classList.toggle('show', !navigator.onLine);
+}
+window.addEventListener('online',  () => { majReseau(); toast('Connexion rétablie') });
+window.addEventListener('offline', majReseau);
 
 (async () => {
   try {

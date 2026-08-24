@@ -71,10 +71,33 @@ const parseCl = q => {
   m = s.match(/([\d.]+)\s*l\b/);           if (m) return Math.round(+m[1] * 100);
   return null;
 };
-const isCan = p => {
+/* ---------- canette ou bouteille ? ----------
+ *
+ * L'ancien filtre cherchait « metal » dans les emballages. Or une capsule
+ * de bouteille est en métal : toutes les bouteilles passaient, d'où les
+ * 75 cl et 150 cl arrivés dans une base censée ne contenir que des canettes.
+ *
+ * On classe désormais explicitement, et on garde les deux : refuser les
+ * bouteilles amputerait la base de l'essentiel du catalogue français.
+ */
+const CANETTE  = /canette|cannette|\bcan\b|boite-boisson|boite-metal|aluminium|\baluminium\b/i;
+const BOUTEILLE = /bouteille|bottle|\bverre\b|\bglass\b/i;
+
+function container(p) {
   const tags = (p.packaging_tags || []).join(' ');
-  return /canette|can\b|boite-metal|metal|aluminium|cannette/i.test(tags);
-};
+  const cl   = parseCl(p.quantity);
+
+  // aucune canette n'existe au-delà de 56 cl : le volume tranche seul
+  if (cl && cl > 56) return 'bouteille';
+
+  const bouteille = BOUTEILLE.test(tags);
+  const canette   = CANETTE.test(tags);
+
+  if (canette && !bouteille) return 'canette';
+  if (bouteille && !canette) return 'bouteille';
+  // les deux, ou aucun des deux : OFF est trop imprécis pour trancher
+  return null;
+}
 
 /* ---------- filtre qualité : on rejette les fiches creuses ---------- */
 function clean(p) {
@@ -89,12 +112,13 @@ function clean(p) {
   if (!cl || cl < 10 || cl > 200) return null;
   if (abv === null || abv < 0 || abv > 20) return null;
   if (!img) return null;                       // pas de photo, pas de fiche
-  if (!isCan(p)) return null;                  // canettes uniquement
   if (/^\d+$/.test(name)) return null;         // noms bidons
 
   const cats = p.categories_tags || [];
   const style = guessStyle(name, cats);
   const country = (p.countries_tags || []).some(t => /france/.test(t)) ? 'France' : 'Autre';
+  const cont = container(p);
+  const format = cont === 'bouteille' ? 'bouteille' : cont === 'canette' ? 'canette' : 'format';
 
   return {
     barcode: p.code,
@@ -103,10 +127,11 @@ function clean(p) {
     style,
     abv: Math.round(abv * 10) / 10,
     volume_cl: cl,
+    container: cont,
     country,
     image_url: img,
     color: COLORS[style] || '#B0B0B8',
-    description: `${style} de ${brand}, ${abv}°, canette ${cl} cl. Fiche importée d'Open Food Facts — complète-la si tu en sais plus.`,
+    description: `${style} de ${brand}, ${abv}°, ${format} ${cl} cl. Fiche importée d'Open Food Facts — complète-la si tu en sais plus.`,
     status: 'approved'          // source fiable : validé d'office
   };
 }
