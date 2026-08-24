@@ -1488,6 +1488,14 @@ async function doPass(id){ const r = await act(()=>Store.pass(id)); if(!r)return
 async function doReply(id){ const t = prompt('Ta réponse :'); if(!t) return;
   const ok = await act(()=>Store.addReply(id,t), 'Réponse non envoyée — réessaie'); if(ok!==null) repaint(id) }
 
+/* Un filtre déjà actif se désactive au second appui : « Toutes » n'est
+   qu'un affichage de l'absence de filtre, pas une valeur à part. */
+function setFilt(c){
+  S.filt = (c === 'Toutes' || S.filt === c) ? null : c;
+  $('#view').scrollTop = 0;
+  render();
+}
+
 /* ---------- recherche ---------- */
 function vSearch(){
   const cats=['Toutes','IPA','Lager','Stout','Sour','Saison','Blanche','< 5°','> 8°','France','Moins de 3 €'];
@@ -1496,7 +1504,7 @@ function vSearch(){
     +'<input id="q" placeholder="Bière, brasserie, style…" value="'+esc(S.q)+'" oninput="S.q=this.value;live()">'
     +(S.q?'<button class="icon-btn" style="padding:2px" onclick="S.q=\'\';render()">'+I.x+'</button>':'')+'</div>'
     +'<div class="chips">'+cats.map(c=>'<button class="chip'+((S.filt||'Toutes')===c?' on':'')
-      +'" onclick="S.filt=\''+c+'\';render()">'+c+'</button>').join('')+'</div>'
+      +'" onclick="setFilt(\''+esc(c)+'\')">'+esc(c)+'</button>').join('')+'</div>'
     +'<div class="sec"><h2>'+list.length+' canette'+(list.length>1?'s':'')+'</h2><span class="eyebrow">trié par note</span></div>'
     +(list.length?'<div class="grid">'+[...list].sort((a,b)=>Store.rating(b.id)-Store.rating(a.id)).map(b=>cell(b)).join('')+'</div>'
       :'<div class="empty">Rien ne correspond.<br><br>'
