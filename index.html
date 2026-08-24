@@ -620,6 +620,36 @@ textarea:focus,input.f:focus,select.f:focus{border-color:var(--accent);box-shado
 .ghost.invite{display:flex;align-items:center;justify-content:center;gap:9px;
   border-color:rgba(255,90,31,.35);color:var(--accent);margin-top:16px}
 @media (hover:hover){.ghost.invite:hover{background:rgba(255,90,31,.08)}}
+/* --- récap de la semaine --- */
+.rc-dates{text-align:center;font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--dimmer);margin-top:18px}
+.rc-hero{text-align:center;padding:14px 20px 4px}
+.rc-n{font-family:'Space Grotesk';font-size:74px;font-weight:700;line-height:1;color:var(--accent);
+  text-shadow:0 0 40px var(--glow)}
+.rc-l{font-size:13.5px;color:var(--dim);margin-top:8px}
+.rc-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;padding:20px 20px 0}
+.rc-c{background:var(--surface);border:1px solid var(--border);border-radius:13px;
+  padding:14px 15px;text-align:center}
+.rc-c b{display:block;font-family:'Space Grotesk';font-size:22px;font-weight:700;color:var(--text)}
+.rc-c span{display:block;font-size:11px;color:var(--dim);margin-top:4px}
+.rc-style{text-align:center;font-size:13px;color:var(--dim);margin-top:18px}
+.rc-style b{color:var(--accent);font-weight:600}
+/* --- premier lancement --- */
+.onb-pas{font-family:'Space Grotesk';font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--dimmer);margin:16px 20px 0}
+.onb-q{font-family:'Space Grotesk';font-size:20px;font-weight:600;letter-spacing:-.01em;
+  margin:8px 20px 0;line-height:1.25}
+.onb-s{font-size:12.5px;color:var(--dim);margin:7px 20px 0;line-height:1.5}
+.onb-l{display:grid;gap:9px;margin:18px 20px 0}
+.onb-c{text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:13px;
+  padding:13px 15px;cursor:pointer;font-family:inherit;transition:.18s var(--e)}
+.onb-c b{display:block;font-size:14px;font-weight:600;color:var(--text)}
+.onb-c span{display:block;font-size:11.5px;color:var(--dim);margin-top:3px}
+.onb-c.on{border-color:var(--accent);background:rgba(255,90,31,.08)}
+.onb-c.on b{color:var(--accent)}
+@media (hover:hover){.onb-c:hover{border-color:#3a3a41}}
+/* --- prix suivis --- */
+.tprix{flex:0 0 auto;font-family:'Space Grotesk';font-size:13.5px;font-weight:600;color:var(--accent)}
 .seeall{background:none;border:0;cursor:pointer;font-family:inherit;font-size:11px;
   letter-spacing:.06em;text-transform:uppercase;color:var(--accent);padding:2px 0}
 .seeall:hover{text-decoration:underline;text-underline-offset:3px}
@@ -748,6 +778,16 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const PRICE_TTL = 21;
 
+/* Familles de goûts du premier lancement, traduites en styles réels du
+   catalogue. Regrouper évite de faire choisir entre dix-huit styles à
+   quelqu'un qui ouvre l'app pour la première fois. */
+const FAMILLES = {
+  blondes: ['Blonde','Pils','Blanche','Sans alcool'],
+  ipa:     ['IPA','NEIPA','Session IPA','Sour','Gose'],
+  brunes:  ['Brune','Stout','Porter','Imperial Stout','Ambrée','Double','Triple'],
+  tout:    []   // aucun filtre de style
+};
+
 /* cache local */
 const C = { me:null, myId:null, email:'', isAdmin:false, users:{}, beers:[], ratings:{}, counts:{},
             reviews:[], logs:[], follows:[], watch:[], wish:[], arts:[] };
@@ -815,7 +855,11 @@ async function hydrate() {
       fme:  followerIds.includes(p.id) ? 1 : 0,
       cans: 0, avg: 0, top: '—', week: 0, act: []
     };
-    if (p.id === C.myId) { C.me = u; C.users['me'] = u; C.isAdmin = !!p.is_admin; }
+    if (p.id === C.myId) {
+      C.me = u; C.users['me'] = u; C.isAdmin = !!p.is_admin;
+      u.familles = p.pref_familles || ''; u.degre = p.pref_degre || '';
+      C.onboarded = p.onboarded !== false;   // absent en base = déjà passé
+    }
     C.users[p.id] = u;
   }
 
@@ -1127,6 +1171,37 @@ const Store = {
       brews: new Set(L.map(l => Store.beer(l.b)?.br)).size,
       wkAvg: +(n/weeks).toFixed(1), eurAvg: +(eur/weeks).toFixed(2), unAvg: +(un/weeks).toFixed(1) };
   },
+  /* ---- goûts et recommandation ----
+     Pas de moteur : un filtre sur les familles de styles et le degré,
+     trié par note. C'est assez pour qu'un nouveau venu ne tombe pas sur
+     un catalogue indifférencié, et ça reste lisible dans six mois. */
+  async savePrefs(familles, degre) {
+    const { error } = await sb.from('profiles')
+      .update({ pref_familles: familles || null, pref_degre: degre || null, onboarded: true })
+      .eq('id', C.myId);
+    if (error) throw error;
+    C.me.familles = familles || ''; C.me.degre = degre || ''; C.onboarded = true;
+  },
+  pourToi(n) {
+    const fams = (C.me.familles || '').split(',').filter(Boolean);
+    const deg  = C.me.degre || '';
+    if (!fams.length && !deg) return [];
+    const styles = new Set();
+    fams.forEach(f => (FAMILLES[f] || []).forEach(s => styles.add(s)));
+    const bues = Store.drunkBeerIds();
+    return Store.beers()
+      .filter(b => !bues.includes(b.id))
+      .filter(b => !styles.size || styles.has(b.st))
+      .filter(b => {
+        if (!deg || deg === 'tout') return true;
+        if (deg === 'leger') return b.abv > 0 && b.abv < 5.5;
+        if (deg === 'moyen') return b.abv >= 5.5 && b.abv <= 7.5;
+        return b.abv > 7.5;
+      })
+      .sort((a,b) => Store.rating(b.id) - Store.rating(a.id))
+      .slice(0, n || 6);
+  },
+
   /* ---- infos perso ---- */
   async saveProfile(p) {
     const patch = {};
@@ -1152,7 +1227,8 @@ const Store = {
   },
 
   /* ---- mes propositions ---- */
-  myBeers: () => C.beers.filter(b => b.mine),
+  myBeers:  () => C.beers.filter(b => b.mine),
+  tracked:  () => C.beers.filter(b => b.track),
 
   /* ---- signalements ---- */
   async report(type, id, reason) {
@@ -1361,6 +1437,7 @@ function stars(n,cls){let s='';
     s+='<span class="st">★<span class="stf" style="width:'+(f*100)+'%">★</span></span>'}
   return '<span class="stars '+(cls||'')+'">'+s+'</span>'}
 const fmtRate = r => String(r).replace('.',',');
+const fmtEuro = v => v.toFixed(2).replace('.',',') + ' €';
 function shortName(n){ return n.length > 42 ? n.slice(0,40).trim()+'…' : n }
 /* x = afficher le degré · mini = vignette de liste.
    En dessous de ~40 px, le bandeau nom + brasserie devient illisible et
@@ -1472,7 +1549,12 @@ function vHome(){
     const pop=[...V].sort((a,b)=>Store.count(b.id)-Store.count(a.id)).slice(0,6);
     const nv=V.filter(b=>b.new);
     const top=[...V].sort((a,b)=>Store.rating(b.id)-Store.rating(a.id)).slice(0,5);
-    return '<div class="sec"><h2>Populaires cette semaine</h2></div>'
+    const pourToi = Store.pourToi(6);
+    return (pourToi.length
+      ? '<div class="sec"><h2>Pour toi</h2><span class="eyebrow">selon tes goûts</span></div>'
+        +'<div class="grid">'+pourToi.map(b=>cell(b)).join('')+'</div>'
+      : '')
+      +'<div class="sec"><h2>Populaires cette semaine</h2></div>'
       +'<div class="grid">'+pop.map(b=>cell(b)).join('')+'</div>'
       +'<div class="sec"><h2>Nouvelles canettes</h2><span class="eyebrow">août 2026</span></div>'
       +'<div class="rail">'+nv.map(b=>cell(b)).join('')+'</div>'
@@ -1769,6 +1851,8 @@ function vMe(){
    +'<div class="barlist">'+top.map(([k,v],i)=>'<div class="bl-row"><span class="lbl">'+esc(k)+'</span>'
      +'<span class="bl-track"><span class="bl-fill" style="width:'+(v/smx*100)+'%;animation-delay:'+(i*.06)+'s"></span></span>'
      +'<span class="num">'+v+'</span></div>').join('')+'</div>'
+   +'<div class="sec" style="padding-top:22px"><h2>Ta semaine</h2>'
+     +'<button class="seeall" onclick="openRecap()">Voir le récap</button></div>'
    +'<div class="sec" style="padding-top:24px"><h2>Ton journal</h2>'
      +'<button class="seeall" onclick="openJournal()">Tout voir et corriger</button></div>'
    +L.slice(0,8).filter(l=>Store.beer(l.b)).map(l=>{const b=Store.beer(l.b);
@@ -1820,12 +1904,13 @@ function shrink(file, max){
 /* ---------- compte ---------- */
 function vAccount(){
   const me=Store.me();
-  const nWish=Store.wishlist().length, nMine=Store.myBeers().length;
+  const nWish=Store.wishlist().length, nMine=Store.myBeers().length, nTrack=Store.tracked().length;
   const rows=[
     ['Infos perso','Pseudo, ville et adresse e-mail','openProfileEdit()'],
     ['Confidentialité','Ce qui est collecté, où c\'est hébergé, tes droits','openAbout(\'data\')'],
     ['À goûter', nWish?nWish+' canette'+(nWish>1?'s':'')+' sur ta liste':'Ta liste d\'envies est vide','openWishlist()'],
     ['Mes propositions de bières', nMine?nMine+' fiche'+(nMine>1?'s':'')+' proposée'+(nMine>1?'s':''):'Aucune fiche proposée','openMyBeers()'],
+    ['Prix suivis', nTrack?nTrack+' bière'+(nTrack>1?'s':'')+' surveillée'+(nTrack>1?'s':''):'Aucune bière suivie','openTracked()'],
     ['Exporter tes données','Ton journal en CSV, ouvrable dans Excel','exportData()'],
     ['À propos','Version, licences et prévention','openAbout()']];
   if(Store.isAdmin()) rows.splice(4,0,
@@ -1879,6 +1964,216 @@ async function saveProfileEdit(){
                       'Ce pseudo est peut-être déjà pris');
   if(r===null) return;
   closeSheet(); toast('Profil mis à jour'); render();
+}
+
+/* ---------- récap de la semaine ----------
+   Le seul mécanisme de retour régulier qui tienne sur un produit lié à
+   l'alcool : il met en avant les jours sans, pas le nombre de canettes.
+   Récompenser la quantité serait à la fois malsain et intenable en France. */
+function semaine(){
+  const debut = Date.now() - 7*864e5;
+  const L = Store.drunk().filter(l => new Date(l.at).getTime() > debut);
+  const jours = new Set(L.map(l => new Date(l.at).toDateString()));
+  const st = {};
+  L.forEach(l => { const b=Store.beer(l.b); if(b) st[b.st]=(st[b.st]||0)+1 });
+  const top = Object.entries(st).sort((a,b)=>b[1]-a[1])[0];
+  return {
+    n: L.length,
+    cl: L.reduce((s,l)=>s+(Store.beer(l.b)?.cl||0),0),
+    eur: L.reduce((s,l)=>s+(l.paid||0),0),
+    un: +L.reduce((s,l)=>{const b=Store.beer(l.b);return s+(b?Store.units(b):0)},0).toFixed(1),
+    kcal: L.reduce((s,l)=>s+Store.kcal(Store.beer(l.b)),0),
+    sans: 7 - jours.size,
+    style: top ? top[0] : '—',
+    du: new Date(debut).toLocaleDateString('fr-FR',{day:'numeric',month:'short'}),
+    au: new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'short'})
+  };
+}
+
+function openRecap(){
+  const s = semaine();
+  const repere = s.un > 10;   // repère de Santé publique France
+  const sh=$('#sheet'); sh.classList.add('open');
+  sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
+   +'<div class="sheet-bar"><b>Ta semaine</b><button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
+   +'<div class="sheet-body">'
+   +'<div class="rc-dates">'+esc(s.du)+' au '+esc(s.au)+'</div>'
+   +'<div class="rc-hero"><div class="rc-n">'+s.sans+'</div>'
+     +'<div class="rc-l">jour'+(s.sans>1?'s':'')+' sans alcool sur sept</div></div>'
+   +'<div class="rc-grid">'
+     +'<div class="rc-c"><b>'+s.n+'</b><span>canette'+(s.n>1?'s':'')+'</span></div>'
+     +'<div class="rc-c"><b>'+s.un+'</b><span>unités d\'alcool</span></div>'
+     +'<div class="rc-c"><b>'+fmtEuro(s.eur)+'</b><span>dépensés</span></div>'
+     +'<div class="rc-c"><b>'+s.kcal.toLocaleString('fr-FR')+'</b><span>calories</span></div>'
+   +'</div>'
+   +(s.n
+     ? '<div class="rc-style">Style le plus bu : <b>'+esc(s.style)+'</b></div>'
+     : '<div class="empty" style="padding:26px 34px">Aucune canette cette semaine. '
+       +'C\'est une semaine comme une autre.</div>')
+   +(repere
+     ? '<div class="note warn">'+I.info+'<span>Tu dépasses les 10 verres hebdomadaires '
+       +'recommandés par Santé publique France. Rien d\'alarmant en soi, c\'est juste bon à savoir.</span></div>'
+     : '')
+   +'<button class="cta" onclick="partagerSemaine()">Partager ma semaine</button>'
+   +'<div class="hint" style="margin-top:10px">Une image, sans lien vers ton compte ni vers ton journal.</div>'
+   +'</div></div>';
+}
+
+/* L'image est dessinée sur place : rien n'est envoyé nulle part, et
+   elle ne contient ni pseudo, ni lien, ni détail du journal. */
+function dessinerSemaine(s){
+  const W=1080, H=1350, c=document.createElement('canvas');
+  c.width=W; c.height=H;
+  const x=c.getContext('2d');
+  x.fillStyle='#0A0A0C'; x.fillRect(0,0,W,H);
+  const g=x.createRadialGradient(W/2,H*0.32,0,W/2,H*0.32,W*0.8);
+  g.addColorStop(0,'rgba(255,90,31,.16)'); g.addColorStop(1,'rgba(255,90,31,0)');
+  x.fillStyle=g; x.fillRect(0,0,W,H);
+
+  x.textAlign='center';
+  x.fillStyle='#5C5C63'; x.font='500 30px Inter, sans-serif';
+  x.fillText('TA SEMAINE · '+s.du.toUpperCase()+' AU '+s.au.toUpperCase(), W/2, 150);
+
+  x.fillStyle='#FF5A1F'; x.font='700 300px "Space Grotesk", sans-serif';
+  x.fillText(String(s.sans), W/2, 500);
+  x.fillStyle='#F4EFE8'; x.font='600 46px Inter, sans-serif';
+  x.fillText('jour'+(s.sans>1?'s':'')+' sans alcool', W/2, 580);
+  x.fillStyle='#8D8D93'; x.font='400 34px Inter, sans-serif';
+  x.fillText('sur les sept derniers', W/2, 634);
+
+  const cases=[[s.n,'canettes'],[s.un,'unités'],[fmtEuro(s.eur),'dépensés'],
+               [s.kcal.toLocaleString('fr-FR'),'calories']];
+  cases.forEach((v,i)=>{
+    const cx = W/2 + (i%2 ? 230 : -230), cy = 800 + Math.floor(i/2)*200;
+    x.fillStyle='#F4EFE8'; x.font='700 72px "Space Grotesk", sans-serif';
+    x.fillText(String(v[0]), cx, cy);
+    x.fillStyle='#8D8D93'; x.font='400 30px Inter, sans-serif';
+    x.fillText(v[1], cx, cy+46);
+  });
+
+  x.fillStyle='#232327'; x.fillRect(W/2-180, 1180, 360, 2);
+  x.fillStyle='#F4EFE8'; x.font='700 40px "Space Grotesk", sans-serif';
+  x.fillText('LETTERBEER', W/2, 1252);
+  x.fillStyle='#5C5C63'; x.font='400 24px Inter, sans-serif';
+  x.fillText("L'abus d'alcool est dangereux pour la santé.", W/2, 1300);
+  return c;
+}
+
+async function partagerSemaine(){
+  const s = semaine();
+  const toile = dessinerSemaine(s);
+  toile.toBlob(async blob => {
+    if(!blob) return toast('Image impossible à créer');
+    const fichier = new File([blob], 'letterbeer-semaine.png', { type:'image/png' });
+    try {
+      if (navigator.canShare && navigator.canShare({ files:[fichier] })) {
+        await navigator.share({ files:[fichier], title:'Ma semaine sur Letterbeer' });
+        return;
+      }
+    } catch(e){ if(e && e.name==='AbortError') return }
+    download(blob, 'letterbeer-semaine.png');
+    toast('Image enregistrée');
+  }, 'image/png');
+}
+
+/* ---------- premier lancement ----------
+   Deux questions, pas trois écrans de présentation : l'app se montre
+   mieux en s'adaptant qu'en se racontant. On peut passer — mais alors
+   on n'y revient plus, la question est marquée comme vue. */
+let ONB = { etape:1, familles:[], degre:'' };
+
+function ouvrirOnboarding(){
+  ONB = { etape:1, familles:[], degre:'' };
+  drawOnboarding();
+}
+
+function drawOnboarding(){
+  const sh=$('#sheet'); sh.classList.add('open');
+  const choix = (cle, libelle, detail, groupe) => {
+    const actif = groupe==='fam' ? ONB.familles.includes(cle) : ONB.degre===cle;
+    return '<button class="onb-c'+(actif?' on':'')+'" onclick="onbChoisir(\''+groupe+'\',\''+cle+'\')">'
+      +'<b>'+libelle+'</b><span>'+detail+'</span></button>';
+  };
+  const q1 = ONB.etape===1;
+  sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
+   +'<div class="sheet-bar"><b>Bienvenue</b>'
+     +'<button class="linkbtn" style="margin:0" onclick="onbPasser()">Passer</button></div>'
+   +'<div class="sheet-body">'
+   +'<div class="onb-pas">Étape '+ONB.etape+' sur 2</div>'
+   +(q1
+     ? '<div class="onb-q">Tu bois quoi, d\'habitude ?</div>'
+       +'<div class="onb-s">Plusieurs réponses possibles. Ça sert juste à trier le catalogue.</div>'
+       +'<div class="onb-l">'
+         +choix('blondes','Blondes et blanches','Légères, faciles, désaltérantes','fam')
+         +choix('ipa','IPA et acidulées','Houblon, amertume, fruits','fam')
+         +choix('brunes','Brunes et ambrées','Torréfié, caramel, rondeur','fam')
+         +choix('tout','Je goûte de tout','Aucun filtre de style','fam')
+       +'</div>'
+     : '<div class="onb-q">Plutôt légères ou costaudes ?</div>'
+       +'<div class="onb-s">Une seule réponse.</div>'
+       +'<div class="onb-l">'
+         +choix('leger','Légères','En dessous de 5,5°','deg')
+         +choix('moyen','Équilibrées','Entre 5,5 et 7,5°','deg')
+         +choix('fort','Costaudes','Au-dessus de 7,5°','deg')
+         +choix('tout','Peu importe','Le degré ne me guide pas','deg')
+       +'</div>')
+   +'<button class="cta" id="onb-go" onclick="onbSuivant()"'
+     +((q1 ? !ONB.familles.length : !ONB.degre) ? ' disabled':'')+'>'
+     +(q1?'Continuer':'Voir mes canettes')+'</button>'
+   +'</div></div>';
+}
+
+function onbChoisir(groupe, cle){
+  if(groupe==='deg'){ ONB.degre = cle }
+  else if(cle==='tout'){ ONB.familles = ONB.familles.includes('tout') ? [] : ['tout'] }
+  else {
+    ONB.familles = ONB.familles.filter(f => f!=='tout');
+    ONB.familles = ONB.familles.includes(cle)
+      ? ONB.familles.filter(f => f!==cle) : [...ONB.familles, cle];
+  }
+  drawOnboarding();
+}
+
+function onbSuivant(){
+  if(ONB.etape===1){ ONB.etape=2; drawOnboarding(); return }
+  onbEnregistrer(ONB.familles.join(','), ONB.degre);
+}
+
+/* Passer marque quand même l'étape comme vue : reposer la question à
+   chaque ouverture serait la meilleure façon de faire fuir quelqu'un. */
+function onbPasser(){ onbEnregistrer('', ''); }
+
+async function onbEnregistrer(familles, degre){
+  const r = await act(()=>Store.savePrefs(familles, degre), 'Préférences non enregistrées');
+  if(r===null){ C.onboarded = true }   // on n'insiste pas si la base refuse
+  closeSheet();
+  S.tab='home'; S.sub='bieres'; render();
+  if(familles) toast('C\'est noté, on te met ça en avant');
+}
+
+/* ---------- prix suivis ----------
+   Tant qu'aucun canal de notification n'existe, on ne promet aucune
+   alerte : on donne une liste consultable, avec le meilleur relevé du
+   moment. Le jour où les notifications arriveront, elles s'appuieront
+   sur cette même table. */
+function openTracked(){
+  const L = Store.tracked();
+  const sh=$('#sheet'); sh.classList.add('open');
+  sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
+   +'<div class="sheet-bar"><b>Prix suivis</b><button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
+   +'<div class="sheet-body">'
+   +'<div class="note">'+I.info+'<span>Les prix viennent des relevés que vous faites tous. '
+     +'Un relevé de plus de '+PRICE_TTL+' jours passe en « à confirmer ».</span></div>'
+   +(L.length
+     ? L.map(b=>{ const bp=Store.bestPrice(b);
+        return '<div class="jrow">'
+         +'<span class="vign">'+can(b,0,1)+'</span>'
+         +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(b.br)
+           +(bp?' · relevé il y a '+bp.age+' j':'')+'</span></span>'
+         +'<span class="tprix">'+(bp?bp.p.toFixed(2)+' €':'—')+'</span></div>'}).join('')
+     : '<div class="empty">Aucune bière suivie.<br><br>Sur une fiche, « Suivre le prix » '
+       +'l\'ajoute ici pour garder un œil dessus.</div>')
+   +'</div></div>';
 }
 
 /* ---------- liste d'envies ---------- */
@@ -2357,7 +2652,7 @@ function drawSheet(){
      +'et sort du meilleur prix tant que personne ne l\'a revu.</span></div>'
    +'<button class="ghost" onclick="trackBeer()" style="display:flex;align-items:center;justify-content:center;gap:9px;'
      +(b.track?'border-color:var(--accent);color:var(--accent)':'')+'">'+I.bell
-     +(b.track?' Suivi de prix activé':' Prévenez-moi si le prix baisse')+'</button>'
+     +(b.track?' Prix suivi':' Suivre le prix de cette bière')+'</button>'
    +(b.allerg?'<div class="sec" style="padding-top:22px"><h2>Allergènes</h2><span class="eyebrow">source Open Food Facts</span></div>'
      +'<div class="tagline" style="padding-top:10px">'+b.allerg.split(',').map(a=>'<span class="tg alrg">'+esc(a.trim())+'</span>').join('')+'</div>'
      +(b.ingr?'<div class="ab-p dim">Ingrédients : '+esc(b.ingr)+'</div>':''):'')
@@ -2379,7 +2674,7 @@ async function trackBeer(){
   const on = await act(()=>Store.toggleTrack(SH.beer), 'Suivi non enregistré — réessaie');
   if(on===null) return;
   drawSheet();
-  toast(on ? 'Tu seras prévenu si le prix baisse' : 'Suivi désactivé');
+  toast(on ? 'Ajoutée à tes prix suivis' : 'Retirée de tes prix suivis');
 }
 async function confirmPrice(i){
   const r = await act(()=>Store.confirmPrice(SH.beer,i), 'Confirmation non enregistrée — réessaie');
@@ -2688,6 +2983,7 @@ window.addEventListener('offline', majReseau);
     if (!ok) { drawLogin(); return; }
     render();
     honorerInvitation().then(() => { if (S.tab==='friends') render() });
+    if (!C.onboarded) setTimeout(ouvrirOnboarding, 400);
   } catch (e) {
     console.error(e);
     drawError();
