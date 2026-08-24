@@ -364,8 +364,14 @@ button.lockup:active{transform:scale(.96)}
 .sheet-bar{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 10px;
   border-bottom:1px solid var(--border);flex:0 0 auto}
 .sheet-bar b{font-family:'Space Grotesk';font-size:15px;font-weight:600}
-.grab{width:38px;height:4px;border-radius:3px;background:var(--border);margin:9px auto 0}
-.sheet-body{overflow-y:auto;padding-bottom:22px}
+.grab{width:38px;height:4px;border-radius:3px;background:var(--border);margin:9px auto 0;
+  transition:background .2s}
+/* pendant le glissé, la feuille suit le doigt : pas de transition, sinon
+   elle traîne derrière lui */
+.sheet-in.drag{animation:none;transition:none;will-change:transform}
+.sheet-in.drag .grab{background:var(--dim)}
+.sheet-in.snap{animation:none;transition:transform .26s var(--e)}
+.sheet-body{overflow-y:auto;padding-bottom:22px;overscroll-behavior:contain}
 .sheet-body::-webkit-scrollbar{width:0}
 .beer-hero{display:flex;gap:15px;padding:18px 20px 4px}
 .beer-hero .can{width:84px;flex:0 0 84px}
@@ -2290,6 +2296,65 @@ async function confirmPrice(i){
   drawSheet(); toast('Merci, relevé confirmé');
 }
 function closeSheet(){$('#sheet').classList.remove('open');$('#sheet').innerHTML=''}
+
+/* ---------- fermer une feuille en la tirant vers le bas ----------
+   Le geste ne démarre que si le contenu est déjà en haut : sinon on
+   volerait le défilement à l'utilisateur qui remonte simplement sa liste.
+   La poignée et la barre de titre, elles, répondent toujours. */
+(function glisserPourFermer(){
+  const SEUIL = 92;      // px au-delà desquels on referme
+  const VITESSE = 0.55;  // px/ms : un geste vif ferme sans atteindre le seuil
+  let feuille=null, depart=0, dernier=0, tDepart=0, actif=false;
+
+  const cible = e => e.target.closest('.sheet-in');
+  const surPoignee = e => !!e.target.closest('.grab, .sheet-bar');
+
+  document.addEventListener('touchstart', e => {
+    const f = cible(e); if(!f || e.touches.length !== 1) return;
+    const corps = f.querySelector('.sheet-body');
+    // un champ ou un bouton garde la main sur son propre geste
+    if (e.target.closest('input, textarea, select')) return;
+    if (!surPoignee(e) && corps && corps.scrollTop > 0) return;
+    feuille=f; depart=dernier=e.touches[0].clientY; tDepart=Date.now(); actif=false;
+  }, {passive:true});
+
+  document.addEventListener('touchmove', e => {
+    if(!feuille) return;
+    const y = e.touches[0].clientY, dy = y - depart;
+    dernier = y;
+    if (dy <= 0) {                       // vers le haut : on rend la main
+      if (actif) { feuille.style.transform=''; feuille.classList.remove('drag'); actif=false }
+      return;
+    }
+    if (!actif) {
+      if (dy < 6) return;                // on laisse passer les micro-mouvements
+      actif = true; feuille.classList.add('drag');
+    }
+    // résistance progressive : la feuille suit sans jamais partir trop loin
+    feuille.style.transform = 'translateY(' + (dy < 260 ? dy : 260 + (dy-260)*0.25) + 'px)';
+  }, {passive:true});
+
+  function relacher(){
+    if(!feuille) return;
+    const f=feuille; feuille=null;
+    if(!actif){ return }
+    const dy = dernier - depart;
+    const vitesse = dy / Math.max(1, Date.now() - tDepart);
+    f.classList.remove('drag');
+    if (dy > SEUIL || vitesse > VITESSE) {
+      f.classList.add('snap');
+      f.style.transform = 'translateY(100%)';
+      setTimeout(closeSheet, 220);
+    } else {
+      f.classList.add('snap');
+      f.style.transform = '';
+      setTimeout(()=>f.classList.remove('snap'), 280);
+    }
+    actif=false;
+  }
+  document.addEventListener('touchend', relacher, {passive:true});
+  document.addEventListener('touchcancel', relacher, {passive:true});
+})();
 function zoomPhoto(url){
   const src=safeUrl(url); if(!src) return;
   const d=document.createElement('div');
