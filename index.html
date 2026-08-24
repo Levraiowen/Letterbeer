@@ -32,6 +32,16 @@ body{background:#000;font-family:'Inter',system-ui,sans-serif;color:var(--text);
 
 #topbar{padding:18px 20px 0;display:flex;align-items:center;justify-content:space-between;flex:0 0 auto;gap:8px}
 .lockup{display:flex;align-items:center;gap:9px;min-width:0}
+button.lockup{background:none;border:0;padding:4px 6px;margin:-4px -6px;cursor:pointer;
+  border-radius:10px;transition:.2s var(--e)}
+button.lockup:active{transform:scale(.96)}
+.homemark{width:33px;height:33px;flex:0 0 33px;display:flex;align-items:center;justify-content:center;
+  background:none;border:0;padding:0;cursor:pointer;border-radius:50%;transition:.2s var(--e)}
+.homemark:active{transform:scale(.92)}
+@media (hover:hover){
+  button.lockup:hover{background:var(--surface)}
+  .homemark:hover{background:var(--surface-2)}
+}
 .lockup .lgmk{flex:0 0 auto;display:block}
 .logo{font-family:'Space Grotesk';font-weight:700;font-size:19px;letter-spacing:2.2px;
   color:var(--text);white-space:nowrap}
@@ -419,10 +429,43 @@ textarea:focus,input.f:focus,select.f:focus{border-color:var(--accent);box-shado
   display:flex;align-items:center;justify-content:center;cursor:pointer;color:#F4EFE8;
   background:rgba(255,255,255,.12)}
 /* --- écran à propos --- */
-.ab-hero{text-align:center;padding:20px 0 6px}
+.ab-sec{display:flex;align-items:center;gap:9px;margin:30px 0 4px;
+  padding-bottom:10px;border-bottom:1px solid var(--border);color:var(--accent)}
+.ab-sec h2{font-family:'Space Grotesk';font-size:16px;font-weight:600;color:var(--text);letter-spacing:-.01em}
+.ab-split{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px}
+.ab-colhead{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+  font-weight:600;margin-bottom:9px}
+.ab-colhead.ok{color:var(--ok)}
+.ab-colhead.no{color:var(--dimmer)}
+.ab-split .ab-li{font-size:12px;padding-left:19px;line-height:1.45}
+.ab-split .ab-li::before{font-size:11px}
+.ab-split .ab-li.ok::before{color:var(--ok)}
+.ab-facts{margin-top:20px;border:1px solid var(--border);border-radius:13px;overflow:hidden}
+.ab-fact{display:flex;gap:14px;padding:12px 15px;border-bottom:1px solid var(--border)}
+.ab-fact:last-child{border-bottom:0}
+.ab-fk{flex:0 0 84px;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--dimmer);padding-top:2px}
+.ab-fv{flex:1;font-size:12.5px;line-height:1.5;color:var(--text)}
+.ab-fv b{color:var(--accent);font-weight:600}
+.ab-help{display:block;margin-top:14px;padding:15px 16px;border-radius:13px;text-decoration:none;
+  background:rgba(255,90,31,.07);border:1px solid rgba(255,90,31,.3);transition:.2s var(--e)}
+.ab-help:active{transform:scale(.99)}
+.ab-hk{display:block;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--dimmer)}
+.ab-hn{display:block;font-family:'Space Grotesk';font-size:22px;font-weight:700;
+  color:var(--accent);letter-spacing:.01em;margin:5px 0 3px}
+.ab-hs{display:block;font-size:11.5px;color:var(--dim)}
+.danger{margin-top:26px;padding:16px;border:1px solid #3a1f1f;border-radius:13px;
+  background:rgba(255,77,77,.04)}
+.danger-h{font-family:'Space Grotesk';font-size:14px;font-weight:600;color:var(--bad);margin-bottom:6px}
+.danger-p{font-size:12px;line-height:1.5;color:var(--dim);margin-bottom:13px}
+.danger-btn{width:100%;background:none;border:1px solid #3a1f1f;color:var(--bad);
+  border-radius:12px;padding:11px;font-family:inherit;font-size:13px;font-weight:600;
+  cursor:pointer;transition:.2s var(--e)}
+.danger-btn:hover{background:rgba(255,77,77,.1)}
+.ab-hero{text-align:center;padding:20px 0 6px;display:flex;flex-direction:column;align-items:center;gap:12px}
 .ab-word{font-family:'Space Grotesk';font-size:21px;font-weight:700;letter-spacing:.13em;color:var(--text)}
 .ab-word span{color:var(--accent)}
-.ab-ver{font-size:11.5px;color:var(--dimmer);margin-top:6px;letter-spacing:.03em}
+.ab-ver{font-size:11.5px;color:var(--dimmer);margin-top:-6px;letter-spacing:.03em}
 .ab-list{list-style:none;padding:0;margin:12px 0 0;display:flex;flex-direction:column;gap:9px}
 .ab-li{position:relative;padding-left:25px;font-size:13px;line-height:1.5;color:var(--dim)}
 .ab-li::before{position:absolute;left:0;top:0;font-size:13px;font-weight:700}
@@ -539,8 +582,23 @@ function logoMark(px){
    + '<circle cx="61" cy="67" r="1.75" fill="none" stroke="#F4EFE8" stroke-width="1.15" opacity=".8"/>'
    + '</svg>';
 }
-const logoLockup = (px) =>
-  '<span class="lockup">'+logoMark(px||21)+'<span class="logo">LETTER<i>BEER</i></span></span>';
+/* clic = retour à l'accueil. Sur les écrans hors session (connexion,
+   mot de passe, erreur) il n'y a nulle part où aller : le logo y reste
+   décoratif. */
+const logoLockup = (px, home) =>
+  (home ? '<button class="lockup tapname" onclick="goHome()" aria-label="Revenir à l\'accueil">'
+        : '<span class="lockup">')
+  + logoMark(px||21) + '<span class="logo">LETTER<i>BEER</i></span>'
+  + (home ? '</button>' : '</span>');
+
+/* Ramène à l'accueil : premier onglet, haut de page. Depuis l'accueil,
+   fait office de « remonter en haut ». */
+function goHome(){
+  const dejaLa = S.tab==='home' && S.sub==='bieres';
+  S.tab='home'; S.sub='bieres'; S.dir=1; S.q=''; S.filt=null;
+  $('#view').scrollTop=0;
+  render(!dejaLa);
+}
 
 const I={
  can:'<svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3.5" width="10" height="17" rx="2.2"/><path d="M7 8h10"/><path d="M10.6 5.8h2.8"/></svg>',
@@ -1197,7 +1255,7 @@ function chrome(){
   const titles={search:'Rechercher',friends:'Les copains',me:'Ton profil',account:'Compte',
     user:S.user?Store.user(S.user).h:''};
   if(S.tab==='home'){
-    T.innerHTML='<span style="width:33px"></span>'+logoLockup(21)+'<span style="width:33px"></span>';
+    T.innerHTML='<span style="width:33px"></span>'+logoLockup(21,1)+'<span style="width:33px"></span>';
     TB.style.display='block';
     TB.innerHTML='<div class="tabwrap">'+subs().map(k=>'<button class="tab'+(S.sub===k?' on':'')
       +'" onclick="setSub(\''+k+'\')">'+({bieres:'Bières',avis:'Avis',journal:'Journal'})[k]+'</button>').join('')
@@ -1206,8 +1264,9 @@ function chrome(){
   }else{
     TB.style.display='none';
     const hasBack=(S.tab==='account'||S.tab==='user');
+    // sans bouton retour, la marque prend la place et ramène à l'accueil
     const left=hasBack?'<button class="icon-btn" onclick="go(\''+(S.tab==='account'?'me':S.back)+'\')">'+I.back+'</button>'
-      :'<span style="width:33px"></span>';
+      :'<button class="homemark" onclick="goHome()" aria-label="Revenir à l\'accueil">'+logoMark(25)+'</button>';
     const right=S.tab==='me'?'<button class="icon-btn" onclick="go(\'account\')">'+I.gear+'</button>'
       :'<span style="width:33px"></span>';
     T.innerHTML=left+'<span class="screen-title">'+titles[S.tab]+'</span>'+right;
@@ -1806,84 +1865,90 @@ async function doDelete(){
 const APP_VERSION = 'v3.2';
 function openAbout(tab){
   const sh=$('#sheet'); sh.classList.add('open');
-  const yes = t => `<li class="ab-li ok">${t}</li>`;
-  const no  = t => `<li class="ab-li no">${t}</li>`;
+  const oui = t => `<li class="ab-li ok">${t}</li>`;
+  const non = t => `<li class="ab-li no">${t}</li>`;
   sh.innerHTML = `<div class="sheet-in"><div class="grab"></div>
    <div class="sheet-bar"><b>À propos</b><button class="icon-btn" onclick="closeSheet()">${I.x}</button></div>
    <div class="sheet-body">
 
     <div class="ab-hero">
+      ${logoMark(54)}
       <div class="ab-word">LETTER<span>BEER</span></div>
-      <div class="ab-ver">${APP_VERSION} · prototype entre amis</div>
+      <div class="ab-ver">${APP_VERSION} · le carnet de canettes</div>
     </div>
 
-    <div class="note warn">${I.info}<span>C'est un prototype. La base peut être réinitialisée sans
-      prévenir, et tes données avec. N'y mets rien que tu ne supporterais pas de perdre.</span></div>
+    <div class="note warn">${I.info}<span>C'est un prototype. La base peut être réinitialisée
+      sans prévenir, et tes données avec. N'y mets rien que tu ne supporterais pas de perdre.</span></div>
 
-    <div class="sec" style="padding-top:22px"><h2>Ce qu'on collecte</h2><span class="eyebrow">le minimum</span></div>
-    <ul class="ab-list">
-      ${yes('Ton e-mail — uniquement pour te connecter')}
-      ${yes('Ton pseudo, et ta ville si tu la renseignes')}
-      ${yes('Ton journal : ce que tu bois, tes notes, tes prix payés')}
-      ${yes('Tes photos de profil, redimensionnées avant envoi')}
-    </ul>
-
-    <div class="sec" style="padding-top:20px"><h2>Ce qu'on ne collecte pas</h2></div>
-    <ul class="ab-list">
-      ${no('Ni nom, ni date de naissance, ni téléphone')}
-      ${no('Aucun traceur, aucun cookie publicitaire, aucun analytics')}
-      ${no('Aucune position GPS — les métadonnées EXIF de tes photos sont effacées avant l\'envoi')}
-    </ul>
-
-    <div class="ab-card">
-      <div class="ab-k">Où sont tes données</div>
-      <div class="ab-v">Hébergées chez Supabase, en Europe. Elles ne quittent pas l'UE.</div>
-    </div>
-    <div class="ab-card">
-      <div class="ab-k">Combien de temps</div>
-      <div class="ab-v">Tant que ton compte existe. Tu le supprimes, tout part avec —
-        journal, avis, photos, dépenses. Sans copie de sauvegarde.</div>
-    </div>
-    <div class="ab-card">
-      <div class="ab-k">Qui voit quoi</div>
-      <div class="ab-v">Tes avis sont publics. <b>Ton journal et tes dépenses ne sortent jamais
-        de ton compte</b>, même profil public, même pour moi. C'est verrouillé côté base, pas juste caché à l'écran.</div>
+    <div class="ab-sec" id="ab-data">${I.lock}<h2>Tes données</h2></div>
+    <div class="ab-split">
+      <div class="ab-col">
+        <div class="ab-colhead ok">Ce qu'on garde</div>
+        <ul class="ab-list">
+          ${oui('Ton e-mail, pour te connecter')}
+          ${oui('Ton pseudo, ta ville si tu veux')}
+          ${oui('Ton journal, tes notes, tes prix')}
+          ${oui('Ta photo de profil')}
+        </ul>
+      </div>
+      <div class="ab-col">
+        <div class="ab-colhead no">Ce qu'on ne prend pas</div>
+        <ul class="ab-list">
+          ${non('Nom, date de naissance, téléphone')}
+          ${non('Traceurs, cookies, analytics')}
+          ${non("Position GPS — l'EXIF des photos est effacé avant l'envoi")}
+        </ul>
+      </div>
     </div>
 
-    <div class="sec" style="padding-top:22px"><h2>Tes droits</h2><span class="eyebrow">RGPD</span></div>
-    <div class="ab-p">Tu peux à tout moment récupérer tes données, les corriger, ou supprimer ton compte.
-      Pas de formulaire, pas de délai : les deux boutons sont dans cet écran Compte.</div>
-    <div class="two" style="margin-top:12px">
-      <button class="ghost" onclick="exportData()">Exporter mes données</button>
-      <button class="ghost" style="color:var(--bad);border-color:#3a1f1f"
-        onclick="confirmDelete()">Supprimer mon compte</button>
+    <div class="ab-facts">
+      <div class="ab-fact"><span class="ab-fk">Hébergement</span>
+        <span class="ab-fv">Supabase, en Europe. Rien ne sort de l'UE.</span></div>
+      <div class="ab-fact"><span class="ab-fk">Durée</span>
+        <span class="ab-fv">Tant que ton compte existe. Tu le supprimes, tout part.</span></div>
+      <div class="ab-fact"><span class="ab-fk">Visibilité</span>
+        <span class="ab-fv">Tes avis sont publics. <b>Ton journal et tes dépenses ne sortent
+          jamais de ton compte</b> — verrouillé côté base, pas juste masqué à l'écran.</span></div>
     </div>
 
-    <div class="sec" style="padding-top:24px"><h2>Alcool et santé</h2><span class="eyebrow">repères officiels</span></div>
-    <div class="ab-p">Santé publique France : <b>pas plus de 10 verres par semaine</b>, pas plus de 2 par jour,
-      et des jours sans alcool. Un verre standard = 1 unité.</div>
-    <div class="ab-card accent">
-      <div class="ab-k">Alcool Info Service</div>
-      <div class="ab-v">Anonyme, gratuit, 8h–2h, 7j/7.</div>
-      <a class="ab-tel" href="tel:0980980930">0 980 980 930</a>
-    </div>
-    <div class="ab-p dim">Letterbeer compte ce que tu bois, il ne te juge pas et ne remplace pas un
-      professionnel de santé.</div>
+    <div class="ab-sec">${I.info}<h2>Alcool et santé</h2></div>
+    <div class="ab-p">Santé publique France : <b>pas plus de 10 verres par semaine</b>,
+      pas plus de 2 par jour, et des jours sans. Un verre standard = 1 unité.</div>
+    <a class="ab-help" href="tel:0980980930">
+      <span class="ab-hk">Alcool Info Service</span>
+      <span class="ab-hn">0 980 980 930</span>
+      <span class="ab-hs">Anonyme et gratuit · 8h–2h, 7j/7</span>
+    </a>
+    <div class="ab-p dim">Letterbeer compte ce que tu bois. Il ne te juge pas, et ne remplace
+      pas un professionnel de santé.</div>
 
-    <div class="sec" style="padding-top:24px"><h2>Sources et licences</h2></div>
-    <div class="ab-p">Les fiches bières viennent d'<b>Open Food Facts</b>, une base ouverte et
-      communautaire.</div>
+    <div class="ab-sec">${I.can}<h2>Sources</h2></div>
+    <div class="ab-p">Les fiches bières viennent d'<b>Open Food Facts</b>, base ouverte et
+      communautaire. Les brèves du Journal sont des résumés écrits ici, avec un lien vers
+      le média d'origine.</div>
     <div class="tagline" style="padding:12px 0 0">
       <span class="tg">Données © Open Food Facts — ODbL</span>
       <span class="tg">Photos — CC-BY-SA</span>
     </div>
 
+    <div class="ab-sec">${I.user}<h2>Tes droits</h2></div>
+    <div class="ab-p">Récupérer, corriger ou effacer tes données : sans formulaire ni délai,
+      tout se fait depuis cet écran et l'écran Compte.</div>
+    <button class="ghost" style="margin-top:12px" onclick="exportData()">Exporter mon journal en CSV</button>
+
     <div class="ab-foot">Letterbeer ${APP_VERSION} · fait entre potes, à Nantes.<br>
       Une question, un bug, une donnée à corriger : écris-moi.</div>
 
+    <div class="danger">
+      <div class="danger-h">Supprimer mon compte</div>
+      <div class="danger-p">Efface définitivement ton journal, tes avis, tes photos et tes
+        relevés de prix. Ni corbeille, ni sauvegarde.</div>
+      <button class="danger-btn" onclick="confirmDelete()">Supprimer mon compte</button>
+    </div>
+
    </div></div>`;
   if(tab==='data') setTimeout(()=>{
-    const el=sh.querySelector('.ab-list'); if(el) el.scrollIntoView({behavior:'smooth',block:'center'});
+    const el=sh.querySelector('#ab-data'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
   },260);
 }
 
