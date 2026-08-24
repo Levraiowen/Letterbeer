@@ -91,7 +91,11 @@ body{background:#000;font-family:'Inter',system-ui,sans-serif;color:var(--text);
 .can .band{padding:7px 7px 8px}
 .can .bname{font-family:'Space Grotesk';font-weight:600;font-size:10.5px;line-height:1.2;color:#1a0800}
 .can .bstyle{font-size:8px;line-height:1.3;margin-top:2px;color:rgba(26,8,0,.62);font-weight:500}
-.can .abv{position:absolute;top:19%;right:6px;font-size:8.5px;font-weight:600;color:var(--dim);z-index:2}
+/* le degré vit dans le bandeau, aligné au nom — rien ne flotte sur la photo */
+.can .brow{display:flex;align-items:flex-end;justify-content:space-between;gap:5px}
+.can .btxt{display:block;min-width:0;flex:1}
+.can .bname,.can .bstyle{display:block}
+.can .abv{font-size:9px;font-weight:700;white-space:nowrap;padding-bottom:1px;color:rgba(26,8,0,.6)}
 .can .pend{position:absolute;top:19%;left:5px;font-size:7.5px;font-weight:600;letter-spacing:.4px;
   color:#1a0800;background:var(--warn);padding:1px 5px;border-radius:7px;z-index:2}
 .cell .meta{display:flex;align-items:center;justify-content:center;gap:5px}
@@ -342,9 +346,71 @@ textarea:focus,input.f:focus,select.f:focus{border-color:var(--accent);box-shado
 .can.hasph .bstyle{color:rgba(244,239,232,.62)}
 .can .bname{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .can .bstyle{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
-.can .abv{background:rgba(0,0,0,.7);padding:1px 5px;border-radius:7px}
+.can.hasph .abv{color:#FF8A4D}
 .grid{align-items:start}
 .cell .meta{min-height:16px}
+/* --- étoiles fractionnaires --- */
+.stars .st{position:relative;display:inline-block;color:rgba(244,239,232,.17)}
+.stars .stf{position:absolute;left:0;top:0;overflow:hidden;white-space:nowrap;
+  color:var(--accent);transition:width .18s var(--e)}
+.stars.dim .stf{color:var(--dimmer)}
+.cell:hover .stars .stf{color:var(--accent)}
+/* --- saisie de la note, demi-étoile au tap --- */
+.rsw{position:relative;display:inline-block;font-size:30px;line-height:1}
+.rss{position:relative;display:block;color:var(--dimmer)}
+.rsf{position:absolute;left:0;top:0;overflow:hidden;white-space:nowrap;color:var(--accent);
+  text-shadow:0 0 14px var(--glow);transition:width .16s var(--e)}
+.rsf.pre{opacity:.5;text-shadow:none}
+.rsh{position:absolute;top:0;bottom:0;left:0;width:50%;background:none;border:0;padding:0;
+  cursor:pointer;z-index:2;-webkit-tap-highlight-color:transparent}
+.rsh.rsr{left:50%}
+.rate-val{text-align:center;font-size:12px;color:var(--dim);margin-top:2px;min-height:15px}
+.rate-val b{color:var(--accent);font-weight:600}
+/* --- photo agrandie --- */
+.beer-hero .zoomable{width:84px;flex:0 0 84px;padding:0;border:0;background:none;
+  display:block;position:relative;cursor:zoom-in}
+.beer-hero .zoomable .can{width:100%}
+.zoomcue{position:absolute;right:5px;bottom:5px;z-index:3;display:flex;align-items:center;
+  justify-content:center;width:21px;height:21px;border-radius:50%;color:#F4EFE8;
+  background:rgba(10,10,12,.62);border:.5px solid rgba(255,255,255,.2);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);transition:.22s var(--e)}
+.beer-hero .zoomable:hover .zoomcue{background:var(--accent);color:#0A0A0C;transform:scale(1.1)}
+.lightbox{position:absolute;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;
+  padding:26px;cursor:zoom-out;background:rgba(6,6,8,.93);backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);opacity:0;transition:opacity .22s var(--e)}
+.lightbox.in{opacity:1}
+.lightbox img{max-width:100%;max-height:100%;object-fit:contain;border-radius:14px;
+  transform:scale(.93);transition:transform .28s var(--e);box-shadow:0 24px 60px -18px rgba(0,0,0,.9)}
+.lightbox.in img{transform:scale(1)}
+.lb-x{position:absolute;top:15px;right:15px;width:34px;height:34px;border-radius:50%;border:0;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;color:#F4EFE8;
+  background:rgba(255,255,255,.12)}
+/* --- écran à propos --- */
+.ab-hero{text-align:center;padding:20px 0 6px}
+.ab-word{font-family:'Space Grotesk';font-size:21px;font-weight:700;letter-spacing:.13em;color:var(--text)}
+.ab-word span{color:var(--accent)}
+.ab-ver{font-size:11.5px;color:var(--dimmer);margin-top:6px;letter-spacing:.03em}
+.ab-list{list-style:none;padding:0;margin:12px 0 0;display:flex;flex-direction:column;gap:9px}
+.ab-li{position:relative;padding-left:25px;font-size:13px;line-height:1.5;color:var(--dim)}
+.ab-li::before{position:absolute;left:0;top:0;font-size:13px;font-weight:700}
+.ab-li.ok::before{content:'✓';color:var(--accent)}
+.ab-li.no::before{content:'✕';color:var(--dimmer)}
+.ab-card{background:var(--surface-2);border:1px solid var(--border);border-radius:13px;
+  padding:13px 15px;margin-top:11px}
+.ab-card.accent{border-color:rgba(255,90,31,.35)}
+.ab-k{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--dimmer);margin-bottom:5px}
+.ab-v{font-size:13px;line-height:1.55;color:var(--text)}
+.ab-v b{color:var(--accent);font-weight:600}
+.ab-tel{display:inline-block;margin-top:9px;font-family:'Space Grotesk';font-size:17px;font-weight:600;
+  color:var(--accent);text-decoration:none;letter-spacing:.02em}
+.ab-p{font-size:13px;line-height:1.6;color:var(--dim);margin-top:10px}
+.ab-p b{color:var(--text);font-weight:600}
+.ab-p.dim{font-size:12px;color:var(--dimmer)}
+.ab-foot{margin-top:26px;padding-top:16px;border-top:1px solid var(--border);
+  font-size:11.5px;line-height:1.7;color:var(--dimmer);text-align:center}
+.est{font-size:10px;color:var(--dimmer);border:1px solid var(--border);border-radius:6px;
+  padding:0 4px;margin-left:3px;letter-spacing:.02em;cursor:help}
+.tg.alrg{background:rgba(232,176,75,.13);color:var(--warn)}
 </style>
 </head>
 <body>
@@ -375,6 +441,7 @@ const I={
  gear:'<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.2 14.6a1.6 1.6 0 0 0 .32 1.77l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.6 1.6 0 0 0-2.72 1.14v.16a2 2 0 1 1-4 0v-.09a1.6 1.6 0 0 0-2.77-1.1l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.6 1.6 0 0 0-1.1-2.72H3.2a2 2 0 1 1 0-4h.09a1.6 1.6 0 0 0 1.1-2.77l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.6 1.6 0 0 0 2.72-1.1V3.2a2 2 0 1 1 4 0v.09a1.6 1.6 0 0 0 2.72 1.1l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.6 1.6 0 0 0 1.1 2.72h.16a2 2 0 1 1 0 4h-.09a1.6 1.6 0 0 0-1.46.97Z"/></svg>',
  back:'<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
  x:'<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+ zoom:'<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.6-4.6M10.5 7.8v5.4M7.8 10.5h5.4"/></svg>',
  chev:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>',
  cam:'<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5h3l1.6-2.4h8.8L18 8.5h3v11H3Z"/><circle cx="12" cy="13.6" r="3.4"/></svg>',
  lock:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10" width="15" height="10.5" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
@@ -465,6 +532,8 @@ async function hydrate() {
     id: b.id, n: b.name, br: b.brewery, st: b.style || 'Non précisé',
     abv: +b.abv || 0, cl: b.volume_cl, pays: b.country || '—', c: b.color || '#FF7A2F',
     d: b.description || '', img: b.image_url, ok: b.status === 'approved' ? 1 : 0,
+    kcal: b.kcal_100ml != null ? +b.kcal_100ml : null, kcalSrc: b.kcal_source || null,
+    allerg: b.allergens || '', ingr: b.ingredients || '',
     mine: b.submitted_by === C.myId ? 1 : 0,
     track: (watch.data||[]).some(w => w.beer_id === b.id) ? 1 : 0,
     new: Date.now() - new Date(b.created_at) < 30*864e5 ? 1 : 0,
@@ -649,13 +718,22 @@ const Store = {
   arts: () => C.arts,
 
   units(b) { return +(b.cl * 10 * (b.abv/100) * 0.789 / 10).toFixed(2); },
+
+  /* Calories. Si la fiche n'a rien, on estime : l'alcool pèse 7,1 kcal/g
+     et sa densité est 0,789, soit ~5,6 kcal par degré et par 100 ml, plus
+     ~14 kcal de glucides résiduels. kcalIsReal dit laquelle des deux on montre. */
+  kcal100(b) { return b && b.kcal != null ? b.kcal : +(((b?.abv || 0) * 5.6 + 14).toFixed(1)); },
+  kcal(b)    { return b ? Math.round(Store.kcal100(b) * (b.cl || 33) / 10) : 0; },
+  kcalIsReal(b) { return !!(b && b.kcal != null && b.kcalSrc === 'off'); },
+
   stats() {
     const L = C.logs, n = L.length, rated = L.filter(l => l.r);
     const cl  = L.reduce((s,l) => s + (Store.beer(l.b)?.cl || 0), 0);
     const eur = L.reduce((s,l) => s + (l.paid || 0), 0);
     const un  = L.reduce((s,l) => { const b = Store.beer(l.b); return s + (b ? Store.units(b) : 0) }, 0);
+    const kcal = L.reduce((s,l) => { const b = Store.beer(l.b); return s + Store.kcal(b) }, 0);
     const weeks = Math.max(1, Math.ceil((Date.now() - new Date(L[L.length-1]?.at || Date.now())) / (7*864e5)));
-    return { n, cl, eur, un:+un.toFixed(1),
+    return { n, cl, eur, un:+un.toFixed(1), kcal, kcalAvg: Math.round(kcal/weeks),
       avg: rated.length ? rated.reduce((s,l)=>s+l.r,0)/rated.length : 0,
       brews: new Set(L.map(l => Store.beer(l.b)?.br)).size,
       wkAvg: +(n/weeks).toFixed(1), eurAvg: +(eur/weeks).toFixed(2), unAvg: +(un/weeks).toFixed(1) };
@@ -759,18 +837,24 @@ const $=s=>document.querySelector(s);
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');
   clearTimeout(t._x);t._x=setTimeout(()=>t.classList.remove('show'),2000)}
 
-function stars(n,cls){let s='';for(let i=1;i<=5;i++)s+=n>=i?'★':'☆';
+/* étoiles avec demi-crans : chaque étoile est une étoile creuse
+   recouverte d'une étoile pleine dont on ne montre qu'un pourcentage */
+function stars(n,cls){let s='';
+  for(let i=1;i<=5;i++){const f=Math.max(0,Math.min(1,(n||0)-i+1));
+    s+='<span class="st">★<span class="stf" style="width:'+(f*100)+'%">★</span></span>'}
   return '<span class="stars '+(cls||'')+'">'+s+'</span>'}
+const fmtRate = r => String(r).replace('.',',');
 function shortName(n){ return n.length > 42 ? n.slice(0,40).trim()+'…' : n }
 function can(b,x){
   return '<div class="can'+(b.img?' hasph':'')+'">'
    + (b.img ? '<div class="ph" style="background-image:url('+b.img+')"></div>'
             : '<div class="rim"><span class="pull"></span></div>')
-   + (x ? '<span class="abv">'+(b.abv ? b.abv+'°' : 'sans alcool')+'</span>' : '')
    + (b.ok ? '' : '<span class="pend">en attente</span>')
-   + '<div class="body"><div class="band" style="background:'+b.c+'">'
-   + '<div class="bname">'+shortName(b.n)+'</div>'
-   + '<div class="bstyle">'+b.br+'</div></div></div></div>';
+   + '<div class="body"><div class="band" style="background:'+b.c+'"><div class="brow">'
+   + '<span class="btxt"><span class="bname">'+shortName(b.n)+'</span>'
+   + '<span class="bstyle">'+b.br+'</span></span>'
+   + (x ? '<span class="abv">'+(b.abv ? fmtRate(b.abv)+'°' : 'sans alc.')+'</span>' : '')
+   + '</div></div></div></div>';
 }
 function cell(b,r){return '<button class="cell" onclick="openBeer(\''+b.id+'\')">'+can(b,1)
   +'<span class="meta">'+stars(r!==undefined?r:Store.rating(b.id),r===undefined?'dim':'')+'</span></button>'}
@@ -955,7 +1039,8 @@ function vUser(){
 /* ---------- mon profil ---------- */
 function vMe(){
   const me=Store.me(),s=Store.stats(),L=Store.logs(),w=Store.week(),wu=Store.weekUnits();
-  const h=[0,0,0,0,0];L.forEach(l=>{if(l.r)h[l.r-1]++});const mx=Math.max(...h,1);
+  // les demi-notes sont regroupées sur l'étoile supérieure (4,5 compte dans les 5)
+  const h=[0,0,0,0,0];L.forEach(l=>{if(l.r)h[Math.min(4,Math.max(0,Math.ceil(l.r)-1))]++});const mx=Math.max(...h,1);
   const st={};L.forEach(l=>{const x=Store.beer(l.b).st;st[x]=(st[x]||0)+1});
   const top=Object.entries(st).sort((a,b)=>b[1]-a[1]).slice(0,5);const smx=top.length?top[0][1]:1;
   const above=w>s.wkAvg*1.3;
@@ -978,6 +1063,7 @@ function vMe(){
      +'<div class="rp-row"><span class="k">Volume total</span><span class="v">'+(s.cl/100).toFixed(1)+' <small>L</small></span></div>'
      +'<div class="rp-row"><span class="k">Unités d\'alcool</span><span class="v">'+s.un+' <small>· '+s.unAvg+'/semaine</small></span></div>'
      +'<div class="rp-row"><span class="k">Dépenses</span><span class="v">'+s.eur.toFixed(2)+' € <small>· '+s.eurAvg+' €/semaine</small></span></div>'
+     +'<div class="rp-row"><span class="k">Calories</span><span class="v">'+s.kcal.toLocaleString('fr-FR')+' <small>kcal · '+s.kcalAvg.toLocaleString('fr-FR')+'/semaine</small></span></div>'
      +'<div class="rp-row"><span class="k">Prix moyen la canette</span><span class="v">'+(s.eur/Math.max(s.n,1)).toFixed(2)+' €</span></div>'
    +'</div>'
    +'<div class="note">'+I.info+'<span>Repère de Santé publique France : pas plus de 10 verres par semaine, pas plus de 2 par jour, et des jours sans. Un verre standard = 1 unité.</span></div>'
@@ -1044,11 +1130,12 @@ function shrink(file, max){
 /* ---------- compte ---------- */
 function vAccount(){
   const me=Store.me();
-  const rows=[['Infos perso','Pseudo, e-mail, ville'],['Confidentialité','Qui voit ton journal et tes dépenses'],
+  const rows=[['Infos perso','Pseudo, e-mail, ville'],
+    ['Confidentialité','Ce qui est collecté, où c\'est hébergé, tes droits','openAbout(\'data\')'],
     ['Devise et unités','€ · cl'],['Notifications','Réponses, mentions, baisses de prix'],
     ['Mes propositions de bières','Fiches envoyées à la validation'],['Exporter tes données','CSV de ton journal'],
     ['Vérification d\'âge','Confirmée'],['Aide et modération','Signaler une fiche, un prix, un avis'],
-    ['À propos','Letterbeer v3 · Données bières © Open Food Facts (ODbL) · Photos CC-BY-SA']];
+    ['À propos','Version, licences et prévention','openAbout()']];
   const pst=me.photo?'background-image:url('+me.photo+')':'';
   return '<div class="phead" style="padding-bottom:14px">'
     +'<button class="pic" style="width:64px;height:64px;font-size:22px;'+pst+'" onclick="pickPhoto()">'
@@ -1058,9 +1145,94 @@ function vAccount(){
      +'<b style="font-size:13.5px;font-weight:500;display:block">Stats privées</b>'
      +'<span style="font-size:11.5px;color:var(--dim)">Masque ta conso et tes dépenses</span></span>'
      +'<span class="sw'+(me.priv?' on':'')+'" onclick="togglePriv()"></span></div>'
-   +rows.map(r=>'<button class="row tap" onclick="toast(\'Écran à construire\')">'
+   +rows.map(r=>'<button class="row tap" onclick="'+(r[2]||'toast(\'Écran à construire\')')+'">'
      +'<span class="t"><b>'+r[0]+'</b><span>'+r[1]+'</span></span><span class="chev">'+I.chev+'</span></button>').join('')
    +'<button class="ghost" style="margin-top:20px;color:var(--bad);border-color:#3a1f1f" onclick="toast(\'Déconnexion\')">Se déconnecter</button>';
+}
+
+/* ---------- à propos & confidentialité ---------- */
+const APP_VERSION = 'v3.1';
+function openAbout(tab){
+  const sh=$('#sheet'); sh.classList.add('open');
+  const yes = t => `<li class="ab-li ok">${t}</li>`;
+  const no  = t => `<li class="ab-li no">${t}</li>`;
+  sh.innerHTML = `<div class="sheet-in"><div class="grab"></div>
+   <div class="sheet-bar"><b>À propos</b><button class="icon-btn" onclick="closeSheet()">${I.x}</button></div>
+   <div class="sheet-body">
+
+    <div class="ab-hero">
+      <div class="ab-word">LETTER<span>BEER</span></div>
+      <div class="ab-ver">${APP_VERSION} · prototype entre amis</div>
+    </div>
+
+    <div class="note warn">${I.info}<span>C'est un prototype. La base peut être réinitialisée sans
+      prévenir, et tes données avec. N'y mets rien que tu ne supporterais pas de perdre.</span></div>
+
+    <div class="sec" style="padding-top:22px"><h2>Ce qu'on collecte</h2><span class="eyebrow">le minimum</span></div>
+    <ul class="ab-list">
+      ${yes('Ton e-mail — uniquement pour te connecter')}
+      ${yes('Ton pseudo, et ta ville si tu la renseignes')}
+      ${yes('Ton journal : ce que tu bois, tes notes, tes prix payés')}
+      ${yes('Tes photos de profil, redimensionnées avant envoi')}
+    </ul>
+
+    <div class="sec" style="padding-top:20px"><h2>Ce qu'on ne collecte pas</h2></div>
+    <ul class="ab-list">
+      ${no('Ni nom, ni date de naissance, ni téléphone')}
+      ${no('Aucun traceur, aucun cookie publicitaire, aucun analytics')}
+      ${no('Aucune position GPS — les métadonnées EXIF de tes photos sont effacées avant l\'envoi')}
+    </ul>
+
+    <div class="ab-card">
+      <div class="ab-k">Où sont tes données</div>
+      <div class="ab-v">Hébergées chez Supabase, en Europe. Elles ne quittent pas l'UE.</div>
+    </div>
+    <div class="ab-card">
+      <div class="ab-k">Combien de temps</div>
+      <div class="ab-v">Tant que ton compte existe. Tu le supprimes, tout part avec —
+        journal, avis, photos, dépenses. Sans copie de sauvegarde.</div>
+    </div>
+    <div class="ab-card">
+      <div class="ab-k">Qui voit quoi</div>
+      <div class="ab-v">Tes avis sont publics. <b>Ton journal et tes dépenses ne sortent jamais
+        de ton compte</b>, même profil public, même pour moi. C'est verrouillé côté base, pas juste caché à l'écran.</div>
+    </div>
+
+    <div class="sec" style="padding-top:22px"><h2>Tes droits</h2><span class="eyebrow">RGPD</span></div>
+    <div class="ab-p">Tu peux à tout moment récupérer tes données, les corriger, ou supprimer ton compte.
+      Pas de formulaire, pas de délai : les deux boutons sont dans cet écran Compte.</div>
+    <div class="two" style="margin-top:12px">
+      <button class="ghost" onclick="toast('Export CSV à brancher')">Exporter mes données</button>
+      <button class="ghost" style="color:var(--bad);border-color:#3a1f1f"
+        onclick="toast('Suppression à brancher')">Supprimer mon compte</button>
+    </div>
+
+    <div class="sec" style="padding-top:24px"><h2>Alcool et santé</h2><span class="eyebrow">repères officiels</span></div>
+    <div class="ab-p">Santé publique France : <b>pas plus de 10 verres par semaine</b>, pas plus de 2 par jour,
+      et des jours sans alcool. Un verre standard = 1 unité.</div>
+    <div class="ab-card accent">
+      <div class="ab-k">Alcool Info Service</div>
+      <div class="ab-v">Anonyme, gratuit, 8h–2h, 7j/7.</div>
+      <a class="ab-tel" href="tel:0980980930">0 980 980 930</a>
+    </div>
+    <div class="ab-p dim">Letterbeer compte ce que tu bois, il ne te juge pas et ne remplace pas un
+      professionnel de santé.</div>
+
+    <div class="sec" style="padding-top:24px"><h2>Sources et licences</h2></div>
+    <div class="ab-p">Les fiches bières viennent d'<b>Open Food Facts</b>, une base ouverte et
+      communautaire.</div>
+    <div class="tagline" style="padding:12px 0 0">
+      <span class="tg">Données © Open Food Facts — ODbL</span>
+      <span class="tg">Photos — CC-BY-SA</span>
+    </div>
+
+    <div class="ab-foot">Letterbeer ${APP_VERSION} · fait entre potes, à Nantes.<br>
+      Une question, un bug, une donnée à corriger : écris-moi.</div>
+
+   </div></div>`;
+  if(tab==='data') setTimeout(()=>{
+    const el=sh.querySelector('.ab-list'); if(el) el.scrollIntoView({behavior:'smooth',block:'center'});
+  },260);
 }
 
 /* ---------- abonnés / abonnements ---------- */
@@ -1091,8 +1263,12 @@ function drawSheet(){
   sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
    +'<div class="sheet-bar"><b>'+b.st+'</b><button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
    +'<div class="sheet-body">'
-   +'<div class="beer-hero">'+can(b)+'<div style="flex:1"><h1>'+b.n+'</h1><div class="br">'+b.br+'</div>'
-     +'<div class="fx">'+(b.abv||'?')+'° · '+b.cl+' cl · '+b.pays+' · '+Store.units(b)+' unité'+(Store.units(b)>1?'s':'')+'</div>'
+   +'<div class="beer-hero">'
+   +(b.img?'<button class="zoomable" onclick="zoomPhoto(\''+b.img+'\')" aria-label="Agrandir la photo">'
+           +can(b)+'<span class="zoomcue">'+I.zoom+'</span></button>':can(b))
+   +'<div style="flex:1"><h1>'+b.n+'</h1><div class="br">'+b.br+'</div>'
+     +'<div class="fx">'+(b.abv||'?')+'° · '+b.cl+' cl · '+b.pays+' · '+Store.units(b)+' unité'+(Store.units(b)>1?'s':'')
+     +'<br>'+Store.kcal(b)+' kcal'+(Store.kcalIsReal(b)?'':' <span class="est" title="Estimé depuis le degré et le volume">estimé</span>')+'</div>'
      +'<div class="avgbox"><span class="num">'+(Store.count(b.id)?Store.rating(b.id).toFixed(1):'—')+'</span><span>'
      +stars(Store.rating(b.id))+'<br><span style="font-size:11px;color:var(--dimmer)">'
      +(Store.count(b.id)?Store.count(b.id).toLocaleString('fr-FR')+' notes':'pas encore notée')+'</span></span></div></div></div>'
@@ -1101,9 +1277,14 @@ function drawSheet(){
    +'<div class="desc">'+b.d+'</div>'
    +'<div class="rate-zone">'
      +'<div class="eyebrow" style="text-align:center">Ta note</div>'
-     +'<div class="rate-stars" onmouseleave="preview(0)">'+[1,2,3,4,5].map(i=>'<button class="rs'+(SH.rate>=i?' on':'')
-       +'" data-i="'+i+'" onmouseenter="preview('+i+')" onclick="setRate('+i+')">'+(SH.rate>=i?'★':'☆')+'</button>').join('')+'</div>'
-     +'<div class="hint">Une note, c\'est tout. Le reste est optionnel.</div>'
+     +'<div class="rate-stars" onmouseleave="preview(0)">'+[1,2,3,4,5].map(i=>{
+       const f=Math.max(0,Math.min(1,SH.rate-i+1));
+       return '<span class="rsw"><span class="rss">★<span class="rsf" style="width:'+(f*100)+'%">★</span></span>'
+        +'<button class="rsh" onmouseenter="preview('+(i-.5)+')" onclick="setRate('+(i-.5)+')" aria-label="'+(i-.5)+' sur 5"></button>'
+        +'<button class="rsh rsr" onmouseenter="preview('+i+')" onclick="setRate('+i+')" aria-label="'+i+' sur 5"></button></span>'
+     }).join('')+'</div>'
+     +'<div class="rate-val">'+(SH.rate?'<b>'+fmtRate(SH.rate)+'</b> sur 5':'')+'</div>'
+     +'<div class="hint">Une note, c\'est tout. Le reste est optionnel. Touche la moitié gauche d\'une étoile pour une demi-note.</div>'
      +'<div style="display:flex;gap:9px;margin-top:13px">'
        +'<button class="chip'+(SH.liked?' on':'')+'" style="flex:1;text-align:center" onclick="SH.liked=SH.liked?0:1;drawSheet()">♥ Coup de cœur</button>'
        +'<button class="chip" style="flex:1;text-align:center" onclick="toast(\'Ajoutée à ta liste d\\\'envies\')">+ À goûter</button>'
@@ -1132,14 +1313,21 @@ function drawSheet(){
    +'<button class="ghost" onclick="trackBeer()" style="display:flex;align-items:center;justify-content:center;gap:9px;'
      +(b.track?'border-color:var(--accent);color:var(--accent)':'')+'">'+I.bell
      +(b.track?' Suivi de prix activé':' Prévenez-moi si le prix baisse')+'</button>'
-   +'<div class="tagline">'+[b.st,b.pays,(b.abv||'?')+'°','canette '+b.cl+' cl'].map(t=>'<span class="tg">'+t+'</span>').join('')+'</div>'
+   +(b.allerg?'<div class="sec" style="padding-top:22px"><h2>Allergènes</h2><span class="eyebrow">source Open Food Facts</span></div>'
+     +'<div class="tagline" style="padding-top:10px">'+b.allerg.split(',').map(a=>'<span class="tg alrg">'+a.trim()+'</span>').join('')+'</div>'
+     +(b.ingr?'<div class="ab-p dim" style="padding:0 20px">Ingrédients : '+b.ingr+'</div>':''):'')
+   +'<div class="tagline">'+[b.st,b.pays,(b.abv||'?')+'°','canette '+b.cl+' cl',Store.kcal(b)+' kcal'].map(t=>'<span class="tg">'+t+'</span>').join('')+'</div>'
    +'<div class="sec" style="padding-top:22px"><h2>Les avis</h2><span class="eyebrow">'+revs.length+'</span></div>'
    +(revs.length?revs.map(revHTML).join(''):'<div class="empty" style="padding:26px 34px">Personne n\'a encore écrit sur celle-ci. À toi de jouer.</div>')
    +'</div></div>';
 }
-function preview(i){document.querySelectorAll('.rs').forEach(b=>{
-  const n=+b.dataset.i;b.classList.toggle('pre',i>0&&n<=i&&SH.rate<n)})}
-function setRate(i){SH.rate=SH.rate===i?0:i;drawSheet()}
+function preview(v){document.querySelectorAll('.rsw').forEach((w,idx)=>{
+  const i=idx+1, base=Math.max(0,Math.min(1,SH.rate-i+1));
+  const f=v>0?Math.max(0,Math.min(1,v-i+1)):base;
+  const el=w.querySelector('.rsf');
+  el.style.width=(f*100)+'%'; el.classList.toggle('pre', v>0 && f>base);
+})}
+function setRate(v){SH.rate=SH.rate===v?0:v;drawSheet()}
 async function trackBeer(){
   const on = await Store.toggleTrack(SH.beer);
   drawSheet();
@@ -1147,6 +1335,17 @@ async function trackBeer(){
 }
 async function confirmPrice(i){ await Store.confirmPrice(SH.beer,i); drawSheet(); toast('Merci, relevé confirmé') }
 function closeSheet(){$('#sheet').classList.remove('open');$('#sheet').innerHTML=''}
+function zoomPhoto(url){
+  const d=document.createElement('div');
+  d.className='lightbox';
+  d.innerHTML='<img src="'+url+'" alt="Photo de la canette"><button class="lb-x" aria-label="Fermer">'+I.x+'</button>';
+  const close=()=>{d.classList.remove('in');setTimeout(()=>d.remove(),220)};
+  d.onclick=close;
+  document.addEventListener('keydown',function esc(e){
+    if(e.key==='Escape'){close();document.removeEventListener('keydown',esc)}});
+  $('#phone').appendChild(d);
+  requestAnimationFrame(()=>d.classList.add('in'));
+}
 async function saveLog(){
   const b = Store.beer(SH.beer), paid = parseFloat((SH.paid||'').replace(',','.')) || null;
   if(!SH.rate && !paid){ toast('Mets au moins une note pour enregistrer'); return }
@@ -1156,7 +1355,7 @@ async function saveLog(){
   if(SH.shop && paid) await Store.addPrice(b.id, SH.shop, paid);
   if(SH.txt.trim()) await Store.addReview({ b:b.id, r:SH.rate, liked:SH.liked, t:SH.txt.trim() });
   closeSheet();
-  toast(b.n + (SH.rate?' · '+SH.rate+'★':'') + ' enregistrée');
+  toast(b.n + (SH.rate?' · '+fmtRate(SH.rate)+'★':'') + ' enregistrée');
   render(); bump();
 }
 function bump(){const el=document.getElementById('bign');if(el){el.classList.add('bump');
