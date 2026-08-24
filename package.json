@@ -1,14 +1,17 @@
 {
   "name": "letterbeer",
-  "version": "1.0.0",
-  "main": "store-supabase.js",
+  "version": "3.3.0",
+  "private": true,
+  "description": "Le carnet de canettes — application web de suivi de dégustation de bières. Ce paquet ne sert qu'aux scripts d'alimentation du catalogue ; l'application elle-même est le fichier index.html, sans dépendance ni compilation.",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "import": "node import-beers.mjs",
+    "enrich": "node enrich-beers.mjs",
+    "icons": "python make-icons.py"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
+  "keywords": ["bière", "canette", "supabase", "pwa"],
+  "author": "Levraiowen",
+  "license": "UNLICENSED",
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3"
   }

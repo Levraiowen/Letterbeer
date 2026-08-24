@@ -1,4 +1,37 @@
 <!DOCTYPE html>
+<!--
+  LETTERBEER — le carnet de canettes
+  https://github.com/Levraiowen/Letterbeer
+
+  Application web d'une seule page, sans étape de compilation : ce fichier
+  se dépose tel quel sur un hébergeur statique. Les données vivent dans
+  Supabase (PostgreSQL), interrogé directement depuis le navigateur avec
+  la clé publique — la sécurité repose entièrement sur les règles RLS
+  décrites dans sql/01-schema.sql, jamais sur le code de cette page.
+
+  Organisation du fichier, dans l'ordre :
+
+    <style>     variables de thème, puis composants du haut vers le bas
+    <body>      la coque : en-tête, contenu, barre de navigation, feuilles
+    <script>
+      MARQUE et ICÔNES     SVG en ligne, aucune police d'icônes
+      AUTHENTIFICATION     inscription, connexion, mot de passe oublié
+      CHARGEMENT           hydrate() remplit le cache C en une passe
+      ÉCHAPPEMENT          esc / safeColor / safeUrl — à utiliser sur
+                           TOUTE donnée venant de la base ou d'un champ
+      STORE                seul endroit qui parle à Supabase
+      VUES                 fonctions v*() qui rendent une chaîne HTML
+      FEUILLES             fonctions open*() / draw*() des panneaux
+      DÉMARRAGE            hydrate puis render, ou écran de repli
+
+  Deux règles à respecter si vous modifiez ce fichier :
+
+    1. toute donnée affichée passe par esc(), safeColor() ou safeUrl() ;
+       le rendu se fait par innerHTML, une omission ouvre une faille XSS
+    2. toute écriture vérifie l'erreur renvoyée par Supabase avant de
+       toucher au cache local, sinon l'écran affiche un succès que la
+       base n'a pas enregistré
+-->
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
@@ -344,11 +377,6 @@ button.lockup:active{transform:scale(.96)}
 .desc{padding:14px 20px 0;font-size:13.5px;line-height:1.6;color:#CFCAC4}
 .rate-zone{margin:16px 20px 0;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:15px}
 .rate-stars{display:flex;gap:9px;justify-content:center;margin:4px 0 2px}
-.rs{background:none;border:0;font-size:30px;line-height:1;color:var(--dimmer);cursor:pointer;padding:0;
-  transition:color .18s,transform .18s var(--e)}
-.rs:hover{transform:scale(1.22)}
-.rs.on{color:var(--accent);text-shadow:0 0 14px var(--glow)}
-.rs.pre{color:#7a4526}
 .hint{text-align:center;font-size:11px;color:var(--dimmer);margin-top:7px;line-height:1.5}
 textarea,input.f,select.f{width:100%;background:var(--surface-2);border:1px solid var(--border);
   border-radius:11px;color:var(--text);font-family:'Inter';font-size:13.5px;padding:11px 13px;outline:0;resize:none;
@@ -509,8 +537,6 @@ textarea:focus,input.f:focus,select.f:focus{border-color:var(--accent);box-shado
 .ab-k{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--dimmer);margin-bottom:5px}
 .ab-v{font-size:13px;line-height:1.55;color:var(--text)}
 .ab-v b{color:var(--accent);font-weight:600}
-.ab-tel{display:inline-block;margin-top:9px;font-family:'Space Grotesk';font-size:17px;font-weight:600;
-  color:var(--accent);text-decoration:none;letter-spacing:.02em}
 .ab-p{font-size:13px;line-height:1.6;color:var(--dim);margin:10px 20px 0}
 .ab-card .ab-p{margin-left:0;margin-right:0}
 .ab-p b{color:var(--text);font-weight:600}
@@ -1173,18 +1199,6 @@ async function drop(id, kind) {
 }
 
 /* ============================ DÉMARRAGE ============================ */
-/* Remplacer l'appel final `render();` de la v3 par :
-
-   (async () => {
-     const ok = await hydrate();
-     if (!ok) { drawLogin(); return; }
-     render();
-   })();
-
-   Et rendre `async` les gestionnaires qui écrivent (saveLog, follow,
-   doCheer, doBof, doPass, doReply, sendBeer, togglePriv, confirmPrice,
-   trackBeer, pickPhoto) en ajoutant `await` devant l'appel Store.
-*/
 let LGMODE = 'in';   // 'in' = connexion, 'up' = création
 
 function drawLogin(){

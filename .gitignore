@@ -1,0 +1,17 @@
+# dépendances des scripts d'import — réinstallables avec npm install
+node_modules/
+
+# jamais dans le dépôt : la clé service_role contourne toutes les règles RLS
+.env
+.env.*
+
+# fichiers de travail des éditeurs et du système
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# sorties temporaires
+*.log
+*.tmp
