@@ -65,7 +65,11 @@ button.lockup:active{transform:scale(.96)}
 #ind{position:absolute;bottom:-1px;height:2px;background:var(--accent);border-radius:2px;
   box-shadow:0 0 10px var(--glow);transition:left .34s var(--e),width .34s var(--e);left:0;width:0}
 
-#view{flex:1;overflow-y:auto;overscroll-behavior:contain;padding-bottom:26px;position:relative}
+/* overflow-x explicite : sans lui, overflow-y:auto rend l'axe horizontal
+   « auto » à son tour, et le moindre débordement d'un pixel laisse la page
+   glisser latéralement. Les carrousels ont leur propre conteneur défilant. */
+#view{flex:1;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;
+  padding-bottom:26px;position:relative}
 #view::-webkit-scrollbar{width:0}
 .page.slide{animation:sl .3s var(--e)}
 @keyframes sl{from{opacity:0;transform:translateX(calc(var(--d,1) * 26px))}to{opacity:1;transform:none}}
@@ -524,15 +528,23 @@ textarea:focus,input.f:focus,select.f:focus{border-color:var(--accent);box-shado
   font-size:12.5px;color:var(--dim);text-decoration:underline;text-underline-offset:3px;
   font-family:inherit;padding:6px}
 .linkbtn:hover{color:var(--accent)}
-/* --- modération --- */
-.modrow{display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--border)}
-.modinfo{flex:1;min-width:0}
-.modinfo b{display:block;font-size:13.5px;font-weight:600;color:var(--text);
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.modinfo span{display:block;font-size:11.5px;color:var(--dim);margin-top:3px}
-.modacts{display:flex;gap:7px;flex:0 0 auto}
-.modbtn{border:1px solid var(--border);background:none;border-radius:16px;padding:6px 12px;
-  font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:.2s var(--e)}
+/* --- modération : la photo décide, donc elle domine la carte --- */
+.modgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+  gap:12px;padding:14px 20px 0}
+.modcard{background:var(--surface);border:1px solid var(--border);border-radius:13px;
+  overflow:hidden;display:flex;flex-direction:column}
+.modph{width:100%;aspect-ratio:1/1;background:#0E0E11;border:0;padding:0;display:block;
+  cursor:zoom-in;position:relative}
+.modph img{width:100%;height:100%;object-fit:contain;display:block}
+.modph.vide{display:flex;align-items:center;justify-content:center;font-size:11px;
+  color:var(--dimmer);cursor:default}
+.modinfo{padding:10px 12px 8px;min-width:0}
+.modinfo b{display:block;font-size:12.5px;font-weight:600;color:var(--text);line-height:1.3;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.modinfo span{display:block;font-size:11px;color:var(--dim);margin-top:3px}
+.modacts{display:flex;gap:6px;padding:0 12px 12px;margin-top:auto}
+.modbtn{flex:1;border:1px solid var(--border);background:none;border-radius:12px;padding:7px 6px;
+  font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit;transition:.2s var(--e)}
 .modbtn.yes{color:var(--ok);border-color:rgba(63,217,139,.35)}
 .modbtn.yes:hover{background:rgba(63,217,139,.12)}
 .modbtn.no{color:var(--bad);border-color:#3a1f1f}
@@ -1079,9 +1091,10 @@ const Store = {
 
   /* ---- modération (administrateurs) ---- */
   isAdmin: () => !!C.isAdmin,
-  async pendingBeers() {
+  async pendingBeers(statut) {
     const { data, error } = await sb.from('beers').select('*')
-      .eq('status','pending').order('created_at',{ ascending:true });
+      .eq('status', statut || 'pending')
+      .order('created_at',{ ascending:false }).limit(400);
     if (error) throw error;
     return data || [];
   },
@@ -1831,42 +1844,62 @@ function openArticle(url){
   window.open(u, '_blank', 'noopener,noreferrer');
 }
 
-/* ---------- modération des fiches proposées ---------- */
-async function openModeration(){
+/* ---------- modération des fiches proposées ----------
+   La photo est le seul élément qui permette de trancher canette ou
+   bouteille : Open Food Facts ne renseigne l'emballage que sur 5 % des
+   fiches. La première version l'omettait, ce qui rendait l'écran
+   inutilisable. Elle est désormais grande et cliquable. */
+let MODTAB = 'pending';
+async function openModeration(tab){
+  MODTAB = tab || 'pending';
   const sh=$('#sheet'); sh.classList.add('open');
   sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
-   +'<div class="sheet-bar"><b>Fiches à valider</b><button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
+   +'<div class="sheet-bar"><b>Fiches</b><button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
+   +'<div style="border-bottom:1px solid var(--border);padding-top:12px"><div class="tabwrap">'
+     +'<button class="tab'+(MODTAB==='pending'?' on':'')+'" onclick="openModeration(\'pending\')">À valider</button>'
+     +'<button class="tab'+(MODTAB==='approved'?' on':'')+'" onclick="openModeration(\'approved\')">Déjà validées</button>'
+   +'</div></div>'
    +'<div class="sheet-body"><div class="empty">Chargement…</div></div></div>';
   let list;
-  try { list = await Store.pendingBeers(); }
+  try { list = await Store.pendingBeers(MODTAB); }
   catch(e){ console.error(e); closeSheet(); toast('Liste indisponible'); return }
   drawModeration(list);
 }
+
 function drawModeration(list){
   const body=document.querySelector('#sheet .sheet-body'); if(!body) return;
+  const enAttente = MODTAB==='pending';
   body.innerHTML =
-    '<div class="note">'+I.info+'<span>Vérifie le nom, la brasserie et la cohérence du degré '
-   +'et du format. Une fiche rejetée reste visible de son auteur seul.</span></div>'
+    '<div class="note">'+I.info+'<span>'
+   +(enAttente
+      ? 'Regarde la photo : <b>canette → Valider, bouteille → Rejeter</b>. Touche l\'image pour l\'agrandir.'
+      : 'Les fiches déjà en ligne. Si une bouteille s\'est glissée dedans, rejette-la ici.')
+   +'</span></div>'
    +(list.length
-     ? list.map(b=>'<div class="modrow" id="mod-'+esc(b.id)+'">'
+     ? '<div class="modgrid">'+list.map(b=>{
+        const img=safeUrl(b.image_url);
+        return '<div class="modcard" id="mod-'+esc(b.id)+'">'
+        +(img?'<button class="modph" onclick="zoomPhoto(\''+esc(img)+'\')" aria-label="Agrandir">'
+              +'<img src="'+esc(img)+'" alt="" loading="lazy"></button>'
+            :'<div class="modph vide">pas de photo</div>')
         +'<div class="modinfo"><b>'+esc(b.name)+'</b>'
-          +'<span>'+esc(b.brewery)+' · '+esc(b.style||'style non précisé')+' · '
-          +(b.abv||'?')+'° · '+(b.volume_cl||'?')+' cl · '+esc(b.country||'—')+'</span></div>'
+          +'<span>'+esc(b.brewery)+' · '+(b.abv||'?')+'° · '+(b.volume_cl||'?')+' cl</span></div>'
         +'<div class="modacts">'
-          +'<button class="modbtn no" onclick="doModerate(\''+esc(b.id)+'\',0)">Rejeter</button>'
-          +'<button class="modbtn yes" onclick="doModerate(\''+esc(b.id)+'\',1)">Valider</button>'
-        +'</div></div>').join('')
-     : '<div class="empty">Aucune fiche en attente. Tout est à jour.</div>');
+          +'<button class="modbtn no" onclick="doModerate(\''+esc(b.id)+'\',0)">Bouteille</button>'
+          +'<button class="modbtn yes" onclick="doModerate(\''+esc(b.id)+'\',1)">Canette</button>'
+        +'</div></div>'}).join('')+'</div>'
+     : '<div class="empty">'+(enAttente?'Aucune fiche en attente. Tout est à jour.':'Aucune fiche validée.')+'</div>');
 }
+
 async function doModerate(id, ok){
   const r = await act(()=>Store.moderate(id, ok), 'Décision non enregistrée — réessaie');
   if(r===null) return;
   const row=document.getElementById('mod-'+id);
   if(row) row.remove();
-  toast(ok ? 'Fiche validée' : 'Fiche rejetée');
-  if(!document.querySelector('.modrow'))
+  toast(ok ? 'Gardée comme canette' : 'Retirée : bouteille');
+  if(!document.querySelector('.modcard'))
     document.querySelector('#sheet .sheet-body').innerHTML =
-      '<div class="empty">Aucune fiche en attente. Tout est à jour.</div>';
+      '<div class="empty">Plus rien ici. Tout est à jour.</div>';
 }
 
 /* ---------- RGPD : exporter et supprimer ---------- */
