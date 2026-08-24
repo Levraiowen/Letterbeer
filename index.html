@@ -423,6 +423,17 @@ textarea:focus,input.f:focus,select.f:focus{border-color:var(--accent);box-shado
   font-size:11.5px;line-height:1.7;color:var(--dimmer);text-align:center}
 .est{font-size:10px;color:var(--dimmer);border:1px solid var(--border);border-radius:6px;
   padding:0 4px;margin-left:3px;letter-spacing:.02em;cursor:help}
+/* --- bandeau « déjà notée » + bouton +1 --- */
+.already{display:flex;align-items:flex-start;gap:10px;margin:14px 20px 0;padding:12px 14px;
+  background:rgba(255,90,31,.08);border:1px solid rgba(255,90,31,.28);border-radius:12px;
+  font-size:12.5px;line-height:1.5;color:var(--dim)}
+.already svg{flex:0 0 auto;color:var(--accent);margin-top:1px}
+.already b{color:var(--text);font-weight:600}
+.plus1{flex:0 0 auto;align-self:center;background:var(--accent);color:#0A0A0C;border:0;
+  font-family:'Space Grotesk';font-weight:700;font-size:14px;padding:7px 14px;border-radius:20px;
+  cursor:pointer;transition:.2s var(--e)}
+.plus1:hover{transform:scale(1.06);box-shadow:0 4px 18px var(--glow)}
+.plus1:active{transform:scale(.97)}
 .tg.alrg{background:rgba(232,176,75,.13);color:var(--warn)}
 </style>
 </head>
@@ -495,7 +506,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 const PRICE_TTL = 21;
 
 /* cache local */
-const C = { me:null, myId:null, users:{}, beers:[], ratings:{}, counts:{},
+const C = { me:null, myId:null, email:'', users:{}, beers:[], ratings:{}, counts:{},
             reviews:[], logs:[], follows:[], watch:[], arts:[] };
 
 /* ============================ AUTHENTIFICATION ============================ */
@@ -520,6 +531,7 @@ async function hydrate() {
   const user = await Auth.current();
   if (!user) return false;
   C.myId = user.id;
+  C.email = user.email || '';
 
   const [profiles, beers, ratings, reviews, replies, reactions, logs, prices, follows, watch] =
     await Promise.all([
@@ -599,7 +611,8 @@ async function hydrate() {
 
   /* --- mon journal --- */
   C.logs = (logs.data||[]).map(l => ({
-    b: l.beer_id, r: l.rating, liked: l.liked, paid: l.price_paid ? +l.price_paid : 0,
+    id: l.id,
+    b: l.beer_id, r: l.rating ? +l.rating : 0, liked: l.liked, paid: l.price_paid ? +l.price_paid : 0,
     shop: l.shop || '', d: frDate(l.drunk_at), at: l.drunk_at
   }));
 
@@ -621,6 +634,22 @@ async function loadArticles() {
   return (data||[]).map(a => ({ t:a.title, s:a.summary, c:a.color||'#FF5A1F', url:a.url }));
 }
 
+/* ---------- échappement ----------
+   Tout le rendu passe par innerHTML. Sans ces trois fonctions, un avis,
+   un pseudo ou un nom de bière venant de la base peut injecter du HTML
+   et s'exécuter chez ceux qui l'affichent — ce que le RLS n'empêche pas,
+   puisque le code tourne avec la session de la victime. */
+const ESCAPES = { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' };
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ESCAPES[c]);
+
+/* Une couleur atterrit dans un attribut style : on n'accepte qu'un
+   code hexadécimal, jamais une valeur libre. */
+const safeColor = c => /^#[0-9a-fA-F]{3,8}$/.test(c || '') ? c : '#FF7A2F';
+
+/* Une URL d'image atterrit dans url(...) et parfois dans un onclick :
+   on impose http(s) et on retire ce qui permettrait d'en sortir. */
+const safeUrl = u => /^https?:\/\//i.test(u || '') ? u.replace(/["'()\\<>\s]/g,'') : '';
+
 /* helpers */
 const initials = h => h.replace(/[^a-zA-Z]/g,'').slice(0,2).toUpperCase() || 'BB';
 const HUES = ['#FF5A1F','#FFB020','#7FD1D9','#8FD14F','#FF5D8F','#B07A4F','#C9E265','#5FC9E8'];
@@ -639,8 +668,10 @@ const Store = {
 
   async toggleFollow(k) {
     const u = C.users[k];
-    if (u.foll) await sb.from('follows').delete().eq('follower_id',C.myId).eq('followee_id',k);
-    else        await sb.from('follows').insert({ follower_id:C.myId, followee_id:k });
+    const { error } = u.foll
+      ? await sb.from('follows').delete().eq('follower_id',C.myId).eq('followee_id',k)
+      : await sb.from('follows').insert({ follower_id:C.myId, followee_id:k });
+    if (error) throw error;
     u.foll = u.foll ? 0 : 1;
     return u.foll;
   },
@@ -653,7 +684,8 @@ const Store = {
     C.me.photo = data.publicUrl;
   },
   async setPrivacy(v) {
-    await sb.from('profiles').update({ private_stats: !!v }).eq('id', C.myId);
+    const { error } = await sb.from('profiles').update({ private_stats: !!v }).eq('id', C.myId);
+    if (error) throw error;
     C.me.priv = v ? 1 : 0;
   },
 
@@ -699,21 +731,25 @@ const Store = {
     return f[0] || null;
   },
   async addPrice(id, shop, price) {
-    const { data } = await sb.from('prices').insert({
+    const { data, error } = await sb.from('prices').insert({
       beer_id:id, user_id:C.myId, shop, city:'relevé par toi', price
     }).select().single();
+    if (error) throw error;
     Store.beer(id).pr.push({ _id:data.id, s:shop, v:'relevé par toi', p:price, by:'me', age:0 });
   },
   async confirmPrice(id, i) {
     const p = Store.prices(id)[i];
-    await sb.from('prices').update({ confirmed_at:new Date().toISOString(), status:'fresh' })
-      .eq('id', p._id);
+    const { error } = await sb.from('prices')
+      .update({ confirmed_at:new Date().toISOString(), status:'fresh' }).eq('id', p._id);
+    if (error) throw error;
     p.age = 0; p.v = 'confirmé par toi'; p.by = 'me';
   },
   async toggleTrack(id) {
     const b = Store.beer(id);
-    if (b.track) await sb.from('beer_watchers').delete().eq('user_id',C.myId).eq('beer_id',id);
-    else         await sb.from('beer_watchers').insert({ user_id:C.myId, beer_id:id });
+    const { error } = b.track
+      ? await sb.from('beer_watchers').delete().eq('user_id',C.myId).eq('beer_id',id)
+      : await sb.from('beer_watchers').insert({ user_id:C.myId, beer_id:id });
+    if (error) throw error;
     b.track = b.track ? 0 : 1;
     return b.track;
   },
@@ -730,24 +766,48 @@ const Store = {
   async pass(id)  { return react(id, 'pass'); },
 
   async addReply(id, t) {
-    await sb.from('replies').insert({ user_id:C.myId, review_id:id, body:t });
+    const { error } = await sb.from('replies').insert({ user_id:C.myId, review_id:id, body:t });
+    if (error) throw error;
     Store.review(id).rep.push({ u:'me', t });
   },
+  /* Un seul avis par personne et par bière (contrainte unique en base).
+     En upsert, réécrire son avis le remplace au lieu d'échouer. */
   async addReview(o) {
-    const { data } = await sb.from('reviews').insert({
-      user_id:C.myId, beer_id:o.b, rating:o.r, liked:!!o.liked, body:o.t
-    }).select().single();
-    C.reviews.unshift({ id:data.id, u:'me', b:o.b, r:o.r, liked:o.liked, t:o.t,
-      ch:0, bof:0, mych:0, mybof:0, pass:0, rep:[] });
+    const { data, error } = await sb.from('reviews').upsert({
+      user_id:C.myId, beer_id:o.b, rating:o.r || null, liked:!!o.liked, body:o.t
+    }, { onConflict:'user_id,beer_id' }).select().single();
+    if (error) throw error;
+    const i = C.reviews.findIndex(r => r.u === 'me' && r.b === o.b);
+    const old = i >= 0 ? C.reviews[i] : null;
+    const rec = { id:data.id, u:'me', b:o.b, r:o.r, liked:o.liked?1:0, t:o.t,
+      ch: old?old.ch:0, bof: old?old.bof:0, mych: old?old.mych:0,
+      mybof: old?old.mybof:0, pass: old?old.pass:0, rep: old?old.rep:[] };
+    if (i >= 0) C.reviews[i] = rec; else C.reviews.unshift(rec);
   },
 
   logs: () => C.logs,
+  /* la ligne de journal qui porte la note pour cette bière, s'il y en a une */
+  myRatedLog: id => C.logs.find(l => l.b === id && l.r),
+  myReview:   id => C.reviews.find(r => r.u === 'me' && r.b === id),
+
   async addLog(l) {
-    await sb.from('logs').insert({
+    const { data, error } = await sb.from('logs').insert({
       user_id:C.myId, beer_id:l.b, rating:l.r || null, liked:!!l.liked,
       price_paid:l.paid || null, shop:l.shop || null
-    });
-    C.logs.unshift({ ...l, at:new Date().toISOString() });
+    }).select().single();
+    if (error) throw error;
+    C.logs.unshift({ ...l, id:data.id, at:data.drunk_at });
+    return data.id;
+  },
+  /* modification d'une note existante : on réécrit la ligne au lieu
+     d'en créer une seconde, qui pèserait deux fois dans la moyenne */
+  async updateLog(id, l) {
+    const { error } = await sb.from('logs')
+      .update({ rating:l.r || null, liked:!!l.liked })
+      .eq('id', id).eq('user_id', C.myId);
+    if (error) throw error;
+    const row = C.logs.find(x => x.id === id);
+    if (row) { row.r = l.r; row.liked = l.liked ? 1 : 0; }
   },
   week: () => C.logs.filter(l => Date.now() - new Date(l.at) < 7*864e5).length,
   drunkBeerIds() { const s=[]; C.logs.forEach(l => { if(!s.includes(l.b)) s.push(l.b) }); return s; },
@@ -801,7 +861,8 @@ async function react(id, kind) {
   const key = kind === 'cheer' ? 'mych' : kind === 'bof' ? 'mybof' : 'pass';
   const on = !r[key];
   if (on) {
-    await sb.from('reactions').insert({ user_id:C.myId, review_id:id, kind });
+    const { error } = await sb.from('reactions').insert({ user_id:C.myId, review_id:id, kind });
+    if (error) throw error;
     if (kind === 'cheer' && r.mybof) { await drop(id,'bof'); r.mybof = 0; }
     if (kind === 'bof' && r.mych)    { await drop(id,'cheer'); r.mych = 0; }
   } else {
@@ -810,8 +871,11 @@ async function react(id, kind) {
   r[key] = on ? 1 : 0;
   return r;
 }
-const drop = (id, kind) =>
-  sb.from('reactions').delete().eq('user_id',C.myId).eq('review_id',id).eq('kind',kind);
+async function drop(id, kind) {
+  const { error } = await sb.from('reactions').delete()
+    .eq('user_id',C.myId).eq('review_id',id).eq('kind',kind);
+  if (error) throw error;
+}
 
 /* ============================ DÉMARRAGE ============================ */
 /* Remplacer l'appel final `render();` de la v3 par :
@@ -899,24 +963,27 @@ function stars(n,cls){let s='';
 const fmtRate = r => String(r).replace('.',',');
 function shortName(n){ return n.length > 42 ? n.slice(0,40).trim()+'…' : n }
 function can(b,x){
-  return '<div class="can'+(b.img?' hasph':'')+'">'
-   + (b.img ? '<div class="ph" style="background-image:url('+b.img+')"></div>'
-            : '<div class="rim"><span class="pull"></span></div>')
+  if(!b) return '<div class="can"><div class="rim"><span class="pull"></span></div></div>';
+  const img = safeUrl(b.img);
+  return '<div class="can'+(img?' hasph':'')+'">'
+   + (img ? '<div class="ph" style="background-image:url('+img+')"></div>'
+          : '<div class="rim"><span class="pull"></span></div>')
    + (b.ok ? '' : '<span class="pend">en attente</span>')
-   + '<div class="body"><div class="band" style="background:'+b.c+'"><div class="brow">'
-   + '<span class="btxt"><span class="bname">'+shortName(b.n)+'</span>'
-   + '<span class="bstyle">'+b.br+'</span></span>'
+   + '<div class="body"><div class="band" style="background:'+safeColor(b.c)+'"><div class="brow">'
+   + '<span class="btxt"><span class="bname">'+esc(shortName(b.n))+'</span>'
+   + '<span class="bstyle">'+esc(b.br)+'</span></span>'
    + (x ? '<span class="abv">'+(b.abv ? fmtRate(b.abv)+'°' : 'sans alc.')+'</span>' : '')
    + '</div></div></div></div>';
 }
-function cell(b,r){return '<button class="cell" onclick="openBeer(\''+b.id+'\')">'+can(b,1)
+function cell(b,r){return '<button class="cell" onclick="openBeer(\''+esc(b.id)+'\')">'+can(b,1)
   +'<span class="meta">'+stars(r!==undefined?r:Store.rating(b.id),r===undefined?'dim':'')+'</span></button>'}
 function av(k,sz){const u=Store.user(k)||Store.me();
-  const st=u.photo?'background-image:url('+u.photo+')':'background:'+u.c;
+  const ph=safeUrl(u.photo);
+  const st=ph?'background-image:url('+ph+')':'background:'+safeColor(u.c);
   return '<button class="av" style="'+st+(sz?';width:'+sz+'px;height:'+sz+'px':'')
-    +'" onclick="event.stopPropagation();openUser(\''+k+'\')">'+(u.photo?'':u.i)+'</button>'}
-function uname(k){return '<button class="uname" onclick="event.stopPropagation();openUser(\''+k+'\')">'
-  +(Store.user(k)||Store.me()).h+'</button>'}
+    +'" onclick="event.stopPropagation();openUser(\''+esc(k)+'\')">'+(ph?'':esc(u.i))+'</button>'}
+function uname(k){return '<button class="uname" onclick="event.stopPropagation();openUser(\''+esc(k)+'\')">'
+  +esc((Store.user(k)||Store.me()).h)+'</button>'}
 
 /* ---------- chrome ---------- */
 function chrome(){
@@ -970,9 +1037,9 @@ function vHome(){
       +'<div class="sec"><h2>Nouvelles canettes</h2><span class="eyebrow">août 2026</span></div>'
       +'<div class="rail">'+nv.map(b=>cell(b)).join('')+'</div>'
       +'<div class="sec"><h2>Top de l\'année</h2></div>'
-      +top.map((b,i)=>'<button class="row tap" onclick="openBeer(\''+b.id+'\')"><span class="n">'+(i+1)+'</span>'
+      +top.map((b,i)=>'<button class="row tap" onclick="openBeer(\''+esc(b.id)+'\')"><span class="n">'+(i+1)+'</span>'
         +'<span style="width:34px;flex:0 0 34px">'+can(b)+'</span>'
-        +'<span class="t"><b>'+b.n+'</b><span>'+b.br+' · '+b.st+'</span></span>'
+        +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(b.br)+' · '+esc(b.st)+'</span></span>'
         +'<span style="text-align:right">'+stars(Store.rating(b.id))
         +'<br><span style="font-size:10.5px;color:var(--dimmer)">'+Store.rating(b.id).toFixed(1)+'</span></span></button>').join('');
   }
@@ -980,45 +1047,58 @@ function vHome(){
     +Store.popular().map(revHTML).join('');
   return '<div class="sec"><h2>Le journal</h2></div>'
     +Store.arts().map(a=>'<article class="art" onclick="toast(\'Article à brancher\')">'
-      +'<div class="ph" style="background:'+a.c+'22"><span class="eyebrow" style="color:'+a.c+'">lecture · 4 min</span></div>'
-      +'<div class="cap"><h3>'+a.t+'</h3><p>'+a.s+'</p></div></article>').join('');
+      +'<div class="ph" style="background:'+safeColor(a.c)+'22"><span class="eyebrow" style="color:'+safeColor(a.c)+'">lecture · 4 min</span></div>'
+      +'<div class="cap"><h3>'+esc(a.t)+'</h3><p>'+esc(a.s)+'</p></div></article>').join('');
 }
 
 /* ---------- avis ---------- */
 function revHTML(r){
   const b=Store.beer(r.b),mine=r.u==='me';
-  return '<div class="review'+(r.mybof?' muted':'')+'" id="rev-'+r.id+'">'
+  // La fiche peut manquer : les avis sont publics, mais une bière en
+  // attente n'est visible que de son auteur. Sans cette sortie, l'onglet
+  // entier tombe sur un TypeError.
+  if(!b) return '';
+  const id=esc(r.id);
+  return '<div class="review'+(r.mybof?' muted':'')+'" id="rev-'+id+'">'
    +'<div class="rev-head">'+av(r.u)+'<span>'+uname(r.u)+'<span class="rev-sub"> a noté</span></span></div>'
-   +'<div class="rev-body"><button class="cell rev-can" onclick="openBeer(\''+b.id+'\')">'+can(b)+'</button>'
-   +'<div style="flex:1"><div class="rev-beer">'+b.n
-     +' <span style="font-weight:400;color:var(--dimmer);font-size:11.5px">'+b.br+'</span></div>'
+   +'<div class="rev-body"><button class="cell rev-can" onclick="openBeer(\''+esc(b.id)+'\')">'+can(b)+'</button>'
+   +'<div style="flex:1"><div class="rev-beer">'+esc(b.n)
+     +' <span style="font-weight:400;color:var(--dimmer);font-size:11.5px">'+esc(b.br)+'</span></div>'
    +'<div style="margin-bottom:7px">'+stars(r.r)+(r.liked?' <span style="color:var(--accent);font-size:11px">♥</span>':'')+'</div>'
-   +'<div class="rev-text">'+r.t+'</div></div></div>'
+   +'<div class="rev-text">'+esc(r.t)+'</div></div></div>'
    +'<div class="acts">'
-     +'<button class="act'+(r.mych?' on':'')+'" onclick="doCheer(\''+r.id+'\')">'+I.clink_s
+     +'<button class="act'+(r.mych?' on':'')+'" onclick="doCheer(\''+id+'\')">'+I.clink_s
        +'<span>'+(r.ch+(r.mych?1:0))+'</span></button>'
-     +'<button class="act" onclick="doReply(\''+r.id+'\')">'+I.speak+'<span>'+r.rep.length+'</span></button>'
-     +'<button class="act'+(r.pass?' on':'')+'" onclick="doPass(\''+r.id+'\')">'+I.pass+'</button>'
-     +'<button class="act bof'+(r.mybof?' on':'')+'" onclick="doBof(\''+r.id+'\')" '
+     +'<button class="act" onclick="doReply(\''+id+'\')">'+I.speak+'<span>'+r.rep.length+'</span></button>'
+     +'<button class="act'+(r.pass?' on':'')+'" onclick="doPass(\''+id+'\')">'+I.pass+'</button>'
+     +'<button class="act bof'+(r.mybof?' on':'')+'" onclick="doBof(\''+id+'\')" '
        +'aria-label="Bof, moins d\'avis comme celui-ci">'+I.flat+'</button>'
    +'</div>'
    +(r.mybof?'<div class="privcount">'+I.lock+'Bof enregistré — personne d\'autre ne le voit</div>':'')
    +(mine&&r.bof?'<div class="privcount">'+I.lock+r.bof+' bof sur ton avis — visible par toi seul</div>':'')
-   +(r.rep.length?'<div class="replies">'+r.rep.map(x=>'<div class="reply"><b>'+(Store.user(x.u)||Store.me()).h+'</b> '+x.t+'</div>').join('')+'</div>':'')
+   +(r.rep.length?'<div class="replies">'+r.rep.map(x=>'<div class="reply"><b>'
+     +esc((Store.user(x.u)||Store.me()).h)+'</b> '+esc(x.t)+'</div>').join('')+'</div>':'')
    +'</div>';
 }
 function repaint(id){const r=Store.review(id);const el=document.getElementById('rev-'+id);if(el)el.outerHTML=revHTML(r)}
-async function doCheer(id){ const r = await Store.cheer(id); repaint(id); if(r.mych) toast('Tu as trinqué à cet avis') }
-async function doBof(id){ const r = await Store.bof(id); repaint(id); toast(r.mybof?'Noté, tu en verras moins comme ça':'Bof retiré') }
-async function doPass(id){ const r = await Store.pass(id); repaint(id); toast(r.pass?'Avis passé à tes abonnés':'Retiré de ton profil') }
-async function doReply(id){ const t = prompt('Ta réponse :'); if(!t) return; await Store.addReply(id,t); repaint(id) }
+/* Chaque action écrit en base : si ça échoue, il faut le dire plutôt que
+   laisser l'écran afficher un état que la base ne connaît pas. */
+async function act(fn, msg){
+  try { return await fn() }
+  catch(e){ console.error(e); toast(msg || 'Action impossible — réessaie'); return null }
+}
+async function doCheer(id){ const r = await act(()=>Store.cheer(id)); if(!r)return; repaint(id); if(r.mych) toast('Tu as trinqué à cet avis') }
+async function doBof(id){ const r = await act(()=>Store.bof(id)); if(!r)return; repaint(id); toast(r.mybof?'Noté, tu en verras moins comme ça':'Bof retiré') }
+async function doPass(id){ const r = await act(()=>Store.pass(id)); if(!r)return; repaint(id); toast(r.pass?'Avis passé à tes abonnés':'Retiré de ton profil') }
+async function doReply(id){ const t = prompt('Ta réponse :'); if(!t) return;
+  const ok = await act(()=>Store.addReply(id,t), 'Réponse non envoyée — réessaie'); if(ok!==null) repaint(id) }
 
 /* ---------- recherche ---------- */
 function vSearch(){
   const cats=['Toutes','IPA','Lager','Stout','Sour','Saison','Blanche','< 5°','> 8°','France','Moins de 3 €'];
   const list=Store.search(S.q,S.filt);
   return '<div class="searchbar">'+I.search
-    +'<input id="q" placeholder="Bière, brasserie, style…" value="'+S.q+'" oninput="S.q=this.value;live()">'
+    +'<input id="q" placeholder="Bière, brasserie, style…" value="'+esc(S.q)+'" oninput="S.q=this.value;live()">'
     +(S.q?'<button class="icon-btn" style="padding:2px" onclick="S.q=\'\';render()">'+I.x+'</button>':'')+'</div>'
     +'<div class="chips">'+cats.map(c=>'<button class="chip'+((S.filt||'Toutes')===c?' on':'')
       +'" onclick="S.filt=\''+c+'\';render()">'+c+'</button>').join('')+'</div>'
@@ -1039,13 +1119,14 @@ function vFriends(){
    +(revs.length?revs.map(revHTML).join('')
      :'<div class="empty">Tes copains n\'ont encore rien écrit.</div>')
    +'<div class="sec" style="padding-top:26px"><h2>Ce qu\'ils ont bu</h2></div>'
-   +feed.map(a=>'<button class="row tap" onclick="openBeer(\''+a.b+'\')">'+av(a.u)
-     +'<span style="width:32px;flex:0 0 32px">'+can(Store.beer(a.b))+'</span>'
-     +'<span class="t"><b>'+Store.beer(a.b).n+'</b><span>'+Store.user(a.u).h+' · '+a.d+'</span></span>'
-     +stars(a.r)+'</button>').join('')
+   +feed.filter(a=>Store.beer(a.b)).map(a=>{const b=Store.beer(a.b);
+     return '<button class="row tap" onclick="openBeer(\''+esc(a.b)+'\')">'+av(a.u)
+     +'<span style="width:32px;flex:0 0 32px">'+can(b)+'</span>'
+     +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(Store.user(a.u).h)+' · '+esc(a.d)+'</span></span>'
+     +stars(a.r)+'</button>'}).join('')
    +'<div class="sec" style="padding-top:26px"><h2>Leur semaine</h2><span class="eyebrow">7 jours</span></div>'
    +foll.map(k=>{const u=Store.user(k);
-     return '<div class="row">'+av(k)+'<span class="t"><b>'+u.h+'</b><span>'
+     return '<div class="row">'+av(k)+'<span class="t"><b>'+esc(u.h)+'</b><span>'
        +(u.priv?'stats privées':u.week+' canette'+(u.week>1?'s':'')+' cette semaine')+'</span></span>'
        +(u.priv?'<span style="color:var(--dimmer)">'+I.lock+'</span>':'')+'</div>'}).join('')
    +'<div class="note">'+I.info+'<span>Pas de classement ici : voir la semaine des autres sert à se situer, pas à gagner.</span></div>'
@@ -1053,12 +1134,14 @@ function vFriends(){
    +Store.suggestions().map(userRow).join('');
 }
 function userRow(k){const u=Store.user(k);
-  return '<div class="row tap" onclick="openUser(\''+k+'\')">'+av(k)
-   +'<span class="t"><b>'+u.h+'</b><span>'+(u.priv?'stats privées · '+u.ville:u.cans+' canettes · '+u.top+' · '+u.ville)+'</span></span>'
-   +'<button class="follow'+(u.foll?' on':'')+'" onclick="event.stopPropagation();follow(\''+k+'\')">'
+  return '<div class="row tap" onclick="openUser(\''+esc(k)+'\')">'+av(k)
+   +'<span class="t"><b>'+esc(u.h)+'</b><span>'
+   +(u.priv?'stats privées · '+esc(u.ville):u.cans+' canettes · '+esc(u.top)+' · '+esc(u.ville))+'</span></span>'
+   +'<button class="follow'+(u.foll?' on':'')+'" onclick="event.stopPropagation();follow(\''+esc(k)+'\')">'
    +(u.foll?'Suivi':'Suivre')+'</button></div>'}
 async function follow(k){
-  const on = await Store.toggleFollow(k);
+  const on = await act(()=>Store.toggleFollow(k), 'Impossible pour le moment — réessaie');
+  if(on===null) return;
   toast(on ? 'Tu suis '+Store.user(k).h : 'Tu ne suis plus '+Store.user(k).h);
   if($('#sheet').classList.contains('open')) drawFoll(FT); else render();
 }
@@ -1066,27 +1149,29 @@ async function follow(k){
 /* ---------- profil d'un autre ---------- */
 function vUser(){
   const k=S.user,u=Store.user(k),revs=Store.byUser(k);
-  const pst=u.photo?'background-image:url('+u.photo+')':'background:'+u.c;
+  const ph=safeUrl(u.photo);
+  const pst=ph?'background-image:url('+ph+')':'background:'+safeColor(u.c);
   return '<div class="phead">'
-    +'<div class="pic" style="cursor:default;'+pst+'">'+(u.photo?'':u.i)+'</div>'
-    +'<span class="h">'+u.h+'</span><span class="s">'+u.ville+'</span>'
-    +'<button class="follow lg'+(u.foll?' on':'')+'" onclick="follow(\''+k+'\')">'
+    +'<div class="pic" style="cursor:default;'+pst+'">'+(ph?'':esc(u.i))+'</div>'
+    +'<span class="h">'+esc(u.h)+'</span><span class="s">'+esc(u.ville)+'</span>'
+    +'<button class="follow lg'+(u.foll?' on':'')+'" onclick="follow(\''+esc(k)+'\')">'
       +(u.foll?'Abonné':'S\'abonner')+'</button></div>'
    +(u.priv
-     ? '<div class="locked">'+I.lock_l+'<br>'+u.h+' garde ses stats privées.<br>Ses avis restent publics.</div>'
+     ? '<div class="locked">'+I.lock_l+'<br>'+esc(u.h)+' garde ses stats privées.<br>Ses avis restent publics.</div>'
      : '<div class="statgrid">'
         +'<div class="stat"><div class="k">Canettes</div><div class="v">'+u.cans+'</div></div>'
         +'<div class="stat"><div class="k">Note moyenne</div><div class="v">'+u.avg.toFixed(1)+' <small>/5</small></div></div>'
         +'<div class="stat"><div class="k">Cette semaine</div><div class="v">'+u.week+' <small>canettes</small></div></div>'
-        +'<div class="stat"><div class="k">Style dominant</div><div class="v" style="font-size:16px">'+u.top+'</div></div>'
+        +'<div class="stat"><div class="k">Style dominant</div><div class="v" style="font-size:16px">'+esc(u.top)+'</div></div>'
        +'</div>')
    +'<div class="sec" style="padding-top:24px"><h2>Ses avis</h2><span class="eyebrow">'+revs.length+'</span></div>'
    +(revs.length?revs.map(revHTML).join(''):'<div class="empty">Aucun avis publié.</div>')
    +'<div class="sec" style="padding-top:24px"><h2>Ses dernières canettes</h2></div>'
-   +u.act.map(a=>'<button class="row tap" onclick="openBeer(\''+a.b+'\')">'
-     +'<span style="width:32px;flex:0 0 32px">'+can(Store.beer(a.b))+'</span>'
-     +'<span class="t"><b>'+Store.beer(a.b).n+'</b><span>'+Store.beer(a.b).br+' · '+a.d+'</span></span>'
-     +stars(a.r)+'</button>').join('');
+   +u.act.filter(a=>Store.beer(a.b)).map(a=>{const b=Store.beer(a.b);
+     return '<button class="row tap" onclick="openBeer(\''+esc(a.b)+'\')">'
+     +'<span style="width:32px;flex:0 0 32px">'+can(b)+'</span>'
+     +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(b.br)+' · '+esc(a.d)+'</span></span>'
+     +stars(a.r)+'</button>'}).join('');
 }
 
 /* ---------- mon profil ---------- */
@@ -1094,14 +1179,15 @@ function vMe(){
   const me=Store.me(),s=Store.stats(),L=Store.logs(),w=Store.week(),wu=Store.weekUnits();
   // les demi-notes sont regroupées sur l'étoile supérieure (4,5 compte dans les 5)
   const h=[0,0,0,0,0];L.forEach(l=>{if(l.r)h[Math.min(4,Math.max(0,Math.ceil(l.r)-1))]++});const mx=Math.max(...h,1);
-  const st={};L.forEach(l=>{const x=Store.beer(l.b).st;st[x]=(st[x]||0)+1});
+  const st={};L.forEach(l=>{const b=Store.beer(l.b);if(!b)return;st[b.st]=(st[b.st]||0)+1});
   const top=Object.entries(st).sort((a,b)=>b[1]-a[1]).slice(0,5);const smx=top.length?top[0][1]:1;
   const above=w>s.wkAvg*1.3;
-  const pst=me.photo?'background-image:url('+me.photo+')':'';
+  const mph=safeUrl(me.photo);
+  const pst=mph?'background-image:url('+mph+')':'';
   return '<div class="phead">'
-    +'<button class="pic" style="'+pst+'" onclick="pickPhoto()">'+(me.photo?'':me.i)
+    +'<button class="pic" style="'+pst+'" onclick="pickPhoto()">'+(mph?'':esc(me.i))
       +'<span class="badge">'+I.cam+'</span></button>'
-    +'<span class="h">'+me.h+'</span><span class="s">'+s.n+' canettes · '+s.brews+' brasseries · '+me.ville+'</span>'
+    +'<span class="h">'+esc(me.h)+'</span><span class="s">'+s.n+' canettes · '+s.brews+' brasseries · '+esc(me.ville)+'</span>'
     +'<div class="follrow">'
       +'<button onclick="openFoll(\'ers\')"><b>'+Store.followers().length+'</b><span>abonnés</span></button>'
       +'<button onclick="openFoll(\'ing\')"><b>'+Store.following().length+'</b><span>abonnements</span></button>'
@@ -1132,19 +1218,21 @@ function vMe(){
    +'<div class="histo">'+h.map((v,i)=>'<div class="bar'+(v===mx?' hi':'')+'" style="height:'+(v/mx*100)+'%;animation-delay:'+(i*.05)+'s"></div>').join('')+'</div>'
    +'<div class="histo-ax"><span>★</span><span>★★★★★</span></div>'
    +'<div class="sec" style="padding-top:24px"><h2>Tes styles</h2></div>'
-   +'<div class="barlist">'+top.map(([k,v],i)=>'<div class="bl-row"><span class="lbl">'+k+'</span>'
+   +'<div class="barlist">'+top.map(([k,v],i)=>'<div class="bl-row"><span class="lbl">'+esc(k)+'</span>'
      +'<span class="bl-track"><span class="bl-fill" style="width:'+(v/smx*100)+'%;animation-delay:'+(i*.06)+'s"></span></span>'
      +'<span class="num">'+v+'</span></div>').join('')+'</div>'
    +'<div class="sec" style="padding-top:24px"><h2>Ton journal</h2><span class="eyebrow">'+s.n+' entrées</span></div>'
-   +L.slice(0,8).map(l=>'<button class="row tap" onclick="openBeer(\''+l.b+'\')">'
-     +'<span class="n" style="width:44px;flex:0 0 44px;font-size:11px">'+l.d+'</span>'
-     +'<span style="width:30px;flex:0 0 30px">'+can(Store.beer(l.b))+'</span>'
-     +'<span class="t"><b>'+Store.beer(l.b).n+'</b><span>'+Store.beer(l.b).br
-       +(l.paid?' · '+l.paid.toFixed(2)+' €':'')+'</span></span>'
-     +stars(l.r)+(l.liked?'<span style="color:var(--accent);font-size:12px;margin-left:6px">♥</span>':'')+'</button>').join('');
+   +L.slice(0,8).filter(l=>Store.beer(l.b)).map(l=>{const b=Store.beer(l.b);
+     return '<button class="row tap" onclick="openBeer(\''+esc(l.b)+'\')">'
+     +'<span class="n" style="width:44px;flex:0 0 44px;font-size:11px">'+esc(l.d)+'</span>'
+     +'<span style="width:30px;flex:0 0 30px">'+can(b)+'</span>'
+     +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(b.br)
+       +(l.paid?' · '+l.paid.toFixed(2)+' €':'')+(l.r?'':' · +1')+'</span></span>'
+     +stars(l.r)+(l.liked?'<span style="color:var(--accent);font-size:12px;margin-left:6px">♥</span>':'')+'</button>'}).join('');
 }
 async function togglePriv(){
-  await Store.setPrivacy(!Store.me().priv);
+  const r = await act(()=>Store.setPrivacy(!Store.me().priv), 'Réglage non enregistré — réessaie');
+  if(r===null) return;
   toast(Store.me().priv ? 'Stats masquées pour tout le monde' : 'Stats visibles par tes abonnés');
   render();
 }
@@ -1190,11 +1278,12 @@ function vAccount(){
     ['Exporter tes données','Ton journal en CSV, ouvrable dans Excel','exportData()'],
     ['Vérification d\'âge','Confirmée'],['Aide et modération','Signaler une fiche, un prix, un avis'],
     ['À propos','Version, licences et prévention','openAbout()']];
-  const pst=me.photo?'background-image:url('+me.photo+')':'';
+  const mph=safeUrl(me.photo);
+  const pst=mph?'background-image:url('+mph+')':'';
   return '<div class="phead" style="padding-bottom:14px">'
     +'<button class="pic" style="width:64px;height:64px;font-size:22px;'+pst+'" onclick="pickPhoto()">'
-      +(me.photo?'':me.i)+'<span class="badge" style="width:23px;height:23px">'+I.cam+'</span></button>'
-    +'<span class="h">'+me.h+'</span><span class="s">owen@exemple.fr</span></div>'
+      +(mph?'':esc(me.i))+'<span class="badge" style="width:23px;height:23px">'+I.cam+'</span></button>'
+    +'<span class="h">'+esc(me.h)+'</span><span class="s">'+esc(C.email||'')+'</span></div>'
    +'<div class="lockrow" style="margin-top:10px"><span class="t">'
      +'<b style="font-size:13.5px;font-weight:500;display:block">Stats privées</b>'
      +'<span style="font-size:11.5px;color:var(--dim)">Masque ta conso et tes dépenses</span></span>'
@@ -1287,7 +1376,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v3.1';
+const APP_VERSION = 'v3.2';
 function openAbout(tab){
   const sh=$('#sheet'); sh.classList.add('open');
   const yes = t => `<li class="ab-li ok">${t}</li>`;
@@ -1389,30 +1478,46 @@ function drawFoll(t){
 }
 
 /* ---------- fiche bière ---------- */
-let SH={beer:null,rate:0,liked:0,txt:'',shop:'',paid:''};
-function openBeer(id){SH={beer:id,rate:0,liked:0,txt:'',shop:'',paid:''};
-  const last=Store.logs().find(l=>l.b===id);if(last){SH.rate=last.r;SH.liked=last.liked}
-  drawSheet()}
+let SH={beer:null,rate:0,liked:0,txt:'',shop:'',paid:'',logId:null,already:0};
+function openBeer(id){
+  SH={beer:id,rate:0,liked:0,txt:'',shop:'',paid:'',logId:null,already:0};
+  // une seule note par bière : si elle existe déjà, on la charge pour
+  // que le geste suivant soit une modification, pas un doublon
+  const rated = Store.myRatedLog(id);
+  if(rated){ SH.rate=rated.r; SH.liked=rated.liked?1:0; SH.logId=rated.id; SH.already=1 }
+  const mine = Store.myReview(id);
+  if(mine) SH.txt = mine.t;
+  drawSheet();
+}
 function drawSheet(){
-  const b=Store.beer(SH.beer),revs=Store.byBeer(b.id),pr=Store.prices(b.id),bp=Store.bestPrice(b);
+  const b=Store.beer(SH.beer);
+  if(!b){ closeSheet(); toast('Cette fiche n\'est plus disponible'); return }
+  const revs=Store.byBeer(b.id),pr=Store.prices(b.id),bp=Store.bestPrice(b);
+  const img=safeUrl(b.img);
+  const times=Store.logs().filter(l=>l.b===b.id).length;
   const sh=$('#sheet');sh.classList.add('open');
   sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
-   +'<div class="sheet-bar"><b>'+b.st+'</b><button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
+   +'<div class="sheet-bar"><b>'+esc(b.st)+'</b><button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
    +'<div class="sheet-body">'
    +'<div class="beer-hero">'
-   +(b.img?'<button class="zoomable" onclick="zoomPhoto(\''+b.img+'\')" aria-label="Agrandir la photo">'
-           +can(b)+'<span class="zoomcue">'+I.zoom+'</span></button>':can(b))
-   +'<div style="flex:1"><h1>'+b.n+'</h1><div class="br">'+b.br+'</div>'
-     +'<div class="fx">'+(b.abv||'?')+'° · '+b.cl+' cl · '+b.pays+' · '+Store.units(b)+' unité'+(Store.units(b)>1?'s':'')
+   +(img?'<button class="zoomable" onclick="zoomPhoto(\''+img+'\')" aria-label="Agrandir la photo">'
+         +can(b)+'<span class="zoomcue">'+I.zoom+'</span></button>':can(b))
+   +'<div style="flex:1"><h1>'+esc(b.n)+'</h1><div class="br">'+esc(b.br)+'</div>'
+     +'<div class="fx">'+(b.abv||'?')+'° · '+b.cl+' cl · '+esc(b.pays)+' · '+Store.units(b)+' unité'+(Store.units(b)>1?'s':'')
      +'<br>'+Store.kcal(b)+' kcal'+(Store.kcalIsReal(b)?'':' <span class="est" title="Estimé depuis le degré et le volume">estimé</span>')+'</div>'
      +'<div class="avgbox"><span class="num">'+(Store.count(b.id)?Store.rating(b.id).toFixed(1):'—')+'</span><span>'
      +stars(Store.rating(b.id))+'<br><span style="font-size:11px;color:var(--dimmer)">'
      +(Store.count(b.id)?Store.count(b.id).toLocaleString('fr-FR')+' notes':'pas encore notée')+'</span></span></div></div></div>'
    +(b.ok?'':'<div class="note warn">'+I.info+'<span>Fiche proposée par un utilisateur, en attente de validation. '
      +'Tu peux déjà la noter, elle restera privée tant qu\'elle n\'est pas validée.</span></div>')
-   +'<div class="desc">'+b.d+'</div>'
+   +'<div class="desc">'+esc(b.d)+'</div>'
+   +(SH.already?'<div class="already">'+I.check
+     +'<span><b>Tu l\'as déjà notée.</b> Tu peux corriger ta note ou ton avis ci-dessous — '
+     +'ça remplacera l\'existant. Si tu en as simplement rebu une, utilise le bouton +1.</span>'
+     +'<button class="plus1" onclick="addOne()">+1</button></div>':'')
+   +(times>1?'<div class="hint" style="text-align:center;margin-top:10px">Bue '+times+' fois</div>':'')
    +'<div class="rate-zone">'
-     +'<div class="eyebrow" style="text-align:center">Ta note</div>'
+     +'<div class="eyebrow" style="text-align:center">'+(SH.already?'Modifier ta note':'Ta note')+'</div>'
      +'<div class="rate-stars" onmouseleave="preview(0)">'+[1,2,3,4,5].map(i=>{
        const f=Math.max(0,Math.min(1,SH.rate-i+1));
        return '<span class="rsw"><span class="rss">★<span class="rsf" style="width:'+(f*100)+'%">★</span></span>'
@@ -1425,22 +1530,22 @@ function drawSheet(){
        +'<button class="chip'+(SH.liked?' on':'')+'" style="flex:1;text-align:center" onclick="SH.liked=SH.liked?0:1;drawSheet()">♥ Coup de cœur</button>'
        +'<button class="chip" style="flex:1;text-align:center" onclick="toast(\'Ajoutée à ta liste d\\\'envies\')">+ À goûter</button>'
      +'</div>'
-     +'<div style="margin-top:11px"><textarea rows="2" placeholder="Ton avis (optionnel)…" oninput="SH.txt=this.value">'+SH.txt+'</textarea></div>'
+     +'<div style="margin-top:11px"><textarea rows="2" placeholder="Ton avis (optionnel)…" oninput="SH.txt=this.value">'+esc(SH.txt)+'</textarea></div>'
      +'<div class="two" style="margin-top:9px">'
-       +'<div><input class="f" placeholder="Achetée où ?" value="'+SH.shop+'" oninput="SH.shop=this.value"></div>'
-       +'<div><input class="f" inputmode="decimal" placeholder="Prix payé €" value="'+SH.paid+'" oninput="SH.paid=this.value"></div>'
+       +'<div><input class="f" placeholder="Achetée où ?" value="'+esc(SH.shop)+'" oninput="SH.shop=this.value"></div>'
+       +'<div><input class="f" inputmode="decimal" placeholder="Prix payé €" value="'+esc(SH.paid)+'" oninput="SH.paid=this.value"></div>'
      +'</div>'
      +'<div class="hint" style="margin-top:8px">Le prix payé alimente le suivi communautaire et tes dépenses. Laisse vide si tu ne veux pas.</div>'
    +'</div>'
-   +'<button class="cta" onclick="saveLog()">Enregistrer</button>'
+   +'<button class="cta" onclick="saveLog()">'+(SH.already?'Enregistrer les modifications':'Enregistrer')+'</button>'
    +'<div class="sec" style="padding-top:24px"><h2>Où la trouver</h2>'
      +'<span class="eyebrow">'+(bp?'dès '+bp.p.toFixed(2)+' €':'à confirmer')+'</span></div>'
    +(pr.length?'<div class="pricebox">'+pr.map((p,i)=>{
        const old=p.age>PRICE_TTL;
        return '<div class="price-r'+(bp&&p===bp?' best':'')+(old?' old':'')+'">'
-        +'<span class="shop"><b>'+p.s+(bp&&p===bp?'<span class="tagbest">meilleur prix</span>':'')
+        +'<span class="shop"><b>'+esc(p.s)+(bp&&p===bp?'<span class="tagbest">meilleur prix</span>':'')
           +(old?'<span class="tagold">à confirmer</span>':'')+'</b>'
-        +'<span>'+p.v+' · '+(p.by==='me'?'toi':(Store.user(p.by)?Store.user(p.by).h:'anonyme'))+' · il y a '+p.age+' j</span></span>'
+        +'<span>'+esc(p.v)+' · '+(p.by==='me'?'toi':esc(Store.user(p.by)?Store.user(p.by).h:'anonyme'))+' · il y a '+p.age+' j</span></span>'
         +(old?'<button class="confirm" onclick="confirmPrice('+i+')">Toujours ce prix</button>':'')
         +'<span class="p">'+p.p.toFixed(2)+' €</span></div>'}).join('')+'</div>'
      :'<div class="empty" style="padding:24px 34px">Personne n\'a encore dit où on la trouve.</div>')
@@ -1450,9 +1555,9 @@ function drawSheet(){
      +(b.track?'border-color:var(--accent);color:var(--accent)':'')+'">'+I.bell
      +(b.track?' Suivi de prix activé':' Prévenez-moi si le prix baisse')+'</button>'
    +(b.allerg?'<div class="sec" style="padding-top:22px"><h2>Allergènes</h2><span class="eyebrow">source Open Food Facts</span></div>'
-     +'<div class="tagline" style="padding-top:10px">'+b.allerg.split(',').map(a=>'<span class="tg alrg">'+a.trim()+'</span>').join('')+'</div>'
-     +(b.ingr?'<div class="ab-p dim" style="padding:0 20px">Ingrédients : '+b.ingr+'</div>':''):'')
-   +'<div class="tagline">'+[b.st,b.pays,(b.abv||'?')+'°','canette '+b.cl+' cl',Store.kcal(b)+' kcal'].map(t=>'<span class="tg">'+t+'</span>').join('')+'</div>'
+     +'<div class="tagline" style="padding-top:10px">'+b.allerg.split(',').map(a=>'<span class="tg alrg">'+esc(a.trim())+'</span>').join('')+'</div>'
+     +(b.ingr?'<div class="ab-p dim" style="padding:0 20px">Ingrédients : '+esc(b.ingr)+'</div>':''):'')
+   +'<div class="tagline">'+[b.st,b.pays,(b.abv||'?')+'°','canette '+b.cl+' cl',Store.kcal(b)+' kcal'].map(t=>'<span class="tg">'+esc(t)+'</span>').join('')+'</div>'
    +'<div class="sec" style="padding-top:22px"><h2>Les avis</h2><span class="eyebrow">'+revs.length+'</span></div>'
    +(revs.length?revs.map(revHTML).join(''):'<div class="empty" style="padding:26px 34px">Personne n\'a encore écrit sur celle-ci. À toi de jouer.</div>')
    +'</div></div>';
@@ -1465,16 +1570,22 @@ function preview(v){document.querySelectorAll('.rsw').forEach((w,idx)=>{
 })}
 function setRate(v){SH.rate=SH.rate===v?0:v;drawSheet()}
 async function trackBeer(){
-  const on = await Store.toggleTrack(SH.beer);
+  const on = await act(()=>Store.toggleTrack(SH.beer), 'Suivi non enregistré — réessaie');
+  if(on===null) return;
   drawSheet();
   toast(on ? 'Tu seras prévenu si le prix baisse' : 'Suivi désactivé');
 }
-async function confirmPrice(i){ await Store.confirmPrice(SH.beer,i); drawSheet(); toast('Merci, relevé confirmé') }
+async function confirmPrice(i){
+  const r = await act(()=>Store.confirmPrice(SH.beer,i), 'Confirmation non enregistrée — réessaie');
+  if(r===null) return;
+  drawSheet(); toast('Merci, relevé confirmé');
+}
 function closeSheet(){$('#sheet').classList.remove('open');$('#sheet').innerHTML=''}
 function zoomPhoto(url){
+  const src=safeUrl(url); if(!src) return;
   const d=document.createElement('div');
   d.className='lightbox';
-  d.innerHTML='<img src="'+url+'" alt="Photo de la canette"><button class="lb-x" aria-label="Fermer">'+I.x+'</button>';
+  d.innerHTML='<img src="'+esc(src)+'" alt="Photo de la canette"><button class="lb-x" aria-label="Fermer">'+I.x+'</button>';
   const close=()=>{d.classList.remove('in');setTimeout(()=>d.remove(),220)};
   d.onclick=close;
   document.addEventListener('keydown',function esc(e){
@@ -1486,12 +1597,43 @@ async function saveLog(){
   const b = Store.beer(SH.beer), paid = parseFloat((SH.paid||'').replace(',','.')) || null;
   if(!SH.rate && !paid){ toast('Mets au moins une note pour enregistrer'); return }
   const bp = Store.bestPrice(b);
-  await Store.addLog({ b:b.id, r:SH.rate, d:"aujourd'hui", liked:SH.liked,
-                       paid: paid || (bp?bp.p:0), shop: SH.shop || null });
-  if(SH.shop && paid) await Store.addPrice(b.id, SH.shop, paid);
-  if(SH.txt.trim()) await Store.addReview({ b:b.id, r:SH.rate, liked:SH.liked, t:SH.txt.trim() });
+  try {
+    if (SH.already && SH.logId) {
+      // la note existe déjà : on la corrige, on n'en crée pas une seconde
+      await Store.updateLog(SH.logId, { r:SH.rate, liked:SH.liked });
+    } else {
+      await Store.addLog({ b:b.id, r:SH.rate, d:"aujourd'hui", liked:SH.liked,
+                           paid: paid || (bp?bp.p:0), shop: SH.shop || null });
+    }
+    if(SH.shop && paid) await Store.addPrice(b.id, SH.shop, paid);
+    if(SH.txt.trim()) await Store.addReview({ b:b.id, r:SH.rate, liked:SH.liked, t:SH.txt.trim() });
+  } catch(e){
+    console.error(e);
+    toast('Enregistrement impossible — réessaie');
+    return;
+  }
+  const verbe = SH.already ? ' mise à jour' : ' enregistrée';
   closeSheet();
-  toast(b.n + (SH.rate?' · '+fmtRate(SH.rate)+'★':'') + ' enregistrée');
+  toast(b.n + (SH.rate?' · '+fmtRate(SH.rate)+'★':'') + verbe);
+  render(); bump();
+}
+
+/* +1 : une canette de plus au journal, sans nouvelle note. Elle compte
+   dans le volume, les unités, les calories et les dépenses, mais pas
+   dans la moyenne publique de la bière. */
+async function addOne(){
+  const b = Store.beer(SH.beer);
+  const bp = Store.bestPrice(b);
+  try {
+    await Store.addLog({ b:b.id, r:0, d:"aujourd'hui", liked:0,
+                         paid: bp?bp.p:0, shop:null });
+  } catch(e){
+    console.error(e);
+    toast('Impossible d\'ajouter — réessaie');
+    return;
+  }
+  closeSheet();
+  toast('+1 ' + b.n);
   render(); bump();
 }
 function bump(){const el=document.getElementById('bign');if(el){el.classList.add('bump');
@@ -1513,7 +1655,7 @@ function drawLog(){
      +'<button class="tab'+(LTAB==='new'?' on':'')+'" onclick="LTAB=\'new\';drawLog()">Nouvelles</button>'
    +'</div></div>'
    +'<div class="sheet-body">'
-   +'<div class="searchbar">'+I.search+'<input id="lq" placeholder="Cherche ta canette…" value="'+LQ
+   +'<div class="searchbar">'+I.search+'<input id="lq" placeholder="Cherche ta canette…" value="'+esc(LQ)
      +'" oninput="LQ=this.value;drawLog();const e=document.getElementById(\'lq\');e.focus();e.setSelectionRange(e.value.length,e.value.length)"></div>'
    +(list.length?'<div class="grid" style="padding-top:16px">'+list.slice(0,9).map(b=>cell(b)).join('')+'</div>'
      :'<div class="empty">Aucune canette ici.</div>')
@@ -1536,16 +1678,16 @@ function drawNewBeer(){
    +'<div class="sheet-body">'
    +'<div class="note">'+I.info+'<span>Ta fiche part en validation. Elle est visible par toi tout de suite, '
      +'par les autres une fois vérifiée : doublons, champs cohérents, photo de la canette.</span></div>'
-   +'<div class="field"><label>Nom de la bière</label><input class="f" value="'+NB.n+'" oninput="NB.n=this.value"></div>'
-   +'<div class="field"><label>Brasserie</label><input class="f" value="'+NB.br+'" oninput="NB.br=this.value"></div>'
+   +'<div class="field"><label>Nom de la bière</label><input class="f" value="'+esc(NB.n)+'" oninput="NB.n=this.value"></div>'
+   +'<div class="field"><label>Brasserie</label><input class="f" value="'+esc(NB.br)+'" oninput="NB.br=this.value"></div>'
    +(dup.length?'<div class="note warn" style="margin-top:12px">'+I.info
-     +'<span>Une fiche « '+dup[0].n+' · '+dup[0].br+' » existe déjà. Vérifie que ce n\'est pas la même.</span></div>':'')
-   +'<div class="field"><label>Style</label><input class="f" placeholder="IPA, Lager, Stout…" value="'+NB.st+'" oninput="NB.st=this.value"></div>'
+     +'<span>Une fiche « '+esc(dup[0].n)+' · '+esc(dup[0].br)+' » existe déjà. Vérifie que ce n\'est pas la même.</span></div>':'')
+   +'<div class="field"><label>Style</label><input class="f" placeholder="IPA, Lager, Stout…" value="'+esc(NB.st)+'" oninput="NB.st=this.value"></div>'
    +'<div class="field"><div class="two">'
-     +'<div><label>Degré</label><input class="f" inputmode="decimal" placeholder="5.5" value="'+NB.abv+'" oninput="NB.abv=this.value"></div>'
-     +'<div><label>Format cl</label><input class="f" inputmode="numeric" value="'+NB.cl+'" oninput="NB.cl=this.value"></div>'
+     +'<div><label>Degré</label><input class="f" inputmode="decimal" placeholder="5.5" value="'+esc(NB.abv)+'" oninput="NB.abv=this.value"></div>'
+     +'<div><label>Format cl</label><input class="f" inputmode="numeric" value="'+esc(NB.cl)+'" oninput="NB.cl=this.value"></div>'
    +'</div></div>'
-   +'<div class="field"><label>Pays</label><input class="f" value="'+NB.pays+'" oninput="NB.pays=this.value"></div>'
+   +'<div class="field"><label>Pays</label><input class="f" value="'+esc(NB.pays)+'" oninput="NB.pays=this.value"></div>'
    +'<button class="ghost" style="display:flex;align-items:center;justify-content:center;gap:9px" onclick="toast(\'Appareil photo à brancher\')">'
      +I.cam+' Photo de la canette (recommandée)</button>'
    +'<button class="cta" onclick="sendBeer()">Envoyer à la validation</button>'
@@ -1567,11 +1709,33 @@ function render(anim){
   const v={home:vHome,search:vSearch,friends:vFriends,me:vMe,account:vAccount,user:vUser}[S.tab];
   $('#view').innerHTML='<div class="page'+(anim?' slide':'')+'" style="--d:'+S.dir+'">'+v()+'</div>';
 }
+/* Écran de repli quand la base ne répond pas. Sur l'offre gratuite, un
+   projet sans requête pendant sept jours se met en pause : c'est un cas
+   attendu, pas une hypothèse. Mieux vaut l'expliquer qu'une page noire. */
+function drawError(){
+  document.querySelector('#tabs').style.display='none';
+  document.querySelector('#bottombar').style.display='none';
+  document.querySelector('#topbar').innerHTML =
+    '<span style="width:33px"></span>'+logoLockup(21)+'<span style="width:33px"></span>';
+  document.querySelector('#view').innerHTML =
+    '<div class="login-mark">'+logoMark(58)+'</div>'
+   +'<div class="empty" style="padding:16px 30px 6px">'
+     +'<b style="color:var(--text);display:block;margin-bottom:8px">Connexion impossible</b>'
+     +'La base n\'a pas répondu. Vérifie ta connexion et réessaie ; '
+     +'si ça persiste, préviens-moi, le projet s\'est peut-être mis en veille.</div>'
+   +'<button class="cta" onclick="location.reload()">Réessayer</button>';
+}
+
 (async () => {
-  const ok = await hydrate();
-  if (!ok) { drawLogin(); return; }
-  render();
-})();;
+  try {
+    const ok = await hydrate();
+    if (!ok) { drawLogin(); return; }
+    render();
+  } catch (e) {
+    console.error(e);
+    drawError();
+  }
+})();
 </script>
 </body>
 </html>
