@@ -47,12 +47,8 @@ body{background:#000;font-family:'Inter',system-ui,sans-serif;color:var(--text);
 button.lockup{background:none;border:0;padding:4px 6px;margin:-4px -6px;cursor:pointer;
   border-radius:10px;transition:.2s var(--e)}
 button.lockup:active{transform:scale(.96)}
-.homemark{width:33px;height:33px;flex:0 0 33px;display:flex;align-items:center;justify-content:center;
-  background:none;border:0;padding:0;cursor:pointer;border-radius:50%;transition:.2s var(--e)}
-.homemark:active{transform:scale(.92)}
 @media (hover:hover){
   button.lockup:hover{background:var(--surface)}
-  .homemark:hover{background:var(--surface-2)}
 }
 .lockup .lgmk{flex:0 0 auto;display:block}
 .logo{font-family:'Space Grotesk';font-weight:700;font-size:19px;letter-spacing:2.2px;
@@ -60,8 +56,18 @@ button.lockup:active{transform:scale(.96)}
 .logo i{font-style:normal;color:var(--accent);text-shadow:0 0 18px var(--glow)}
 .login-mark{display:flex;justify-content:center;padding:30px 0 4px}
 .login-mark svg{filter:drop-shadow(0 10px 26px rgba(0,0,0,.6))}
+/* La marque accompagne le titre au centre, plutôt que d'être reléguée
+   dans un coin : les deux forment un bloc, comme sur l'accueil. */
+.titlewrap{flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:8px}
+.titlemark{flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+  background:none;border:0;padding:3px;margin:-3px;cursor:pointer;border-radius:50%;
+  transition:transform .18s var(--e)}
+.titlemark:active{transform:scale(.9)}
 .screen-title{font-family:'Space Grotesk';font-weight:600;font-size:18px;letter-spacing:-.01em;
-  flex:1;min-width:0;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  flex:0 1 auto;min-width:0;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.screen-title i{font-style:normal;color:var(--accent)}
+.screen-title .pt{margin-left:1px}
+@media (hover:hover){.titlemark:hover{background:var(--surface-2)}}
 .icon-btn{background:none;border:0;color:var(--dim);display:flex;padding:6px;cursor:pointer;
   border-radius:50%;transition:color .18s,background .18s,transform .12s;flex:0 0 auto}
 .icon-btn:hover{color:var(--text);background:var(--surface-2)}
@@ -1370,12 +1376,17 @@ function chrome(){
   }else{
     TB.style.display='none';
     const hasBack=(S.tab==='account'||S.tab==='user');
-    // sans bouton retour, la marque prend la place et ramène à l'accueil
     const left=hasBack?'<button class="icon-btn" onclick="go(\''+(S.tab==='account'?'me':S.back)+'\')">'+I.back+'</button>'
-      :'<button class="homemark" onclick="goHome()" aria-label="Revenir à l\'accueil">'+logoMark(25)+'</button>';
+      :'<span style="width:33px"></span>';
     const right=S.tab==='me'?'<button class="icon-btn" onclick="go(\'account\')">'+I.gear+'</button>'
       :'<span style="width:33px"></span>';
-    T.innerHTML=left+'<span class="screen-title">'+titles[S.tab]+'</span>'+right;
+    // Le profil d'un autre porte son pseudo : la marque Letterbeer n'a
+    // rien à faire collée au nom de quelqu'un.
+    const centre = S.tab==='user'
+      ? '<span class="screen-title">'+esc(titles[S.tab])+'</span>'
+      : '<button class="titlemark" onclick="goHome()" aria-label="Revenir à l\'accueil">'+logoMark(23)+'</button>'
+        +'<span class="screen-title">'+titreEcran(titles[S.tab])+'</span>';
+    T.innerHTML=left+'<span class="titlewrap">'+centre+'</span>'+right;
     requestAnimationFrame(ajusterChrome);
   }
   $('#bottombar').innerHTML=
@@ -1391,6 +1402,18 @@ function moveInd(){const a=document.querySelector('.tab.on'),i=document.getEleme
 /* Le bandeau étant hors flux, c'est à la zone de contenu de lui réserver
    sa place. Sa hauteur change selon l'écran — avec ou sans onglets — donc
    on la relit après chaque rendu plutôt que de la coder en dur. */
+/* Reprend la bicolorie du mot-symbole : le dernier mot passe en orange.
+   Sur un titre d'un seul mot, il n'y a aucune couture naturelle — un
+   point orange tient le rôle plutôt qu'une coupure inventée. */
+function titreEcran(t){
+  const mots = String(t||'').trim().split(/\s+/);
+  if (mots.length >= 2) {
+    const dernier = mots.pop();
+    return esc(mots.join(' ')) + ' <i>' + esc(dernier) + '</i>';
+  }
+  return esc(t) + '<i class="pt">.</i>';
+}
+
 function ajusterChrome(){
   const c=document.getElementById('chrome'), v=document.getElementById('view');
   if(c && v) v.style.paddingTop = c.offsetHeight + 'px';
