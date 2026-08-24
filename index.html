@@ -216,6 +216,16 @@ button.lockup:active{transform:scale(.96)}
 .act.bof{margin-left:auto;padding:6px 9px}
 .act.bof.on{color:var(--warn);background:rgba(232,176,75,.13)}
 .privcount{font-size:10.5px;color:var(--dimmer);padding:7px 0 0 64px;display:flex;align-items:center;gap:6px}
+/* --- répondre à un avis --- */
+.rep-src{display:flex;gap:12px;align-items:flex-start;margin:16px 20px 0;padding:13px 15px;
+  background:var(--surface);border:1px solid var(--border);border-radius:13px}
+.rep-srct{flex:1;min-width:0}
+.rep-srct b{font-size:13px;font-weight:600;color:var(--text)}
+.rep-srct span{font-size:11.5px;color:var(--dimmer);margin-left:7px}
+.rep-srcq{font-size:12.5px;line-height:1.55;color:var(--dim);margin-top:6px;
+  border-left:2px solid var(--border);padding-left:10px}
+.rep-compte{text-align:right;font-size:11px;color:var(--dimmer);margin:6px 20px 0;
+  font-variant-numeric:tabular-nums}
 .replies{padding:8px 0 0 64px;display:flex;flex-direction:column;gap:8px}
 .reply{font-size:12.5px;line-height:1.5;color:var(--dim);border-left:2px solid var(--border);padding-left:10px;
   transition:border-color .25s}
@@ -1531,8 +1541,75 @@ async function act(fn, msg){
 async function doCheer(id){ const r = await act(()=>Store.cheer(id)); if(!r)return; repaint(id); if(r.mych) toast('Tu as trinqué à cet avis') }
 async function doBof(id){ const r = await act(()=>Store.bof(id)); if(!r)return; repaint(id); toast(r.mybof?'Noté, tu en verras moins comme ça':'Bof retiré') }
 async function doPass(id){ const r = await act(()=>Store.pass(id)); if(!r)return; repaint(id); toast(r.pass?'Avis passé à tes abonnés':'Retiré de ton profil') }
-async function doReply(id){ const t = prompt('Ta réponse :'); if(!t) return;
-  const ok = await act(()=>Store.addReply(id,t), 'Réponse non envoyée — réessaie'); if(ok!==null) repaint(id) }
+/* ---------- répondre à un avis ----------
+   Remplace le prompt() du navigateur, qui affichait le nom de domaine
+   dans une boîte grise sans rapport avec le reste de l'app. */
+const MAX_REPONSE = 500;   // la base refuse au-delà
+let REP = { rev:null, txt:'', retour:null };
+
+function doReply(id){
+  // on peut répondre depuis une vue, ou depuis la fiche bière déjà ouverte :
+  // dans ce second cas il faut savoir où revenir en refermant
+  const surFicheBiere = $('#sheet').classList.contains('open')
+                        && !!document.querySelector('#sheet .beer-hero');
+  REP = { rev:id, txt:'', retour: surFicheBiere ? 'biere' : null };
+  drawReply();
+}
+
+function drawReply(){
+  const r = Store.review(REP.rev);
+  if(!r){ fermerReponse(); return }
+  const b = Store.beer(r.b);
+  const sh = $('#sheet'); sh.classList.add('open');
+  sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
+   +'<div class="sheet-bar"><b>Répondre</b>'
+     +'<button class="icon-btn" onclick="fermerReponse()">'+I.x+'</button></div>'
+   +'<div class="sheet-body">'
+   // l'avis auquel on répond, en contexte
+   +'<div class="rep-src">'+av(r.u)
+     +'<div class="rep-srct"><b>'+esc((Store.user(r.u)||Store.me()).h)+'</b>'
+       +(b?'<span>'+esc(b.n)+'</span>':'')
+       +'<div class="rep-srcq">'+esc(r.t)+'</div></div></div>'
+   +(r.rep.length
+     ? '<div class="sec" style="padding-top:18px"><h2>Réponses</h2>'
+       +'<span class="eyebrow">'+r.rep.length+'</span></div>'
+       +'<div class="replies" style="padding-left:20px">'+r.rep.map(x=>'<div class="reply"><b>'
+         +esc((Store.user(x.u)||Store.me()).h)+'</b> '+esc(x.t)+'</div>').join('')+'</div>'
+     : '')
+   +'<div class="field" style="margin-top:20px"><label>Ta réponse</label>'
+     +'<textarea id="rep-t" rows="4" maxlength="'+MAX_REPONSE+'" placeholder="Reste sympa, vous vous connaissez…"'
+     +' oninput="REP.txt=this.value;majCompteurReponse()">'+esc(REP.txt)+'</textarea></div>'
+   +'<div class="rep-compte" id="rep-c">'+REP.txt.length+' / '+MAX_REPONSE+'</div>'
+   +'<button class="cta" id="rep-go" onclick="envoyerReponse()">Envoyer</button>'
+   +'</div></div>';
+  const z = document.getElementById('rep-t');
+  if(z){ z.focus(); z.setSelectionRange(z.value.length, z.value.length) }
+  majCompteurReponse();
+}
+
+function majCompteurReponse(){
+  const c = document.getElementById('rep-c'), go = document.getElementById('rep-go');
+  if(c) c.textContent = REP.txt.length + ' / ' + MAX_REPONSE;
+  if(go) go.disabled = !REP.txt.trim();
+}
+
+function fermerReponse(){
+  const id = REP.rev, retour = REP.retour;
+  REP = { rev:null, txt:'', retour:null };
+  if(retour === 'biere') drawSheet(); else closeSheet();
+  if(id) repaint(id);
+}
+
+async function envoyerReponse(){
+  const t = REP.txt.trim();
+  if(!t) return toast('Écris quelque chose d\'abord');
+  const go = document.getElementById('rep-go');
+  if(go){ go.disabled = true; go.textContent = 'Envoi…' }
+  const ok = await act(()=>Store.addReply(REP.rev, t), 'Réponse non envoyée — réessaie');
+  if(ok === null){ if(go){ go.disabled=false; go.textContent='Envoyer' } return }
+  toast('Réponse publiée');
+  fermerReponse();
+}
 
 /* Un filtre déjà actif se désactive au second appui : « Toutes » n'est
    qu'un affichage de l'absence de filtre, pas une valeur à part. */
