@@ -30,6 +30,17 @@ body{background:#000;font-family:'Inter',system-ui,sans-serif;color:var(--text);
 @media(min-width:520px){#phone{border-radius:34px;border:1px solid #1c1c1f;
   box-shadow:0 40px 100px -30px rgba(255,90,31,.2)}}
 
+/* Le bandeau flotte au-dessus du contenu, qui défile dessous et s'y
+   efface. Le dégradé est calé en pixels depuis le bas, pour rester juste
+   que l'écran ait des onglets ou non. */
+#chrome{position:absolute;top:0;left:0;right:0;z-index:20;pointer-events:none;
+  padding-bottom:22px;
+  background:linear-gradient(to top,
+    transparent 0,
+    rgba(10,10,12,.35) 8px,
+    rgba(10,10,12,.82) 15px,
+    var(--bg) 22px)}
+#chrome > *{pointer-events:auto}
 #topbar{padding:18px 20px 0;display:flex;align-items:center;justify-content:space-between;flex:0 0 auto;gap:8px}
 .lockup{display:flex;align-items:center;gap:9px;min-width:0}
 button.lockup{background:none;border:0;padding:4px 6px;margin:-4px -6px;cursor:pointer;
@@ -55,7 +66,8 @@ button.lockup:active{transform:scale(.96)}
 .icon-btn:hover{color:var(--text);background:var(--surface-2)}
 .icon-btn:active{transform:scale(.9);color:var(--accent)}
 
-#tabs{flex:0 0 auto;border-bottom:1px solid var(--border);padding-top:14px}
+/* plus de filet sous les onglets : c'est le dégradé qui sépare désormais */
+#tabs{flex:0 0 auto;padding-top:14px}
 .tabwrap{position:relative;display:flex;justify-content:center;gap:30px}
 .tab{background:none;border:0;font-family:'Inter';font-size:14px;font-weight:500;color:var(--dim);
   padding:0 4px 12px;cursor:pointer;transition:color .22s,transform .14s}
@@ -587,8 +599,10 @@ select.f{appearance:none;-webkit-appearance:none;
 </head>
 <body>
 <div id="phone">
-  <div id="topbar"></div>
-  <div id="tabs"></div>
+  <div id="chrome">
+    <div id="topbar"></div>
+    <div id="tabs"></div>
+  </div>
   <main id="view"></main>
   <nav id="bottombar"></nav>
   <div id="sheet"></div>
@@ -1205,6 +1219,7 @@ function drawLogin(){
       Ton pseudo, tes avis et tes notes sont visibles par les autres membres.
       Ton journal et tes dépenses restent privés.</div>`:''}
     <div class="evin">${EVIN}</div>`;
+  requestAnimationFrame(ajusterChrome);
 }
 
 function togglePw(id, btn){
@@ -1242,6 +1257,7 @@ function drawReset(){
       <input class="f" id="rs-p" type="password" placeholder="8 caractères minimum"
         autocomplete="new-password" onkeydown="if(event.key==='Enter')doReset()"></div>
     <button class="cta" onclick="doReset()">Enregistrer et continuer</button>`;
+  requestAnimationFrame(ajusterChrome);
 }
 
 async function doReset(){
@@ -1346,7 +1362,7 @@ function chrome(){
     TB.innerHTML='<div class="tabwrap">'+subs().map(k=>'<button class="tab'+(S.sub===k?' on':'')
       +'" onclick="setSub(\''+k+'\')">'+({bieres:'Bières',avis:'Avis',journal:'Journal'})[k]+'</button>').join('')
       +'<span id="ind"></span></div>';
-    requestAnimationFrame(moveInd);
+    requestAnimationFrame(()=>{ moveInd(); ajusterChrome() });
   }else{
     TB.style.display='none';
     const hasBack=(S.tab==='account'||S.tab==='user');
@@ -1356,6 +1372,7 @@ function chrome(){
     const right=S.tab==='me'?'<button class="icon-btn" onclick="go(\'account\')">'+I.gear+'</button>'
       :'<span style="width:33px"></span>';
     T.innerHTML=left+'<span class="screen-title">'+titles[S.tab]+'</span>'+right;
+    requestAnimationFrame(ajusterChrome);
   }
   $('#bottombar').innerHTML=
      '<button class="nav'+(S.tab==='home'?' on':'')+'" onclick="go(\'home\')" aria-label="Accueil">'+I.can+'</button>'
@@ -1366,6 +1383,14 @@ function chrome(){
 }
 function moveInd(){const a=document.querySelector('.tab.on'),i=document.getElementById('ind');
   if(a&&i){i.style.left=a.offsetLeft+'px';i.style.width=a.offsetWidth+'px'}}
+
+/* Le bandeau étant hors flux, c'est à la zone de contenu de lui réserver
+   sa place. Sa hauteur change selon l'écran — avec ou sans onglets — donc
+   on la relit après chaque rendu plutôt que de la coder en dur. */
+function ajusterChrome(){
+  const c=document.getElementById('chrome'), v=document.getElementById('view');
+  if(c && v) v.style.paddingTop = c.offsetHeight + 'px';
+}
 function setSub(k){if(k===S.sub)return;
   const L=subs();S.dir=L.indexOf(k)>L.indexOf(S.sub)?1:-1;S.sub=k;$('#view').scrollTop=0;render(1)}
 function go(t){S.dir=1;S.tab=t;$('#view').scrollTop=0;render(1)}
@@ -2370,6 +2395,7 @@ function drawError(){
      +'La base n\'a pas répondu. Vérifie ta connexion et réessaie ; '
      +'si ça persiste, préviens-moi, le projet s\'est peut-être mis en veille.</div>'
    +'<button class="cta" onclick="location.reload()">Réessayer</button>';
+  requestAnimationFrame(ajusterChrome);
 }
 
 /* Le lien de réinitialisation revient avec type=recovery dans le fragment
