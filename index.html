@@ -617,6 +617,9 @@ textarea:focus,input.f:focus,select.f:focus{border-color:var(--accent);box-shado
 .modbtn.no{color:var(--bad);border-color:#3a1f1f}
 .modbtn.no:hover{background:rgba(255,77,77,.1)}
 /* --- journal corrigeable --- */
+.ghost.invite{display:flex;align-items:center;justify-content:center;gap:9px;
+  border-color:rgba(255,90,31,.35);color:var(--accent);margin-top:16px}
+@media (hover:hover){.ghost.invite:hover{background:rgba(255,90,31,.08)}}
 .seeall{background:none;border:0;cursor:pointer;font-family:inherit;font-size:11px;
   letter-spacing:.06em;text-transform:uppercase;color:var(--accent);padding:2px 0}
 .seeall:hover{text-decoration:underline;text-underline-offset:3px}
@@ -725,6 +728,7 @@ const I={
  zoom:'<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.6-4.6M10.5 7.8v5.4M7.8 10.5h5.4"/></svg>',
  ext:'<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path d="M14 4h6v6M20 4l-8.5 8.5"/><path d="M18 14v5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 19V8a1.5 1.5 0 0 1 1.5-1.5H10"/></svg>',
  trash:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 4.5h4M9.5 11v6M14.5 11v6"/><path d="M6 7l.9 12.2A1.5 1.5 0 0 0 8.4 20.5h7.2a1.5 1.5 0 0 0 1.5-1.3L18 7"/></svg>',
+ invite:'<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.6"/><path d="M2.5 20c0-3.6 3.2-5.6 6.5-5.6s6.5 2 6.5 5.6"/><path d="M18.5 7.5v6M21.5 10.5h-6"/></svg>',
  flag:'<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 21V4"/><path d="M5.5 5.2h11l-1.8 3.6 1.8 3.6h-11"/></svg>',
  minuscan:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3.5" width="10" height="17" rx="2.2"/><path d="M7 8h10"/><path d="M4 20.5 20 3.5"/></svg>',
  eye:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3.2"/></svg>',
@@ -1671,7 +1675,11 @@ function vFriends(){
        +(u.priv?'<span style="color:var(--dimmer)">'+I.lock+'</span>':'')+'</div>'}).join('')
    +'<div class="note">'+I.info+'<span>Pas de classement ici : voir la semaine des autres sert à se situer, pas à gagner.</span></div>'
    +'<div class="sec" style="padding-top:26px"><h2>À découvrir</h2></div>'
-   +Store.suggestions().map(userRow).join('');
+   +Store.suggestions().map(userRow).join('')
+   +'<button class="ghost invite" onclick="inviterUnAmi()">'+I.invite
+   +' Inviter un ami sur Letterbeer</button>'
+   +'<div class="empty" style="padding:12px 34px 0;font-size:11.5px">'
+   +"Il te suit dès son inscription, tu n'as rien d'autre à faire.</div>";
 }
 function userRow(k){const u=Store.user(k);
   return '<div class="row tap" onclick="openUser(\''+esc(k)+'\')">'+av(k)
@@ -2601,6 +2609,58 @@ function drawError(){
    jamais changé. */
 const isRecovery = () => /[#&]type=recovery/.test(window.location.hash || '');
 
+/* ---------- invitation d'un ami ----------
+   Un lien ?inv=<identifiant du parrain>. On le retient le temps de
+   l'inscription — qui recharge la page — puis on crée l'abonnement.
+
+   L'invité suit son parrain, pas l'inverse : les règles de la base ne
+   laissent créer un abonnement qu'en son propre nom, et c'est très bien
+   ainsi — personne ne doit pouvoir décider qui suit qui. Le parrain
+   reçoit donc un abonné, et suit en retour s'il le souhaite. */
+const CLE_INVIT = 'lb_invitation';
+const estUUID = v => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v||'');
+
+function capterInvitation(){
+  const p = new URLSearchParams(window.location.search).get('inv');
+  if (estUUID(p)) {
+    try { localStorage.setItem(CLE_INVIT, p) } catch(e){}
+    // on nettoie l'adresse : l'identifiant n'a rien à faire dans l'historique.
+    // Certains contextes refusent replaceState — ce n'est pas une raison
+    // de perdre l'invitation, qui est déjà en mémoire à ce stade.
+    try { history.replaceState(null, '', window.location.pathname) } catch(e){}
+  }
+}
+
+async function honorerInvitation(){
+  let parrain;
+  try { parrain = localStorage.getItem(CLE_INVIT) } catch(e){ return }
+  if (!parrain) return;
+  try { localStorage.removeItem(CLE_INVIT) } catch(e){}
+  if (!estUUID(parrain) || parrain === C.myId) return;
+  if (C.follows.some(f => f.follower_id===C.myId && f.followee_id===parrain)) return;
+  const { error } = await sb.from('follows')
+    .insert({ follower_id:C.myId, followee_id:parrain });
+  if (error) { console.warn('invitation non honorée', error.message); return }
+  const u = C.users[parrain];
+  if (u) { u.foll = 1; C.follows.push({ follower_id:C.myId, followee_id:parrain }) }
+  toast(u ? 'Tu suis maintenant ' + u.h : 'Invitation acceptée');
+}
+
+/* Le lien à faire circuler. On passe par le partage natif quand il existe
+   — c'est ce qui ouvre WhatsApp ou les messages — sinon on copie. */
+async function inviterUnAmi(){
+  const lien = window.location.origin + window.location.pathname + '?inv=' + C.myId;
+  const texte = 'Je note mes bières sur Letterbeer, rejoins-moi : ';
+  try {
+    if (navigator.share) { await navigator.share({ title:'Letterbeer', text:texte, url:lien }); return }
+    await navigator.clipboard.writeText(lien);
+    toast('Lien copié, envoie-le à qui tu veux');
+  } catch(e){
+    if (e && e.name === 'AbortError') return;   // partage annulé, rien à signaler
+    prompt('Copie ce lien et envoie-le :', lien);
+  }
+}
+
 /* Service worker : la coque et les photos survivent à une perte de réseau.
    Il ne s'enregistre qu'en HTTPS — en ouvrant le fichier en local, il est
    simplement absent, ce qui n'empêche rien. */
@@ -2622,10 +2682,12 @@ window.addEventListener('offline', majReseau);
 
 (async () => {
   try {
+    capterInvitation();
     if (isRecovery()) { drawReset(); return; }
     const ok = await hydrate();
     if (!ok) { drawLogin(); return; }
     render();
+    honorerInvitation().then(() => { if (S.tab==='friends') render() });
   } catch (e) {
     console.error(e);
     drawError();
