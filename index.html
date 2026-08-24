@@ -314,6 +314,9 @@ textarea:focus,input.f:focus,select.f:focus{border-color:var(--accent);box-shado
   cursor:pointer;box-shadow:0 0 22px var(--glow);transition:transform .16s var(--e),box-shadow .2s}
 .cta:hover{transform:translateY(-2px);box-shadow:0 6px 34px var(--glow)}
 .cta:active{transform:scale(.98)}
+.cta.danger{background:var(--bad);color:#fff}
+.cta.danger:hover{box-shadow:0 6px 34px rgba(255,77,77,.4)}
+.cta:disabled{opacity:.38;pointer-events:none}
 .ghost{margin:10px 20px 0;width:calc(100% - 40px);background:none;color:var(--dim);
   border:1px solid var(--border);border-radius:13px;padding:12px;font-family:'Inter';font-size:13px;cursor:pointer;
   transition:border-color .2s,color .2s,background .2s}
@@ -597,7 +600,7 @@ async function hydrate() {
   /* --- mon journal --- */
   C.logs = (logs.data||[]).map(l => ({
     b: l.beer_id, r: l.rating, liked: l.liked, paid: l.price_paid ? +l.price_paid : 0,
-    d: frDate(l.drunk_at), at: l.drunk_at
+    shop: l.shop || '', d: frDate(l.drunk_at), at: l.drunk_at
   }));
 
   /* --- activité récente des gens suivis, pour l'onglet copains --- */
@@ -772,6 +775,21 @@ const Store = {
       brews: new Set(L.map(l => Store.beer(l.b)?.br)).size,
       wkAvg: +(n/weeks).toFixed(1), eurAvg: +(eur/weeks).toFixed(2), unAvg: +(un/weeks).toFixed(1) };
   },
+  /* ---- RGPD : portabilité et effacement ---- */
+  async deleteAccount() {
+    // on vide le bucket d'abord : Storage ne cascade pas, et une fois le
+    // compte parti on n'a plus le droit d'y toucher
+    try {
+      const { data: files } = await sb.storage.from('avatars').list(C.myId);
+      if (files && files.length)
+        await sb.storage.from('avatars').remove(files.map(f => `${C.myId}/${f.name}`));
+    } catch (e) { console.warn('nettoyage des photos', e); }
+
+    const { error } = await sb.rpc('delete_my_account');
+    if (error) throw error;
+    await sb.auth.signOut();
+  },
+
   weekUnits() {
     return +C.logs.filter(l => Date.now() - new Date(l.at) < 7*864e5)
       .reduce((s,l) => { const b = Store.beer(l.b); return s + (b ? Store.units(b) : 0) }, 0).toFixed(1);
@@ -1168,7 +1186,8 @@ function vAccount(){
   const rows=[['Infos perso','Pseudo, e-mail, ville'],
     ['Confidentialité','Ce qui est collecté, où c\'est hébergé, tes droits','openAbout(\'data\')'],
     ['Devise et unités','€ · cl'],['Notifications','Réponses, mentions, baisses de prix'],
-    ['Mes propositions de bières','Fiches envoyées à la validation'],['Exporter tes données','CSV de ton journal'],
+    ['Mes propositions de bières','Fiches envoyées à la validation'],
+    ['Exporter tes données','Ton journal en CSV, ouvrable dans Excel','exportData()'],
     ['Vérification d\'âge','Confirmée'],['Aide et modération','Signaler une fiche, un prix, un avis'],
     ['À propos','Version, licences et prévention','openAbout()']];
   const pst=me.photo?'background-image:url('+me.photo+')':'';
@@ -1182,7 +1201,89 @@ function vAccount(){
      +'<span class="sw'+(me.priv?' on':'')+'" onclick="togglePriv()"></span></div>'
    +rows.map(r=>'<button class="row tap" onclick="'+(r[2]||'toast(\'Écran à construire\')')+'">'
      +'<span class="t"><b>'+r[0]+'</b><span>'+r[1]+'</span></span><span class="chev">'+I.chev+'</span></button>').join('')
-   +'<button class="ghost" style="margin-top:20px;color:var(--bad);border-color:#3a1f1f" onclick="toast(\'Déconnexion\')">Se déconnecter</button>';
+   +'<button class="ghost" style="margin-top:20px" onclick="Auth.signOut()">Se déconnecter</button>'
+   +'<button class="ghost" style="margin-top:10px;color:var(--bad);border-color:#3a1f1f" onclick="confirmDelete()">Supprimer mon compte</button>';
+}
+
+/* ---------- RGPD : exporter et supprimer ---------- */
+function download(blob, name){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+/* Une cellule qui commence par = + - @ est exécutée comme une formule
+   quand le CSV s'ouvre dans Excel. Un nom de bière trafiqué pourrait
+   donc lancer du code sur la machine de celui qui ouvre le fichier :
+   on désamorce en préfixant d'une apostrophe. */
+function csvCell(v){
+  let s = v == null ? '' : String(v);
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  if (/[";\n\r]/.test(s))     s = '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function exportData(){
+  const L = Store.logs();
+  if (!L.length) { toast('Ton journal est encore vide'); return }
+  const head = ['Date','Bière','Brasserie','Style','Degré','Volume (cl)','Note sur 5',
+                'Coup de cœur','Prix payé (€)','Magasin','Unités d\'alcool','Calories (kcal)','Mon avis'];
+  const rows = L.map(l => {
+    const b = Store.beer(l.b) || {};
+    const rev = (C.reviews || []).find(r => r.u === 'me' && r.b === l.b);
+    return [
+      new Date(l.at).toLocaleDateString('fr-FR'),
+      b.n || '', b.br || '', b.st || '', b.abv ? fmtRate(b.abv) : '', b.cl || '',
+      l.r ? fmtRate(l.r) : '',
+      l.liked ? 'oui' : 'non',
+      l.paid ? l.paid.toFixed(2).replace('.', ',') : '',
+      l.shop || '',
+      (b.cl && b.abv) ? String(Store.units(b)).replace('.', ',') : '',
+      b.cl ? Store.kcal(b) : '',
+      rev ? rev.t : ''
+    ];
+  });
+  // point-virgule et BOM : sans eux, Excel en français colle tout dans une
+  // seule colonne et massacre les accents
+  const csv = [head, ...rows].map(r => r.map(csvCell).join(';')).join('\r\n');
+  download(new Blob(['﻿' + csv], { type:'text/csv;charset=utf-8' }),
+           'letterbeer-journal-' + new Date().toISOString().slice(0,10) + '.csv');
+  toast(L.length + ' entrée' + (L.length>1?'s':'') + ' exportée' + (L.length>1?'s':''));
+}
+
+function confirmDelete(){
+  const sh = $('#sheet'); sh.classList.add('open');
+  sh.innerHTML = `<div class="sheet-in"><div class="grab"></div>
+   <div class="sheet-bar"><b>Supprimer mon compte</b><button class="icon-btn" onclick="closeSheet()">${I.x}</button></div>
+   <div class="sheet-body">
+    <div class="note warn">${I.info}<span>C'est définitif. Ton journal, tes avis, tes photos et tes
+      relevés de prix partent avec le compte. Il n'y a ni corbeille ni sauvegarde à restaurer.</span></div>
+    <div class="ab-p">Les avis que tu as publiés disparaîtront aussi des fiches bières, ainsi que
+      les réponses qu'ils ont reçues.</div>
+    <button class="ghost" style="margin-top:14px" onclick="exportData()">Exporter mon journal d'abord</button>
+    <div class="field" style="margin-top:24px">
+      <label>Tape SUPPRIMER pour confirmer</label>
+      <input class="f" id="del-w" autocomplete="off" autocapitalize="characters" placeholder="SUPPRIMER"
+        oninput="document.getElementById('del-go').disabled = this.value.trim().toUpperCase() !== 'SUPPRIMER'">
+    </div>
+    <button class="cta danger" id="del-go" disabled onclick="doDelete()">Supprimer définitivement</button>
+   </div></div>`;
+}
+
+async function doDelete(){
+  const btn = document.getElementById('del-go');
+  btn.disabled = true; btn.textContent = 'Suppression en cours…';
+  try {
+    await Store.deleteAccount();
+    closeSheet();
+    location.reload();
+  } catch (e) {
+    console.error(e);
+    btn.disabled = false; btn.textContent = 'Supprimer définitivement';
+    toast('Suppression impossible — réessaie');
+  }
 }
 
 /* ---------- à propos & confidentialité ---------- */
@@ -1237,9 +1338,9 @@ function openAbout(tab){
     <div class="ab-p">Tu peux à tout moment récupérer tes données, les corriger, ou supprimer ton compte.
       Pas de formulaire, pas de délai : les deux boutons sont dans cet écran Compte.</div>
     <div class="two" style="margin-top:12px">
-      <button class="ghost" onclick="toast('Export CSV à brancher')">Exporter mes données</button>
+      <button class="ghost" onclick="exportData()">Exporter mes données</button>
       <button class="ghost" style="color:var(--bad);border-color:#3a1f1f"
-        onclick="toast('Suppression à brancher')">Supprimer mon compte</button>
+        onclick="confirmDelete()">Supprimer mon compte</button>
     </div>
 
     <div class="sec" style="padding-top:24px"><h2>Alcool et santé</h2><span class="eyebrow">repères officiels</span></div>
