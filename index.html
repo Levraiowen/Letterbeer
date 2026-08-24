@@ -460,6 +460,19 @@ textarea:focus,input.f:focus,select.f:focus{border-color:var(--accent);box-shado
 .modbtn.yes:hover{background:rgba(63,217,139,.12)}
 .modbtn.no{color:var(--bad);border-color:#3a1f1f}
 .modbtn.no:hover{background:rgba(255,77,77,.1)}
+/* --- journal corrigeable --- */
+.seeall{background:none;border:0;cursor:pointer;font-family:inherit;font-size:11px;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--accent);padding:2px 0}
+.seeall:hover{text-decoration:underline;text-underline-offset:3px}
+.jrow{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--border)}
+.jrow .t{flex:1;min-width:0}
+.jrow .t b{display:block;font-size:13px;font-weight:600;color:var(--text);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.jrow .t span{display:block;font-size:11px;color:var(--dim);margin-top:2px}
+.jdel{flex:0 0 auto;background:none;border:1px solid var(--border);border-radius:9px;
+  color:var(--dimmer);width:32px;height:32px;display:flex;align-items:center;
+  justify-content:center;cursor:pointer;transition:.2s var(--e)}
+.jdel:hover{color:var(--bad);border-color:#3a1f1f;background:rgba(255,77,77,.08)}
 .tg.alrg{background:rgba(232,176,75,.13);color:var(--warn)}
 </style>
 </head>
@@ -517,6 +530,7 @@ const I={
  x:'<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
  zoom:'<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.6-4.6M10.5 7.8v5.4M7.8 10.5h5.4"/></svg>',
  ext:'<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><path d="M14 4h6v6M20 4l-8.5 8.5"/><path d="M18 14v5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 19V8a1.5 1.5 0 0 1 1.5-1.5H10"/></svg>',
+ trash:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 4.5h4M9.5 11v6M14.5 11v6"/><path d="M6 7l.9 12.2A1.5 1.5 0 0 0 8.4 20.5h7.2a1.5 1.5 0 0 0 1.5-1.3L18 7"/></svg>',
  chev:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>',
  cam:'<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5h3l1.6-2.4h8.8L18 8.5h3v11H3Z"/><circle cx="12" cy="13.6" r="3.4"/></svg>',
  lock:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10" width="15" height="10.5" rx="2.2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
@@ -650,6 +664,8 @@ async function hydrate() {
   C.logs = (logs.data||[]).map(l => ({
     id: l.id,
     b: l.beer_id, r: l.rating ? +l.rating : 0, liked: l.liked, paid: l.price_paid ? +l.price_paid : 0,
+    // counted=false : note saisie de mémoire, sans avoir bu
+    counted: l.counted === false ? 0 : 1,
     shop: l.shop || '', d: frDate(l.drunk_at), at: l.drunk_at
   }));
 
@@ -837,13 +853,22 @@ const Store = {
   myReview:   id => C.reviews.find(r => r.u === 'me' && r.b === id),
 
   async addLog(l) {
+    const counted = l.counted === 0 ? false : true;
     const { data, error } = await sb.from('logs').insert({
       user_id:C.myId, beer_id:l.b, rating:l.r || null, liked:!!l.liked,
-      price_paid:l.paid || null, shop:l.shop || null
+      // une note de mémoire ne s'accompagne ni de prix ni de magasin
+      price_paid: counted ? (l.paid || null) : null,
+      shop: counted ? (l.shop || null) : null,
+      counted
     }).select().single();
     if (error) throw error;
-    C.logs.unshift({ ...l, id:data.id, at:data.drunk_at });
+    C.logs.unshift({ ...l, id:data.id, counted: counted?1:0, at:data.drunk_at });
     return data.id;
+  },
+  async deleteLog(id) {
+    const { error } = await sb.from('logs').delete().eq('id', id).eq('user_id', C.myId);
+    if (error) throw error;
+    C.logs = C.logs.filter(l => l.id !== id);
   },
   /* modification d'une note existante : on réécrit la ligne au lieu
      d'en créer une seconde, qui pèserait deux fois dans la moyenne */
@@ -855,8 +880,11 @@ const Store = {
     const row = C.logs.find(x => x.id === id);
     if (row) { row.r = l.r; row.liked = l.liked ? 1 : 0; }
   },
-  week: () => C.logs.filter(l => Date.now() - new Date(l.at) < 7*864e5).length,
-  drunkBeerIds() { const s=[]; C.logs.forEach(l => { if(!s.includes(l.b)) s.push(l.b) }); return s; },
+  /* Les notes saisies de mémoire ne comptent nulle part comme des canettes :
+     ni dans la semaine, ni dans les volumes, ni dans « déjà bues ». */
+  drunk: () => C.logs.filter(l => l.counted),
+  week: () => Store.drunk().filter(l => Date.now() - new Date(l.at) < 7*864e5).length,
+  drunkBeerIds() { const s=[]; Store.drunk().forEach(l => { if(!s.includes(l.b)) s.push(l.b) }); return s; },
   lastPaid(id) { const l = C.logs.find(x => x.b === id); return l ? l.paid : null; },
   arts: () => C.arts,
 
@@ -870,7 +898,9 @@ const Store = {
   kcalIsReal(b) { return !!(b && b.kcal != null && b.kcalSrc === 'off'); },
 
   stats() {
-    const L = C.logs, n = L.length, rated = L.filter(l => l.r);
+    // volumes, unités, calories et dépenses : uniquement ce qui a été bu.
+    // la note moyenne, elle, tient compte des notes de mémoire.
+    const L = Store.drunk(), n = L.length, rated = C.logs.filter(l => l.r);
     const cl  = L.reduce((s,l) => s + (Store.beer(l.b)?.cl || 0), 0);
     const eur = L.reduce((s,l) => s + (l.paid || 0), 0);
     const un  = L.reduce((s,l) => { const b = Store.beer(l.b); return s + (b ? Store.units(b) : 0) }, 0);
@@ -913,7 +943,7 @@ const Store = {
   },
 
   weekUnits() {
-    return +C.logs.filter(l => Date.now() - new Date(l.at) < 7*864e5)
+    return +Store.drunk().filter(l => Date.now() - new Date(l.at) < 7*864e5)
       .reduce((s,l) => { const b = Store.beer(l.b); return s + (b ? Store.units(b) : 0) }, 0).toFixed(1);
   }
 };
@@ -1350,7 +1380,8 @@ function vMe(){
    +'<div class="barlist">'+top.map(([k,v],i)=>'<div class="bl-row"><span class="lbl">'+esc(k)+'</span>'
      +'<span class="bl-track"><span class="bl-fill" style="width:'+(v/smx*100)+'%;animation-delay:'+(i*.06)+'s"></span></span>'
      +'<span class="num">'+v+'</span></div>').join('')+'</div>'
-   +'<div class="sec" style="padding-top:24px"><h2>Ton journal</h2><span class="eyebrow">'+s.n+' entrées</span></div>'
+   +'<div class="sec" style="padding-top:24px"><h2>Ton journal</h2>'
+     +'<button class="seeall" onclick="openJournal()">Tout voir et corriger</button></div>'
    +L.slice(0,8).filter(l=>Store.beer(l.b)).map(l=>{const b=Store.beer(l.b);
      return '<button class="row tap" onclick="openBeer(\''+esc(l.b)+'\')">'
      +'<span class="n" style="width:44px;flex:0 0 44px;font-size:11px">'+esc(l.d)+'</span>'
@@ -1425,6 +1456,44 @@ function vAccount(){
    +'<button class="ghost" style="margin-top:10px;color:var(--bad);border-color:#3a1f1f" onclick="confirmDelete()">Supprimer mon compte</button>';
 }
 
+/* ---------- journal complet, corrigeable ---------- */
+function openJournal(){
+  const sh=$('#sheet'); sh.classList.add('open');
+  sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
+   +'<div class="sheet-bar"><b>Ton journal</b><button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
+   +'<div class="sheet-body" id="jrn"></div></div>';
+  drawJournal();
+}
+function drawJournal(){
+  const el=document.getElementById('jrn'); if(!el) return;
+  const L=Store.logs();
+  const bus=Store.drunk().length, notes=L.length-bus;
+  el.innerHTML =
+    '<div class="note">'+I.info+'<span>'+bus+' canette'+(bus>1?'s':'')+' bue'+(bus>1?'s':'')
+   +(notes?' · '+notes+' note'+(notes>1?'s':'')+' de mémoire, non comptée'+(notes>1?'s':''):'')
+   +'. Supprime une entrée si tu t\'es trompé — c\'est définitif.</span></div>'
+   +(L.length
+     ? L.filter(l=>Store.beer(l.b)).map(l=>{const b=Store.beer(l.b);
+        return '<div class="jrow" id="j-'+esc(l.id)+'">'
+         +'<span style="width:30px;flex:0 0 30px">'+can(b)+'</span>'
+         +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(l.d)
+           +(l.counted?(l.paid?' · '+l.paid.toFixed(2)+' €':''):' · note de mémoire')
+           +(l.r?' · '+fmtRate(l.r)+'★':'')+'</span></span>'
+         +'<button class="jdel" onclick="doDeleteLog(\''+esc(l.id)+'\')" '
+           +'aria-label="Supprimer cette entrée">'+I.trash+'</button></div>'}).join('')
+     : '<div class="empty">Ton journal est vide.</div>');
+}
+async function doDeleteLog(id){
+  const l = Store.logs().find(x => x.id === id);
+  const portaitLaNote = l && l.r;
+  if(portaitLaNote && !confirm('Cette entrée porte ta note. La supprimer effacera aussi la note. Continuer ?')) return;
+  const r = await act(()=>Store.deleteLog(id), 'Suppression impossible — réessaie');
+  if(r===null) return;
+  drawJournal();
+  toast(portaitLaNote ? 'Entrée et note supprimées' : 'Entrée supprimée');
+  render();
+}
+
 /* Le lien part chez le média : noopener pour qu'il ne puisse pas
    reprendre la main sur notre onglet. */
 function openArticle(url){
@@ -1493,7 +1562,7 @@ function csvCell(v){
 function exportData(){
   const L = Store.logs();
   if (!L.length) { toast('Ton journal est encore vide'); return }
-  const head = ['Date','Bière','Brasserie','Style','Degré','Volume (cl)','Note sur 5',
+  const head = ['Date','Bière','Brasserie','Style','Degré','Volume (cl)','Note sur 5','Bue',
                 'Coup de cœur','Prix payé (€)','Magasin','Unités d\'alcool','Calories (kcal)','Mon avis'];
   const rows = L.map(l => {
     const b = Store.beer(l.b) || {};
@@ -1502,11 +1571,12 @@ function exportData(){
       new Date(l.at).toLocaleDateString('fr-FR'),
       b.n || '', b.br || '', b.st || '', b.abv ? fmtRate(b.abv) : '', b.cl || '',
       l.r ? fmtRate(l.r) : '',
+      l.counted ? 'oui' : 'non — note de mémoire',
       l.liked ? 'oui' : 'non',
       l.paid ? l.paid.toFixed(2).replace('.', ',') : '',
       l.shop || '',
-      (b.cl && b.abv) ? String(Store.units(b)).replace('.', ',') : '',
-      b.cl ? Store.kcal(b) : '',
+      (l.counted && b.cl && b.abv) ? String(Store.units(b)).replace('.', ',') : '',
+      (l.counted && b.cl) ? Store.kcal(b) : '',
       rev ? rev.t : ''
     ];
   });
@@ -1654,9 +1724,9 @@ function drawFoll(t){
 }
 
 /* ---------- fiche bière ---------- */
-let SH={beer:null,rate:0,liked:0,txt:'',shop:'',paid:'',logId:null,already:0,rate0:0,liked0:0,txt0:''};
+let SH={beer:null,rate:0,liked:0,txt:'',shop:'',paid:'',logId:null,already:0,rate0:0,liked0:0,txt0:'',counted:1};
 function openBeer(id){
-  SH={beer:id,rate:0,liked:0,txt:'',shop:'',paid:'',logId:null,already:0,rate0:0,liked0:0,txt0:''};
+  SH={beer:id,rate:0,liked:0,txt:'',shop:'',paid:'',logId:null,already:0,rate0:0,liked0:0,txt0:'',counted:1};
   // une seule note par bière : si elle existe déjà, on la charge pour
   // que le geste suivant soit une modification, pas un doublon
   const rated = Store.myRatedLog(id);
@@ -1706,14 +1776,23 @@ function drawSheet(){
      +'<div class="hint">Une note, c\'est tout. Le reste est optionnel. Touche la moitié gauche d\'une étoile pour une demi-note.</div>'
      +'<div style="display:flex;gap:9px;margin-top:13px">'
        +'<button class="chip'+(SH.liked?' on':'')+'" style="flex:1;text-align:center" onclick="SH.liked=SH.liked?0:1;drawSheet()">♥ Coup de cœur</button>'
-       +'<button class="chip" style="flex:1;text-align:center" onclick="toast(\'Ajoutée à ta liste d\\\'envies\')">+ À goûter</button>'
      +'</div>'
+     // noter n'est pas toujours boire : on laisse le choix, coché par défaut
+     +(SH.already?'':'<div class="lockrow" style="margin-top:13px"><span class="t">'
+       +'<b style="font-size:13.5px;font-weight:500;display:block">J\'en ai bu une</b>'
+       +'<span style="font-size:11.5px;color:var(--dim)">'
+       +(SH.counted?'Compte dans ton volume, tes unités et tes dépenses'
+                   :'Ta note est enregistrée, mais aucune canette ajoutée')+'</span></span>'
+       +'<span class="sw'+(SH.counted?' on':'')+'" onclick="SH.counted=SH.counted?0:1;drawSheet()"></span></div>')
      +'<div style="margin-top:11px"><textarea rows="2" placeholder="Ton avis (optionnel)…" oninput="SH.txt=this.value">'+esc(SH.txt)+'</textarea></div>'
-     +'<div class="two" style="margin-top:9px">'
-       +'<div><input class="f" placeholder="Achetée où ?" value="'+esc(SH.shop)+'" oninput="SH.shop=this.value"></div>'
-       +'<div><input class="f" inputmode="decimal" placeholder="Prix payé €" value="'+esc(SH.paid)+'" oninput="SH.paid=this.value"></div>'
-     +'</div>'
-     +'<div class="hint" style="margin-top:8px">Le prix payé alimente le suivi communautaire et tes dépenses. Laisse vide si tu ne veux pas.</div>'
+     // sans consommation, il n'y a ni prix payé ni magasin à relever
+     +(SH.counted||SH.already
+       ? '<div class="two" style="margin-top:9px">'
+         +'<div><input class="f" placeholder="Achetée où ?" value="'+esc(SH.shop)+'" oninput="SH.shop=this.value"></div>'
+         +'<div><input class="f" inputmode="decimal" placeholder="Prix payé €" value="'+esc(SH.paid)+'" oninput="SH.paid=this.value"></div>'
+         +'</div>'
+         +'<div class="hint" style="margin-top:8px">Le prix payé alimente le suivi communautaire et tes dépenses. Laisse vide si tu ne veux pas.</div>'
+       : '<div class="hint" style="margin-top:10px">Note de mémoire : ni prix ni magasin à renseigner.</div>')
    +'</div>'
    +'<button class="cta" onclick="saveLog()">'+(SH.already?'Enregistrer les modifications':'Enregistrer')+'</button>'
    +'<div class="sec" style="padding-top:24px"><h2>Où la trouver</h2>'
@@ -1775,22 +1854,25 @@ async function saveLog(){
   const b = Store.beer(SH.beer), paid = parseFloat((SH.paid||'').replace(',','.')) || null;
   if(!SH.rate && !paid){ toast('Mets au moins une note pour enregistrer'); return }
   const bp = Store.bestPrice(b);
+  const compte = SH.already ? 1 : SH.counted;
   try {
     if (SH.already && SH.logId) {
       // la note existe déjà : on la corrige, on n'en crée pas une seconde
       await Store.updateLog(SH.logId, { r:SH.rate, liked:SH.liked });
     } else {
-      await Store.addLog({ b:b.id, r:SH.rate, d:"aujourd'hui", liked:SH.liked,
-                           paid: paid || (bp?bp.p:0), shop: SH.shop || null });
+      await Store.addLog({ b:b.id, r:SH.rate, d:"aujourd'hui", liked:SH.liked, counted:compte,
+                           paid: compte ? (paid || (bp?bp.p:0)) : 0, shop: compte ? (SH.shop||null) : null });
     }
-    if(SH.shop && paid) await Store.addPrice(b.id, SH.shop, paid);
+    if(compte && SH.shop && paid) await Store.addPrice(b.id, SH.shop, paid);
     if(SH.txt.trim()) await Store.addReview({ b:b.id, r:SH.rate, liked:SH.liked, t:SH.txt.trim() });
   } catch(e){
     console.error(e);
     toast('Enregistrement impossible — réessaie');
     return;
   }
-  const verbe = SH.already ? ' mise à jour' : ' enregistrée';
+  const verbe = SH.already ? ' mise à jour'
+              : compte ? ' enregistrée'
+              : ' notée · pas comptée comme bue';
   closeSheet();
   toast(b.n + (SH.rate?' · '+fmtRate(SH.rate)+'★':'') + verbe);
   render(); bump();
