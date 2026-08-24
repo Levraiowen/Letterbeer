@@ -113,6 +113,17 @@ sort de France.
 - **Vérification d'âge** — déclaration sur l'honneur, gelée en base depuis la
   migration 08. Suffisant pour un usage privé ; à revoir si l'audience sort du
   cercle d'amis.
+- **En-têtes HTTP de sécurité** — la politique de sécurité du contenu est
+  posée en balise `meta`, ce qui couvre l'essentiel. Mais `frame-ancestors`,
+  `Strict-Transport-Security` et `X-Content-Type-Options` n'existent qu'en
+  en-tête HTTP, que GitHub Pages ne permet pas de définir. Un hébergeur qui
+  autorise les en-têtes, ou la coque native, réglera ça.
+- **Limitation du débit d'écriture** — rien n'empêche aujourd'hui de publier
+  mille avis en une minute. Sans effet entre amis, à prévoir avant toute
+  ouverture publique.
+- **Empreinte de la bibliothèque** — la version de `supabase-js` est épinglée
+  et son empreinte vérifiée. À recalculer à chaque montée de version, sinon
+  le navigateur refusera de la charger.
 - **Rapports de plantage** — aucun moyen de savoir ce qui casse chez les
   autres. La sortie honnête est un bouton « Signaler un problème » qui envoie
   **le message écrit par l'utilisateur**, et rien d'autre : la promesse

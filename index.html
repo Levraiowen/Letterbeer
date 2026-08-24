@@ -39,13 +39,50 @@
 <title>Letterbeer — le carnet de canettes</title>
 <meta name="description" content="Le carnet de canettes : note tes bières, suis tes repères, partage avec tes potes.">
 <meta name="theme-color" content="#0A0A0C">
+<!--
+  Politique de sécurité du contenu.
+
+  La ligne qui compte vraiment est connect-src : même si une faille
+  d'échappement passait entre les mailles, le code injecté ne pourrait
+  envoyer le jeton de session nulle part — seul Supabase est joignable.
+  C'est la barrière la plus utile sur une application de ce type.
+
+  'unsafe-inline' reste nécessaire : tout le style et tous les
+  gestionnaires de clic sont en ligne dans ce fichier unique. Le supprimer
+  demanderait de réécrire l'application entière ; la protection réelle
+  reste l'échappement systématique, dont ceci n'est qu'un filet.
+
+  frame-ancestors n'a aucun effet en balise meta — il exige un en-tête
+  HTTP, que GitHub Pages ne permet pas de définir. Noté dans MIGRATION.md.
+-->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;
+  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+  font-src 'self' https://fonts.gstatic.com;
+  img-src 'self' data: blob: https://wleilfzebdkudkteezht.supabase.co https://*.openfoodfacts.org https://*.openfoodfacts.net;
+  connect-src 'self' https://wleilfzebdkudkteezht.supabase.co wss://wleilfzebdkudkteezht.supabase.co;
+  worker-src 'self';
+  manifest-src 'self';
+  object-src 'none';
+  base-uri 'self';
+  form-action 'none';
+  upgrade-insecure-requests">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+
 <link rel="icon" type="image/svg+xml" href="logo.svg">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Version épinglée et empreinte vérifiée : le lien flottant « @2 » pouvait
+     changer sous nos pieds, et un CDN compromis aurait exécuté n'importe quoi
+     avec un accès complet à la session. Le navigateur refuse désormais tout
+     fichier dont l'empreinte ne correspond pas. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"
+  integrity="sha384-qafw21c/iciq0VXsi9FzkfoQv5I/V0iqE4lSNcKXPnW9/UTJLnv5CcN4FHxVLnKg"
+  crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <style>
 :root{
   --bg:#0A0A0C; --surface:#141417; --surface-2:#1C1C20; --accent:#FF5A1F;
