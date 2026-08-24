@@ -435,6 +435,9 @@ textarea:focus,input.f:focus,select.f:focus{border-color:var(--accent);box-shado
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 /* vignette de liste : pas de bandeau, photo un peu plus serrée puisqu'il
    n'y a plus de texte à laisser respirer en bas */
+/* vignette de ligne : display:block indispensable, une largeur ne
+   s'applique pas à un span resté en display:inline */
+.vign{flex:0 0 32px;width:32px;display:block}
 .can.mini{aspect-ratio:2/3;border-radius:7px}
 .can.mini .ph-fg{padding:8% 8%;background-position:center}
 .can.mini .rim{height:20%}
@@ -1461,7 +1464,7 @@ function vHome(){
       +'<div class="rail">'+nv.map(b=>cell(b)).join('')+'</div>'
       +'<div class="sec"><h2>Top de l\'année</h2></div>'
       +top.map((b,i)=>'<button class="row tap" onclick="openBeer(\''+esc(b.id)+'\')"><span class="n">'+(i+1)+'</span>'
-        +'<span style="width:34px;flex:0 0 34px">'+can(b,0,1)+'</span>'
+        +'<span class="vign">'+can(b,0,1)+'</span>'
         +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(b.br)+' · '+esc(b.st)+'</span></span>'
         +'<span style="text-align:right">'+stars(Store.rating(b.id))
         +'<br><span style="font-size:10.5px;color:var(--dimmer)">'+Store.rating(b.id).toFixed(1)+'</span></span></button>').join('');
@@ -1576,11 +1579,14 @@ function vFriends(){
    +(revs.length?revs.map(revHTML).join('')
      :'<div class="empty">Tes copains n\'ont encore rien écrit.</div>')
    +'<div class="sec" style="padding-top:26px"><h2>Ce qu\'ils ont bu</h2></div>'
+   // div et non button : av() renvoie déjà un bouton, et un bouton
+   // imbriqué fait fermer le parent par l'analyseur HTML — la ligne
+   // éclatait alors et la vignette prenait tout l'écran.
    +feed.filter(a=>Store.beer(a.b)).map(a=>{const b=Store.beer(a.b);
-     return '<button class="row tap" onclick="openBeer(\''+esc(a.b)+'\')">'+av(a.u)
-     +'<span style="width:32px;flex:0 0 32px">'+can(b,0,1)+'</span>'
+     return '<div class="row tap" onclick="openBeer(\''+esc(a.b)+'\')">'+av(a.u)
+     +'<span class="vign">'+can(b,0,1)+'</span>'
      +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(Store.user(a.u).h)+' · '+esc(a.d)+'</span></span>'
-     +stars(a.r)+'</button>'}).join('')
+     +stars(a.r)+'</div>'}).join('')
    +'<div class="sec" style="padding-top:26px"><h2>Leur semaine</h2><span class="eyebrow">7 jours</span></div>'
    +foll.map(k=>{const u=Store.user(k);
      return '<div class="row">'+av(k)+'<span class="t"><b>'+esc(u.h)+'</b><span>'
@@ -1626,7 +1632,7 @@ function vUser(){
    +'<div class="sec" style="padding-top:24px"><h2>Ses dernières canettes</h2></div>'
    +u.act.filter(a=>Store.beer(a.b)).map(a=>{const b=Store.beer(a.b);
      return '<button class="row tap" onclick="openBeer(\''+esc(a.b)+'\')">'
-     +'<span style="width:32px;flex:0 0 32px">'+can(b,0,1)+'</span>'
+     +'<span class="vign">'+can(b,0,1)+'</span>'
      +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(b.br)+' · '+esc(a.d)+'</span></span>'
      +stars(a.r)+'</button>'}).join('');
 }
@@ -1683,7 +1689,7 @@ function vMe(){
    +L.slice(0,8).filter(l=>Store.beer(l.b)).map(l=>{const b=Store.beer(l.b);
      return '<button class="row tap" onclick="openBeer(\''+esc(l.b)+'\')">'
      +'<span class="n" style="width:44px;flex:0 0 44px;font-size:11px">'+esc(l.d)+'</span>'
-     +'<span style="width:30px;flex:0 0 30px">'+can(b,0,1)+'</span>'
+     +'<span class="vign">'+can(b,0,1)+'</span>'
      +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(b.br)
        +(l.paid?' · '+l.paid.toFixed(2)+' €':'')+(l.r?'':' · +1')+'</span></span>'
      +stars(l.r)+(l.liked?'<span style="color:var(--accent);font-size:12px;margin-left:6px">♥</span>':'')+'</button>'}).join('');
@@ -1827,7 +1833,7 @@ function openMyBeers(){
      +'et par les autres une fois vérifiée.</span></div>'
    +(L.length
      ? L.map(b=>'<div class="jrow">'
-        +'<span style="width:30px;flex:0 0 30px">'+can(b,0,1)+'</span>'
+        +'<span class="vign">'+can(b,0,1)+'</span>'
         +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(b.br)+' · '+(b.abv||'?')+'° · '+b.cl+' cl</span></span>'
         +badge(b)+'</div>').join('')
      : '<div class="empty">Tu n\'as encore proposé aucune bière.<br><br>'
@@ -1883,7 +1889,7 @@ function drawJournal(){
    +(L.length
      ? L.filter(l=>Store.beer(l.b)).map(l=>{const b=Store.beer(l.b);
         return '<div class="jrow" id="j-'+esc(l.id)+'">'
-         +'<span style="width:30px;flex:0 0 30px">'+can(b,0,1)+'</span>'
+         +'<span class="vign">'+can(b,0,1)+'</span>'
          +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(l.d)
            +(l.counted?(l.paid?' · '+l.paid.toFixed(2)+' €':''):' · note de mémoire')
            +(l.r?' · '+fmtRate(l.r)+'★':'')+'</span></span>'
