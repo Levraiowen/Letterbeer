@@ -399,6 +399,7 @@ button.lockup:active{transform:scale(.96)}
   background:var(--surface-2);border:1px solid var(--border);color:var(--text);display:flex;align-items:center;justify-content:center}
 .phead .h{font-family:'Space Grotesk';font-size:17px;font-weight:600}
 .phead .s{font-size:12px;color:var(--dim)}
+.phead .pgouts{display:inline-flex;align-items:center;gap:5px;margin-top:7px;font-size:11.5px;color:var(--accent);background:var(--surface-2);padding:4px 10px;border-radius:999px}
 .phead .pbio{font-size:12.5px;line-height:1.45;color:var(--dim);text-align:center;max-width:290px;margin:8px auto 0;white-space:pre-wrap;overflow-wrap:anywhere}
 .follrow{display:flex;gap:20px;margin-top:4px}
 .follrow button,.follrow div{background:none;border:0;color:var(--text);cursor:pointer;text-align:center;
@@ -1085,9 +1086,11 @@ async function hydrate() {
       fme:  followerIds.includes(p.id) ? 1 : 0,
       cans: 0, avg: 0, top: '—', week: 0, act: []
     };
+    // les goûts sont désormais affichés sur le profil, donc chargés pour tous
+    u.familles = p.pref_familles || '';
+    u.degre    = p.pref_degre || '';
     if (p.id === C.myId) {
       C.me = u; C.users['me'] = u;
-      u.familles = p.pref_familles || ''; u.degre = p.pref_degre || '';
       C.onboarded = p.onboarded !== false;   // absent en base = déjà passé
     }
     C.users[p.id] = u;
@@ -1859,6 +1862,21 @@ const fmtEuro = v => v.toFixed(2).replace('.',',') + ' €';
    anglais : « 3.5 L », « 17.2 unités », « 0.00 € » — au milieu de calories
    pourtant écrites « 1 704 ». Un seul écran, deux conventions. */
 const fmtDec  = (v, n=1) => Number(v || 0).toFixed(n).replace('.',',');
+
+/* Les goûts déclarés au premier lancement ne servaient qu'au tri de « Pour
+   toi » : personne ne les voyait, et on ne pouvait plus les changer. Ils
+   disent pourtant mieux qui on est, dans une app de bière, qu'une boîte de
+   texte vide. On les rend lisibles — « blondes, IPA · plutôt costaudes ». */
+const LIBELLE_FAMILLE = { blondes:'blondes', ipa:'IPA', brunes:'brunes', tout:'de tout' };
+const LIBELLE_DEGRE   = { leger:'plutôt légères', moyen:'plutôt équilibrées',
+                          fort:'plutôt costaudes', tout:'peu importe le degré' };
+const ligneGouts = u => {
+  if (!u) return '';
+  const f = (u.familles || '').split(',').filter(Boolean)
+              .map(x => LIBELLE_FAMILLE[x]).filter(Boolean);
+  const d = LIBELLE_DEGRE[u.degre] || '';
+  return [f.join(', '), d].filter(Boolean).join(' · ');
+};
 function shortName(n){ return n.length > 42 ? n.slice(0,40).trim()+'…' : n }
 /* x = afficher le degré · mini = vignette de liste.
    En dessous de ~40 px, le bandeau nom + brasserie devient illisible et
@@ -2312,6 +2330,7 @@ function vUser(){
   return '<div class="phead">'
     +'<div class="pic" style="cursor:default;'+pst+'">'+(ph?'':esc(u.i))+'</div>'
     +'<span class="h">'+esc(u.h)+'</span><span class="s">'+esc(u.ville)+'</span>'
+    +(ligneGouts(u)?'<span class="pgouts">'+I.minuscan+esc(ligneGouts(u))+'</span>':'')
     +(u.bio?'<span class="pbio">'+esc(u.bio)+'</span>':'')
     +'<button class="follow lg'+(u.foll?' on':'')+'" onclick="follow(\''+esc(k)+'\')">'
       +(u.foll?'Abonné':'S\'abonner')+'</button></div>'
@@ -2347,6 +2366,7 @@ function vMe(){
     +'<button class="pic" style="'+pst+'" onclick="pickPhoto()">'+(mph?'':esc(me.i))
       +'<span class="badge">'+I.cam+'</span></button>'
     +'<span class="h">'+esc(me.h)+'</span><span class="s">'+s.n+' canettes · '+s.brews+' brasseries · '+esc(me.ville)+'</span>'
+    +(ligneGouts(me)?'<span class="pgouts">'+I.minuscan+esc(ligneGouts(me))+'</span>':'')
     +(me.bio?'<span class="pbio">'+esc(me.bio)+'</span>':'')
     +'<div class="follrow">'
       +'<button onclick="openFoll(\'ers\')"><b>'+Store.followers().length+'</b><span>abonnés</span></button>'
@@ -2436,15 +2456,21 @@ function vAccount(){
   const me=Store.me();
   const nWish=Store.wishlist().length, nMine=Store.myBeers().length, nTrack=Store.tracked().length;
   const rows=[
-    ['Infos perso','Pseudo, ville et adresse e-mail','openProfileEdit()'],
+    ['Infos perso','Pseudo, ville, bio et adresse e-mail','openProfileEdit()'],
+    ['Mes goûts', ligneGouts(Store.me()) || 'Pas encore renseignés','ouvrirGouts()'],
     ['Confidentialité','Ce qui est collecté, où c\'est hébergé, tes droits','openAbout(\'data\')'],
     ['À goûter', nWish?nWish+' canette'+(nWish>1?'s':'')+' sur ta liste':'Ta liste d\'envies est vide','openWishlist()'],
     ['Mes propositions de bières', nMine?nMine+' fiche'+(nMine>1?'s':'')+' proposée'+(nMine>1?'s':''):'Aucune fiche proposée','openMyBeers()'],
     ['Prix suivis', nTrack?nTrack+' bière'+(nTrack>1?'s':'')+' surveillée'+(nTrack>1?'s':''):'Aucune bière suivie','openTracked()'],
     ['Exporter tes données','Ton journal en CSV, ouvrable dans Excel','exportData()'],
     ['À propos','Version, licences et prévention','openAbout()']];
-  if(Store.isAdmin()) rows.splice(4,0,
-    ['Fiches à valider','Propositions en attente de modération','openModeration()']);
+  // repéré par son voisin plutôt que par un index : ajouter une ligne
+  // au-dessus déplaçait silencieusement l'entrée de modération
+  if(Store.isAdmin()) {
+    const i = rows.findIndex(r => r[0] === 'Mes propositions de bières');
+    rows.splice(i < 0 ? rows.length : i + 1, 0,
+      ['Fiches à valider','Propositions en attente de modération','openModeration()']);
+  }
   const mph=safeUrl(me.photo);
   const pst=mph?'background-image:url('+mph+')':'';
   return '<div class="phead" style="padding-bottom:14px">'
@@ -2456,7 +2482,9 @@ function vAccount(){
      +'<span style="font-size:11.5px;color:var(--dim)">Masque ta conso et tes dépenses</span></span>'
      +'<span class="sw'+(me.priv?' on':'')+'" onclick="togglePriv()"></span></div>'
    +rows.map(r=>'<button class="row tap" onclick="'+(r[2]||'toast(\'Écran à construire\')')+'">'
-     +'<span class="t"><b>'+r[0]+'</b><span>'+r[1]+'</span></span><span class="chev">'+I.chev+'</span></button>').join('')
+     // r[2] est du code, il ne s'échappe pas ; r[0] et r[1] sont du texte
+     +'<span class="t"><b>'+esc(r[0])+'</b><span>'+esc(r[1])+'</span></span>'
+     +'<span class="chev">'+I.chev+'</span></button>').join('')
    +'<button class="ghost" style="margin-top:20px" onclick="Auth.signOut()">Se déconnecter</button>'
    +'<button class="ghost" style="margin-top:10px;color:var(--bad);border-color:#3a1f1f" onclick="confirmDelete()">Supprimer mon compte</button>';
 }
@@ -2640,10 +2668,25 @@ async function partagerSemaine(){
    Deux questions, pas trois écrans de présentation : l'app se montre
    mieux en s'adaptant qu'en se racontant. On peut passer — mais alors
    on n'y revient plus, la question est marquée comme vue. */
-let ONB = { etape:1, familles:[], degre:'' };
+let ONB = { etape:1, familles:[], degre:'', edition:false };
 
 function ouvrirOnboarding(){
-  ONB = { etape:1, familles:[], degre:'' };
+  ONB = { etape:1, familles:[], degre:'', edition:false };
+  drawOnboarding();
+}
+
+/* Le même écran, rouvert depuis le Compte pour corriger ses goûts.
+   Les deux questions étaient posées une fois pour toutes au premier
+   lancement, sans aucun moyen d'y revenir — alors que les goûts changent,
+   et qu'une réponse donnée en dix secondes le premier jour mérite d'être
+   corrigeable. On réutilise l'écran plutôt que d'en écrire un second :
+   l'exclusivité de « Je goûte de tout » et le reste sont déjà là. */
+function ouvrirGouts(){
+  const me = Store.me();
+  ONB = { etape:1,
+          familles: (me.familles||'').split(',').filter(Boolean),
+          degre: me.degre || '',
+          edition: true };
   drawOnboarding();
 }
 
@@ -2656,13 +2699,15 @@ function drawOnboarding(){
   };
   const q1 = ONB.etape===1;
   sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
-   +'<div class="sheet-bar"><b>Bienvenue</b>'
-     +'<button class="linkbtn" style="margin:0" onclick="onbPasser()">Passer</button></div>'
+   +'<div class="sheet-bar"><b>'+(ONB.edition?'Tes goûts':'Bienvenue')+'</b>'
+     +(ONB.edition
+        ? '<button class="linkbtn" style="margin:0" onclick="closeSheet()">Annuler</button>'
+        : '<button class="linkbtn" style="margin:0" onclick="onbPasser()">Passer</button>')+'</div>'
    +'<div class="sheet-body">'
    +'<div class="onb-pas">Étape '+ONB.etape+' sur 2</div>'
    +(q1
      ? '<div class="onb-q">Tu bois quoi, d\'habitude ?</div>'
-       +'<div class="onb-s">Plusieurs réponses possibles. Ça sert juste à trier le catalogue.</div>'
+       +'<div class="onb-s">Plusieurs réponses possibles. Ça trie le catalogue, et ça s\'affiche sur ton profil.</div>'
        +'<div class="onb-l">'
          +choix('blondes','Blondes et blanches','Légères, faciles, désaltérantes','fam')
          +choix('ipa','IPA et acidulées','Houblon, amertume, fruits','fam')
@@ -2678,8 +2723,11 @@ function drawOnboarding(){
          +choix('tout','Peu importe','Le degré ne me guide pas','deg')
        +'</div>')
    +'<button class="cta" id="onb-go" onclick="onbSuivant()"'
-     +((q1 ? !ONB.familles.length : !ONB.degre) ? ' disabled':'')+'>'
-     +(q1?'Continuer':'Voir mes canettes')+'</button>'
+     // en modification, on peut tout décocher : c'est ainsi qu'on efface ses goûts
+     +((!ONB.edition && (q1 ? !ONB.familles.length : !ONB.degre)) ? ' disabled':'')+'>'
+     +(q1 ? 'Continuer' : ONB.edition ? 'Enregistrer' : 'Voir mes canettes')+'</button>'
+   // il n'y avait aucun moyen de revenir corriger la première réponse
+   +(q1?'':'<button class="ghost" style="margin-top:9px" onclick="ONB.etape=1;drawOnboarding()">Retour</button>')
    +'</div></div>';
 }
 
@@ -2706,9 +2754,13 @@ function onbPasser(){ onbEnregistrer('', ''); }
 async function onbEnregistrer(familles, degre){
   const r = await act(()=>Store.savePrefs(familles, degre), 'Préférences non enregistrées');
   if(r===null){ C.onboarded = true }   // on n'insiste pas si la base refuse
+  const edition = ONB.edition;
   closeSheet();
-  S.tab='home'; S.sub='bieres'; render();
-  if(familles) toast('C\'est noté, on te met ça en avant');
+  // en modification on reste où l'on était ; au premier lancement on ouvre le catalogue
+  if(!edition){ S.tab='home'; S.sub='bieres' }
+  render();
+  if(edition)        toast(familles ? 'Goûts mis à jour' : 'Goûts effacés');
+  else if(familles)  toast('C\'est noté, on te met ça en avant');
 }
 
 /* ---------- prix suivis ----------
@@ -3039,7 +3091,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v4.0';
+const APP_VERSION = 'v4.1';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
