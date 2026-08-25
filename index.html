@@ -250,7 +250,10 @@ button.lockup:active{transform:scale(.96)}
 .rev-body{display:flex;gap:12px}
 .rev-can{width:52px;flex:0 0 52px}
 .rev-text{font-size:13.5px;line-height:1.55;color:#D5D0CA}
-.rev-beer{font-family:'Space Grotesk';font-size:13px;font-weight:600;margin-bottom:3px}
+.rev-beer{font-family:'Space Grotesk';font-size:13px;font-weight:600}
+/* La brasserie passe SOUS le nom plutôt qu'à sa suite : collée derrière, en
+   gris, elle se lisait comme une répétition du nom. */
+.rev-br{font-size:11px;color:var(--dim);margin-top:1px;margin-bottom:3px}
 .acts{display:flex;align-items:center;gap:8px;margin-top:11px;padding-left:64px}
 .act{background:none;border:0;color:var(--dimmer);font-size:12px;font-weight:500;display:flex;
   align-items:center;gap:6px;cursor:pointer;font-family:'Inter';padding:6px 11px;border-radius:16px;
@@ -1273,6 +1276,29 @@ const sansAccent = s => String(s||'')
   .normalize('NFD').replace(/\p{Diacritic}/gu, '')   // accents
   .replace(/['’-]/g, '')                       // apostrophes et tirets
   .toLowerCase();
+/* La brasserie ne s'affiche que si elle apprend quelque chose. Sur 28 % du
+   catalogue elle répète le nom — « Jupiler · JUPILER », « 8.6 Originale ·
+   8.6 ORIGINAL » — ce qui donne un bégaiement à l'écran.
+
+   La comparaison se fait sur des mots entiers, pas sur une sous-chaîne : avec
+   une sous-chaîne, « La Chouffe » masquait « Achouffe », qui est pourtant une
+   vraie brasserie et une information à garder. Un préfixe suffit à partir de
+   quatre lettres, pour attraper « original » / « originale ». */
+const MOTS_VIDES = new Set(['brasserie','brasseries','brouwerij','brewery','brewing',
+  'cerveceria','de','du','la','le','les','des','et','and','the','co','sa','sas']);
+const motsUtiles = t => sansAccent(String(t||'')).split(/[^a-z0-9.]+/)
+  .filter(w => w && !MOTS_VIDES.has(w));
+function brasserieUtile(b){
+  if (!b || !b.br) return '';
+  const nom = motsUtiles(b.n), br = motsUtiles(b.br).filter(w => w.length >= 3);
+  if (!nom.length || !br.length) return b.br;
+  const couvert = m => nom.some(n => n === m || (m.length >= 4 && (n.startsWith(m) || m.startsWith(n))));
+  return br.every(couvert) ? '' : b.br;
+}
+/* Assemble un sous-titre en sautant les morceaux vides, pour ne jamais
+   laisser un « · » orphelin en tête ou entre deux séparateurs. */
+const sousTitre = (...parts) => parts.filter(x => x != null && x !== '').join(' · ');
+
 const HUES = ['#FF5A1F','#FFB020','#7FD1D9','#8FD14F','#FF5D8F','#B07A4F','#C9E265','#5FC9E8'];
 const hueOf = id => HUES[[...id].reduce((s,c)=>s+c.charCodeAt(0),0) % HUES.length];
 const frDate = d => new Date(d).toLocaleDateString('fr-FR',{day:'numeric',month:'short'});
@@ -2030,7 +2056,8 @@ function can(b,x,mini){
    + (b.ok ? '' : '<span class="pend">en attente</span>')
    + '<div class="body"><div class="band" style="background:'+safeColor(b.c)+'"><div class="brow">'
    + '<span class="btxt"><span class="bname">'+esc(shortName(b.n))+'</span>'
-   + '<span class="bstyle">'+esc(b.br)+'</span></span>'
+   + (brasserieUtile(b) ? '<span class="bstyle">'+esc(brasserieUtile(b))+'</span>' : '')
+   + '</span>'
    + (x ? '<span class="abv">'+(b.abv ? fmtRate(b.abv)+'°' : 'sans alc.')+'</span>' : '')
    + '</div></div></div></div>';
 }
@@ -2103,7 +2130,21 @@ function ajusterChrome(){
 }
 function setSub(k){if(k===S.sub)return;
   const L=subs();S.dir=L.indexOf(k)>L.indexOf(S.sub)?1:-1;S.sub=k;$('#view').scrollTop=0;render(1)}
-function go(t){S.dir=1;S.tab=t;$('#view').scrollTop=0;render(1)}
+/* Racine d'un onglet : ce qu'on doit y retrouver en arrivant « à neuf ».
+   Retaper l'onglet où l'on se trouve déjà y ramène — c'est le geste attendu
+   sur mobile, et il n'existait pas. L'accueil s'y remet aussi quand on y
+   revient depuis un autre onglet : son icône est une canette, elle doit
+   ouvrir le catalogue et non la revue de presse qu'on lisait tout à l'heure.
+   goHome(), branché sur le logo, faisait déjà exactement ça. */
+function racineOnglet(t){
+  if (t === 'home')   { S.sub = 'bieres'; S.avisTri = 'chauds' }
+  if (t === 'search') { S.q = ''; S.filts = []; S.tri = 'note-desc' }
+}
+function go(t){
+  const memeOnglet = S.tab === t || (t === 'me' && S.tab === 'account');
+  if (memeOnglet || t === 'home') racineOnglet(t);
+  S.dir = 1; S.tab = t; $('#view').scrollTop = 0; render(1);
+}
 function openUser(k){
   closeSheet();
   if(k==='me'){go('me');return}
@@ -2129,8 +2170,8 @@ function vHome(){
       // semaine calme, ou migration 24 pas encore passée : on masque plutôt
       // que d'afficher sous un titre qui mentirait
       +(pop.length
-        ? '<div class="sec"><h2>Populaires cette semaine</h2>'
-          +'<span class="eyebrow">7 derniers jours</span></div>'
+        // « cette semaine » et « 7 derniers jours » disaient la même chose
+        ? '<div class="sec"><h2>Populaires cette semaine</h2></div>'
           +'<div class="grid">'+pop.map(b=>cell(b)).join('')+'</div>'
         : '')
       // le mois était écrit en dur — faux dès le mois suivant — alors que le
@@ -2143,7 +2184,7 @@ function vHome(){
       +'<div class="sec"><h2>Top de l\'année</h2></div>'
       +top.map((b,i)=>'<button class="row tap" onclick="openBeer(\''+esc(b.id)+'\')"><span class="n">'+(i+1)+'</span>'
         +'<span class="vign">'+can(b,0,1)+'</span>'
-        +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(b.br)+' · '+esc(b.st)+'</span></span>'
+        +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(sousTitre(brasserieUtile(b), b.st))+'</span></span>'
         +'<span style="text-align:right">'+stars(Store.rating(b.id))
         +'<br><span style="font-size:10.5px;color:var(--dimmer)">'+fmtDec(Store.rating(b.id))
         +' <span style="opacity:.7">· '+Store.count(b.id)+' note'+(Store.count(b.id)>1?'s':'')+'</span></span></span></button>').join('');
@@ -2189,8 +2230,8 @@ function revHTML(r){
   return '<div class="review'+(r.mybof?' muted':'')+'" id="rev-'+id+'">'
    +'<div class="rev-head">'+av(r.u)+'<span>'+uname(r.u)+'<span class="rev-sub"> a noté</span></span></div>'
    +'<div class="rev-body"><button class="cell rev-can" onclick="openBeer(\''+esc(b.id)+'\')">'+can(b)+'</button>'
-   +'<div style="flex:1"><div class="rev-beer">'+esc(b.n)
-     +' <span style="font-weight:400;color:var(--dimmer);font-size:11.5px">'+esc(b.br)+'</span></div>'
+   +'<div style="flex:1"><div class="rev-beer">'+esc(b.n)+'</div>'
+     +(brasserieUtile(b)?'<div class="rev-br">'+esc(brasserieUtile(b))+'</div>':'')
    +'<div style="margin-bottom:7px">'+stars(r.r)+(r.liked?' <span style="color:var(--accent);font-size:11px">♥</span>':'')+'</div>'
    +'<div class="rev-text">'+esc(r.t)+'</div></div></div>'
    +'<div class="acts">'
@@ -2476,7 +2517,7 @@ function vUser(){
    +u.act.filter(a=>Store.beer(a.b)).map(a=>{const b=Store.beer(a.b);
      return '<button class="row tap" onclick="openBeer(\''+esc(a.b)+'\')">'
      +'<span class="vign">'+can(b,0,1)+'</span>'
-     +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(b.br)+' · '+esc(a.d)+'</span></span>'
+     +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(sousTitre(brasserieUtile(b), a.d))+'</span></span>'
      +stars(a.r)+'</button>'}).join('');
 }
 
@@ -2539,8 +2580,8 @@ function vMe(){
      return '<button class="row tap" onclick="openBeer(\''+esc(l.b)+'\')">'
      +'<span class="n" style="width:44px;flex:0 0 44px;font-size:11px">'+esc(l.d)+'</span>'
      +'<span class="vign">'+can(b,0,1)+'</span>'
-     +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(b.br)
-       +(l.paid?' · '+l.paid.toFixed(2)+' €':'')+(l.r?'':' · +1')+'</span></span>'
+     +'<span class="t"><b>'+esc(b.n)+'</b><span>'
+       +esc(sousTitre(brasserieUtile(b), l.paid?fmtEuro(l.paid):'', l.r?'':'+1'))+'</span></span>'
      +stars(l.r)+(l.liked?'<span style="color:var(--accent);font-size:12px;margin-left:6px">♥</span>':'')+'</button>'}).join('');
 }
 async function togglePriv(){
@@ -2911,9 +2952,9 @@ function openTracked(){
      ? L.map(b=>{ const bp=Store.bestPrice(b);
         return '<div class="jrow">'
          +'<span class="vign">'+can(b,0,1)+'</span>'
-         +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(b.br)
-           +(bp?' · relevé il y a '+bp.age+' j':'')+'</span></span>'
-         +'<span class="tprix">'+(bp?bp.p.toFixed(2)+' €':'—')+'</span></div>'}).join('')
+         +'<span class="t"><b>'+esc(b.n)+'</b><span>'
+           +esc(sousTitre(brasserieUtile(b), bp?'relevé il y a '+bp.age+' j':''))+'</span></span>'
+         +'<span class="tprix">'+(bp?fmtEuro(bp.p):'—')+'</span></div>'}).join('')
      : '<div class="empty">Aucune bière suivie.<br><br>Sur une fiche, « Suivre le prix » '
        +'l\'ajoute ici pour garder un œil dessus.</div>')
    +'</div></div>';
@@ -2957,7 +2998,8 @@ function openMyBeers(){
    +(L.length
      ? L.map(b=>'<div class="jrow">'
         +'<span class="vign">'+can(b,0,1)+'</span>'
-        +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(b.br)+' · '+(b.abv||'?')+'° · '+b.cl+' cl</span></span>'
+        +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(sousTitre(brasserieUtile(b),
+           (b.abv?fmtRate(b.abv):'?')+'°', b.cl+' cl'))+'</span></span>'
         +badge(b)+'</div>').join('')
      : '<div class="empty">Tu n\'as encore proposé aucune bière.<br><br>'
        +'Le bouton + puis « Elle n\'est pas dans la base » si tu en trouves une qui manque.</div>')
@@ -3027,7 +3069,7 @@ function drawJournal(){
         return '<div class="jrow" id="j-'+esc(l.id)+'">'
          +'<span class="vign">'+can(b,0,1)+'</span>'
          +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(l.d)
-           +(l.counted?(l.paid?' · '+l.paid.toFixed(2)+' €':''):' · note de mémoire')
+           +(l.counted?(l.paid?' · '+fmtEuro(l.paid):''):' · note de mémoire')
            +(l.r?' · '+fmtRate(l.r)+'★':'')+'</span></span>'
          // une entrée notée ET comptée peut perdre la consommation sans perdre la note
          +(l.counted&&l.r?'<button class="juncount" onclick="doUncountLog(\''+esc(l.id)+'\')" '
@@ -3404,7 +3446,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v4.6';
+const APP_VERSION = 'v4.7';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
@@ -3543,7 +3585,8 @@ function drawSheet(){
    +'<div class="beer-hero">'
    +(img?'<button class="zoomable" onclick="zoomPhoto(\''+img+'\')" aria-label="Agrandir la photo">'
          +can(b)+'<span class="zoomcue">'+I.zoom+'</span></button>':can(b))
-   +'<div style="flex:1"><h1>'+esc(b.n)+'</h1><div class="br">'+esc(b.br)+'</div>'
+   +'<div style="flex:1"><h1>'+esc(b.n)+'</h1>'
+     +(brasserieUtile(b)?'<div class="br">'+esc(brasserieUtile(b))+'</div>':'')
      +'<div class="fx">'+(b.abv?fmtRate(b.abv):'?')+'° · canette '+b.cl+' cl · '+esc(b.pays)
      +' · '+fmtDec(Store.units(b),2)+' unité'+(Store.units(b)>1?'s':'')
      +'<br>'+Store.kcal(b)+' kcal'+(Store.kcalIsReal(b)?'':' <span class="est" title="Estimé depuis le degré et le volume">estimé</span>')+'</div>'
@@ -3602,7 +3645,7 @@ function drawSheet(){
    +'</div>'
    +'<button class="cta" onclick="saveLog()">'+(SH.already?'Enregistrer les modifications':'Enregistrer')+'</button>'
    +'<div class="sec" style="padding-top:24px"><h2>Où la trouver</h2>'
-     +'<span class="eyebrow">'+(bp?'dès '+bp.p.toFixed(2)+' €':'à confirmer')+'</span></div>'
+     +'<span class="eyebrow">'+(bp?'dès '+fmtEuro(bp.p):'à confirmer')+'</span></div>'
    +(pr.length?'<div class="pricebox">'+pr.map((p,i)=>{
        const old=p.age>PRICE_TTL;
        return '<div class="price-r'+(bp&&p===bp?' best':'')+(old?' old':'')+'">'
