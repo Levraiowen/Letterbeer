@@ -24,11 +24,16 @@
       FEUILLES             fonctions open*() / draw*() des panneaux
       DÉMARRAGE            hydrate puis render, ou écran de repli
 
-  Deux règles à respecter si vous modifiez ce fichier :
+  Trois règles à respecter si vous modifiez ce fichier :
 
     1. toute donnée affichée passe par esc(), safeColor() ou safeUrl() ;
        le rendu se fait par innerHTML, une omission ouvre une faille XSS
-    2. toute écriture vérifie l'erreur renvoyée par Supabase avant de
+    2. dans un attribut d'événement — onclick, onkeydown — esc() ne
+       protège de RIEN : il produit &#39; pour une apostrophe, et le
+       parseur HTML redécode les entités avant que le JavaScript soit
+       compilé. On n'y passe donc qu'un identifiant, jamais une donnée
+       de la base ; le libellé se relit dans la fonction appelée
+    3. toute écriture vérifie l'erreur renvoyée par Supabase avant de
        toucher au cache local, sinon l'écran affiche un succès que la
        base n'a pas enregistré
 -->
@@ -909,7 +914,11 @@ const Auth = {
     if (!ageOk) throw new Error("Il faut confirmer que tu as 18 ans ou plus.");
     const { error } = await sb.auth.signInWithOtp({
       email,
-      options: { data: { handle, age_ok: true }, emailRedirectTo: window.location.origin }
+      // origin seul renverrait à la racine du domaine : sur GitHub Pages
+      // l'app vit dans un sous-dossier. resetPassword ci-dessous fait déjà
+      // correctement origin + pathname.
+      options: { data: { handle, age_ok: true },
+                 emailRedirectTo: window.location.origin + window.location.pathname }
     });
     if (error) throw error;
   },
@@ -927,6 +936,38 @@ const Auth = {
 };
 
 /* ============================ CHARGEMENT ============================ */
+
+/* On nomme les colonnes au lieu de demander « * ».
+   Le RLS ne filtre que des lignes, jamais des colonnes : age_ok, is_admin
+   et bofs_count étaient donc lisibles par n'importe quel compte, alors que
+   le schéma et l'écran promettaient l'inverse. La migration 19 retire le
+   droit de les lire, et l'app passe par is_admin() et mes_bofs(), qui ne
+   répondent que pour l'appelant.
+   ⚠️ Une colonne ajoutée à ces tables doit l'être ici ET dans le grant de
+      la migration 19, sinon l'app ne la verra pas. */
+const COL_PROFILS = 'id, handle, avatar_url, city, private_stats, created_at,'
+                  + ' pref_familles, pref_degre, onboarded';
+const COL_AVIS    = 'id, user_id, beer_id, rating, liked, body, cheers_count, created_at';
+
+/* PostgREST plafonne silencieusement chaque réponse — mille lignes chez
+   Supabase. Au-delà, des bières ou des prix disparaissaient sans le moindre
+   message : ni erreur, ni indication à l'écran. On pagine donc jusqu'à
+   épuisement, et on remonte l'erreur plutôt que de rendre un écran vide.
+
+   Chaque requête est triée sur une clé unique : sans ordre déterministe,
+   la pagination peut sauter ou dupliquer des lignes entre deux pages. */
+const PAGE = 1000;
+async function chargerTout(quoi, construire) {
+  const tout = [];
+  for (let debut = 0; ; debut += PAGE) {
+    const { data, error } = await construire().range(debut, debut + PAGE - 1);
+    if (error) throw new Error(quoi + ' : ' + error.message);
+    tout.push(...(data || []));
+    if (!data || data.length < PAGE) break;
+  }
+  return { data: tout };
+}
+
 async function hydrate() {
   const user = await Auth.current();
   if (!user) return false;
@@ -935,17 +976,21 @@ async function hydrate() {
 
   const [profiles, beers, ratings, reviews, replies, reactions, logs, prices, follows, watch, wish] =
     await Promise.all([
-      sb.from('profiles').select('*'),
-      sb.from('beers').select('*'),
-      sb.from('beer_ratings').select('*'),
-      sb.from('reviews').select('*').order('cheers_count', { ascending:false }),
-      sb.from('replies').select('*').order('created_at'),
-      sb.from('reactions').select('*'),                    // RLS : uniquement les miennes
-      sb.from('logs').select('*').order('drunk_at', { ascending:false }),
-      sb.from('prices').select('*'),
-      sb.from('follows').select('*'),
-      sb.from('beer_watchers').select('*'),
-      sb.from('wishlist').select('beer_id')
+      chargerTout('profils', () => sb.from('profiles').select(COL_PROFILS).order('id')),
+      chargerTout('bières',  () => sb.from('beers').select('*').order('id')),
+      chargerTout('notes',   () => sb.from('beer_ratings').select('*').order('beer_id')),
+      chargerTout('avis',    () => sb.from('reviews').select(COL_AVIS)
+                                     .order('cheers_count', { ascending:false }).order('id')),
+      chargerTout('réponses',  () => sb.from('replies').select('*').order('created_at').order('id')),
+      // RLS : uniquement les miennes, donc (review_id, kind) y est unique
+      chargerTout('réactions', () => sb.from('reactions').select('*').order('review_id').order('kind')),
+      chargerTout('journal', () => sb.from('logs').select('*')
+                                     .order('drunk_at', { ascending:false }).order('id')),
+      chargerTout('prix',        () => sb.from('prices').select('*').order('id')),
+      chargerTout('abonnements', () => sb.from('follows').select('*')
+                                          .order('follower_id').order('followee_id')),
+      chargerTout('prix suivis', () => sb.from('beer_watchers').select('*').order('beer_id')),
+      chargerTout('liste d\'envies', () => sb.from('wishlist').select('beer_id').order('beer_id'))
     ]);
   C.wish = (wish.data||[]).map(w => w.beer_id);
 
@@ -963,11 +1008,32 @@ async function hydrate() {
       cans: 0, avg: 0, top: '—', week: 0, act: []
     };
     if (p.id === C.myId) {
-      C.me = u; C.users['me'] = u; C.isAdmin = !!p.is_admin;
+      C.me = u; C.users['me'] = u;
       u.familles = p.pref_familles || ''; u.degre = p.pref_degre || '';
       C.onboarded = p.onboarded !== false;   // absent en base = déjà passé
     }
     C.users[p.id] = u;
+  }
+
+  /* Sans profil, tout ce qui suit part en cascade de TypeError sur un
+     écran à moitié dessiné. Mieux vaut une erreur franche. */
+  if (!C.me) throw new Error('profil introuvable pour ce compte');
+
+  /* is_admin ne se lit plus dans la table : la colonne désignait le compte
+     administrateur à tout le monde. La fonction, elle, ne répond que pour
+     l'appelant. Elle existe depuis la migration 08. */
+  const { data: estAdmin, error: adminErr } = await sb.rpc('is_admin');
+  if (adminErr) console.warn('droits d\'administration indéterminés', adminErr.message);
+  C.isAdmin = !!estAdmin;
+
+  /* Le compte de « bof » de ses propres avis. Il vivait dans la table,
+     donc lisible par tous, alors que l'écran promet « personne d'autre ne
+     le voit ». Il passe par une fonction filtrée sur l'appelant. */
+  const mesBofs = {};
+  {
+    const { data: bofs, error: bofsErr } = await sb.rpc('mes_bofs');
+    if (bofsErr) console.warn('compte des bofs indisponible', bofsErr.message);
+    else for (const b of bofs || []) mesBofs[b.review_id] = b.bofs;
   }
 
   /* --- stats publiques des autres, en une seule requête ---
@@ -1008,7 +1074,7 @@ async function hydrate() {
     u: r.user_id === C.myId ? 'me' : r.user_id,     // les vues testent u === 'me'
     b: r.beer_id, r: r.rating, liked: r.liked, t: r.body, at: r.created_at,
     ch: r.cheers_count,
-    bof: r.user_id === C.myId ? r.bofs_count : 0,   // total visible par l'auteur seul
+    bof: mesBofs[r.id] || 0,                        // total visible par l'auteur seul
     mych: (reactions.data||[]).some(x => x.review_id===r.id && x.kind==='cheer') ? 1 : 0,
     mybof:(reactions.data||[]).some(x => x.review_id===r.id && x.kind==='bof')   ? 1 : 0,
     pass: (reactions.data||[]).some(x => x.review_id===r.id && x.kind==='pass')  ? 1 : 0,
@@ -1026,12 +1092,19 @@ async function hydrate() {
     shop: l.shop || '', d: frDate(l.drunk_at), at: l.drunk_at
   }));
 
-  /* --- activité récente des gens suivis, pour l'onglet copains --- */
-  for (const id of followingIds) {
-    const { data } = await sb.from('reviews').select('beer_id, rating, created_at')
-      .eq('user_id', id).order('created_at',{ascending:false}).limit(3);
-    if (C.users[id]) C.users[id].act = (data||[])
-      .map(x => ({ b: x.beer_id, r: x.rating, d: frDate(x.created_at) }));
+  /* --- activité récente des gens suivis, pour l'onglet copains ---
+     Une requête par personne suivie faisait autant d'allers-retours que
+     d'abonnements, avant le premier rendu — et pour une donnée qu'on vient
+     de charger en entier. Les trois plus récents de chacun se calculent
+     ici, sans toucher au réseau. */
+  const suivis = new Set(followingIds);
+  const recents = (reviews.data||[])
+    .filter(r => suivis.has(r.user_id))
+    .sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+  for (const x of recents) {
+    const u = C.users[x.user_id];
+    if (!u || u.act.length >= 3) continue;
+    u.act.push({ b: x.beer_id, r: x.rating, d: frDate(x.created_at) });
   }
 
   C.arts = await loadArticles();
@@ -1099,8 +1172,21 @@ const Store = {
     const { error } = await sb.storage.from('avatars').upload(path, file, { upsert:true, contentType:'image/jpeg' });
     if (error) throw error;
     const { data } = sb.storage.from('avatars').getPublicUrl(path);
-    await sb.from('profiles').update({ avatar_url: data.publicUrl }).eq('id', C.myId);
+    const { error: majErr } = await sb.from('profiles')
+      .update({ avatar_url: data.publicUrl }).eq('id', C.myId);
+    if (majErr) throw majErr;
     C.me.photo = data.publicUrl;
+    /* Chaque envoi crée un fichier horodaté. Sans ce nettoyage, les photos
+       précédentes restent en ligne indéfiniment dans un bucket public :
+       remplacer sa photo ne la retirerait pas vraiment. L'échec du ménage
+       ne doit pas faire échouer un envoi qui, lui, a réussi. */
+    try {
+      const { data: anciennes } = await sb.storage.from('avatars').list(C.myId);
+      const perimees = (anciennes || [])
+        .map(f => `${C.myId}/${f.name}`)
+        .filter(p => p !== path);
+      if (perimees.length) await sb.storage.from('avatars').remove(perimees);
+    } catch (e) { console.warn('anciennes photos non retirées', e); }
   },
   async setPrivacy(v) {
     const { error } = await sb.from('profiles').update({ private_stats: !!v }).eq('id', C.myId);
@@ -1250,7 +1336,8 @@ const Store = {
   async addReview(o) {
     const { data, error } = await sb.from('reviews').upsert({
       user_id:C.myId, beer_id:o.b, rating:o.r || null, liked:!!o.liked, body:o.t
-    }, { onConflict:'user_id,beer_id' }).select().single();
+      // colonnes nommées : bofs_count n'est plus lisible depuis le navigateur
+    }, { onConflict:'user_id,beer_id' }).select(COL_AVIS).single();
     if (error) throw error;
     const i = C.reviews.findIndex(r => r.u === 'me' && r.b === o.b);
     const old = i >= 0 ? C.reviews[i] : null;
@@ -1796,8 +1883,8 @@ function revHTML(r){
      +'<button class="act'+(r.pass?' on':'')+'" onclick="doPass(\''+id+'\')">'+I.pass+'</button>'
      +'<button class="act bof'+(r.mybof?' on':'')+'" onclick="doBof(\''+id+'\')" '
        +'aria-label="Bof, moins d\'avis comme celui-ci">'+I.flat+'</button>'
-     +(mine?'':'<button class="act flag" onclick="openReport(\'review\',\''+id+'\',\'l\\\'avis de '
-       +esc((Store.user(r.u)||Store.me()).h).replace(/'/g,"\\'")+'\')" aria-label="Signaler cet avis">'+I.flag+'</button>')
+     +(mine?'':'<button class="act flag" onclick="openReport(\'review\',\''+id+'\')"'
+       +' aria-label="Signaler cet avis">'+I.flag+'</button>')
    +'</div>'
    +(r.mybof?'<div class="privcount">'+I.lock+'Bof enregistré — personne d\'autre ne le voit</div>':'')
    +(mine&&r.bof?'<div class="privcount">'+I.lock+r.bof+' bof sur ton avis — visible par toi seul</div>':'')
@@ -1870,7 +1957,7 @@ function drawReply(){
                ? '<button class="msg-x" onclick="supprimerReponse(\''+esc(r.id)+'\',\''+esc(x.id)+'\')"'
                  +' aria-label="Supprimer cette réponse">'+I.x+'</button>' : '')
            +'</div><div class="msg-t">'+esc(x.t)+'</div>'
-           +'<button class="msg-r" onclick="repondreA(\''+esc(u.h)+'\')">Répondre</button>'
+           +'<button class="msg-r" onclick="repondreA(\''+esc(x.u)+'\')">Répondre</button>'
            +'</div></div>'}).join('')+'</div>'
      : '<div class="empty" style="padding:26px 34px">Personne n\'a encore répondu.</div>')
    +'<div class="field" style="margin-top:20px"><label>Ta réponse</label>'
@@ -1887,7 +1974,12 @@ function drawReply(){
 /* S'adresser à quelqu'un sans imbriquer : on préfixe la saisie de son
    pseudo. Le fil reste plat — donc lisible sur un téléphone — et la
    conversation reste suivable. */
-function repondreA(pseudo){
+/* On reçoit la clé de la personne, pas son pseudo : voir la règle 2 en
+   tête de fichier. Le pseudo n'accepte aujourd'hui que [a-z0-9_.], donc
+   l'apostrophe y était impossible — mais faire dépendre la sécurité d'une
+   contrainte posée dans une autre migration ne tient pas dans le temps. */
+function repondreA(cle){
+  const pseudo = (Store.user(cle) || Store.me()).h;
   const marque = '@' + pseudo + ' ';
   if (!REP.txt.startsWith(marque)) REP.txt = marque + REP.txt.replace(/^@\S+\s*/, '');
   drawReply();
@@ -2483,7 +2575,20 @@ function openMyBeers(){
 }
 
 /* ---------- signalement ---------- */
-function openReport(type, id, quoi){
+/* Le libellé est reconstruit ici, à partir du seul identifiant.
+   Il transitait avant par l'attribut onclick du bouton, ce qui n'était
+   pas rattrapable par esc() : cette fonction produit &#39; pour une
+   apostrophe, et le parseur HTML redécode les entités AVANT que le
+   JavaScript de l'attribut soit compilé. Un nom de bière contenant une
+   apostrophe — « Ch'ti », « Cuvée d'Alsace » — cassait donc le bouton,
+   et un nom fabriqué exécutait ce qu'il voulait dans la session de qui
+   cliquait. Règle générale : une donnée de la base ne va jamais dans un
+   attribut d'événement, seulement un identifiant. */
+function openReport(type, id){
+  const quoi = type==='review'
+    ? (() => { const r = Store.review(id), u = r && (Store.user(r.u) || Store.me());
+               return u ? "l'avis de " + u.h : 'cet avis' })()
+    : (() => { const b = Store.beer(id); return b ? 'la fiche ' + b.n : 'cette fiche' })();
   const sh=$('#sheet'); sh.classList.add('open');
   const motifs = type==='review'
     ? ['Propos haineux ou insultants','Hors sujet ou publicité','Faux avis','Autre']
@@ -2712,7 +2817,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v3.3';
+const APP_VERSION = 'v3.6';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
@@ -2918,8 +3023,8 @@ function drawSheet(){
      +'<div class="tagline" style="padding-top:10px">'+b.allerg.split(',').map(a=>'<span class="tg alrg">'+esc(a.trim())+'</span>').join('')+'</div>'
      +(b.ingr?'<div class="ab-p dim">Ingrédients : '+esc(b.ingr)+'</div>':''):'')
    +'<div class="tagline">'+[b.st,b.pays,(b.abv||'?')+'°','canette '+b.cl+' cl',Store.kcal(b)+' kcal'].map(t=>'<span class="tg">'+esc(t)+'</span>').join('')+'</div>'
-   +'<button class="reportlink" onclick="openReport(\'beer\',\''+esc(b.id)+'\',\'la fiche '
-     +esc(b.n).replace(/'/g,"\\'")+'\')">'+I.flag+' Signaler un problème sur cette fiche</button>'
+   +'<button class="reportlink" onclick="openReport(\'beer\',\''+esc(b.id)+'\')">'
+     +I.flag+' Signaler un problème sur cette fiche</button>'
    +'<div class="sec" style="padding-top:22px"><h2>Les avis</h2><span class="eyebrow">'+revs.length+'</span></div>'
    +(revs.length?revs.map(revHTML).join(''):'<div class="empty" style="padding:26px 34px">Personne n\'a encore écrit sur celle-ci. À toi de jouer.</div>')
    +'</div></div>';

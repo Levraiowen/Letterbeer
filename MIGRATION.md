@@ -5,7 +5,7 @@ pour les stores. **Tenue à jour au fil du développement** — ce qui est déci
 maintenant mais reporté atterrit ici, pour ne pas être redécouvert dans six
 mois.
 
-Dernière révision : 25 août 2026.
+Dernière révision : 25 août 2026 (audit sécurité).
 
 ---
 
@@ -104,9 +104,11 @@ sort de France.
   conversations à plus de vingt messages apparaissent, ce qui est peu
   probable entre amis.
 
-- **Pagination** — l'app charge tout d'un bloc. Supabase plafonne
-  silencieusement à mille lignes par requête. Sans effet aujourd'hui, bloquant
-  au-delà.
+- **Péremption des prix** — `expire_prices()` existe mais n'est branchée à
+  aucun `pg_cron`, et l'app ne lit jamais `prices.status` : la péremption est
+  calculée à l'affichage, depuis `confirmed_at`. Le comportement visible est
+  le bon, la fonction dort. À brancher le jour où `pg_cron` sera de toute
+  façon posé pour les notifications, ou à supprimer.
 - **Descriptions des bières** — toutes portent le même texte généré à
   l'import. Trois phrases écrites sur les cinquante fiches les plus consultées
   valent mieux que cinq cents fiches identiques.
@@ -145,3 +147,32 @@ Pour mémoire, afin de ne pas le refaire :
 - Récap de semaine partageable en image
 - Conversation sous un avis : fil à plat, mentions, suppression de sa
   propre réponse
+
+### Audit du 25 août 2026 — corrigé
+
+- **XSS stocké par le nom de bière.** Le libellé du bouton « Signaler »
+  transitait par l'attribut `onclick`, où `esc()` ne protège de rien : il
+  produit `&#39;`, que le parseur HTML redécode avant que le JavaScript soit
+  compilé. Toute bière au nom contenant une apostrophe cassait déjà le bouton
+  en silence ; un nom fabriqué — et les fiches viennent d'Open Food Facts,
+  un wiki public — exécutait ce qu'il voulait dans la session de qui cliquait.
+  Les attributs d'événement ne reçoivent plus que des identifiants. Règle
+  ajoutée en tête d'`index.html` et au README.
+- **`bofs_count` et `is_admin` lisibles par tous** — masqués à l'écran, pas
+  en base. Migration 19 : droits par colonne, plus `mes_bofs()`.
+- **Bucket `avatars` énumérable sans compte**, et anciennes photos jamais
+  effacées. Migration 20 pour la règle de lecture, `setPhoto()` fait le
+  ménage de ses propres envois.
+- **`expire_prices()` appelable sans être connecté** — oubliée par les
+  révocations de la migration 08.
+- **Compteurs d'avis falsifiables par leur auteur** — déclencheur de gel,
+  sur le modèle de `prices_figer`, avec `pg_trigger_depth()` pour laisser
+  passer l'écriture légitime de `bump_review_counts()`.
+- **Pagination** — les onze requêtes de `hydrate()` sont paginées et triées
+  sur une clé unique. Le plafond silencieux des mille lignes ne tronque plus
+  ni le catalogue ni les prix.
+- **Erreurs de chargement avalées** — `hydrate()` ne regardait aucune des
+  onze erreurs : un écran vide sans explication remplaçait le catalogue.
+- Majorité déclarée étendue aux quatre écritures qui l'avaient oubliée,
+  pseudo normalisé à l'inscription, `emailRedirectTo` corrigé, N+1 de
+  l'activité des copains supprimé.

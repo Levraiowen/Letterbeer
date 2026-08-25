@@ -81,7 +81,20 @@ sql/11-ecrans-compte.sql       liste d'envies, signalements
 sql/12-contenant.sql           canette ou bouteille
 sql/13-canettes-uniquement.sql purge des bouteilles — lire les blocs !
 sql/14-correctif-admin.sql     droits d'administrateur
+sql/15-preferences.sql         goûts et premier lancement
+sql/16-reponses.sql            suppression de sa propre réponse
+sql/17-durcissement-stockage.sql dossier par personne, taille et types
+sql/18-durcissement-ecritures.sql prix et profil : colonnes gelées
+sql/19-colonnes-privees.sql    colonnes retirées à la lecture — lire l'entête
+sql/20-correctifs-audit.sql    correctifs d'audit — lire le contrôle préalable
 ```
+
+La migration `19` retire le droit de lire certaines colonnes de `profiles`
+et de `reviews`. **Mettre `index.html` en ligne AVANT de la passer** :
+la version précédente demandait `*` sur ces deux tables, et `select *`
+exige en PostgreSQL le droit de lire la table entière — elle tomberait
+donc en erreur dès la migration passée. La nouvelle version, elle, nomme
+ses colonnes : elle fonctionne avant comme après.
 
 `sql/outils/verifier-migrations.sql` dit à tout moment lesquelles sont déjà
 passées. Il ne modifie rien.
@@ -120,16 +133,31 @@ coup d'œil.
 
 ## Modifier le code
 
-Deux règles, à respecter sans exception :
+Trois règles, à respecter sans exception :
 
 **Toute donnée affichée passe par `esc()`, `safeColor()` ou `safeUrl()`.** Le
 rendu se fait par `innerHTML` : un avis ou un pseudo inséré brut suffit à
 exécuter du code chez ceux qui l'affichent, ce que les règles RLS n'empêchent
 pas puisque le code tourne avec la session de la victime.
 
+**Dans un attribut d'événement, `esc()` ne protège de rien.** Il produit
+`&#39;` pour une apostrophe, et le parseur HTML redécode les entités *avant*
+que le JavaScript de l'attribut soit compilé — l'apostrophe est donc rendue
+au moment où elle devient dangereuse. On ne passe à un `onclick` qu'un
+identifiant ; le libellé se relit dans la fonction appelée. Les noms de
+bières viennent d'Open Food Facts, un wiki public, et l'apostrophe est
+partout dans les noms français.
+
 **Toute écriture vérifie l'erreur renvoyée avant de toucher au cache local.**
 Sinon l'écran annonce un succès que la base n'a pas enregistré, et la perte
 n'apparaît qu'au rechargement suivant.
+
+**Le RLS filtre des lignes, jamais des colonnes.** Masquer une valeur à
+l'affichage ne la retire pas de la réponse de l'API. Une donnée qui ne doit
+sortir que pour son propriétaire passe par un droit `grant select (…)` et
+une fonction `security definer` — voir `sql/19-colonnes-privees.sql`. Une
+colonne ajoutée à `profiles` ou à `reviews` doit être déclarée à la fois
+dans ce `grant` et dans `COL_PROFILS` / `COL_AVIS` d'`index.html`.
 
 ## Licences et attribution
 
