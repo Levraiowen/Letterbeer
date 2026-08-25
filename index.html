@@ -1236,6 +1236,15 @@ const safeUrl = u => /^https?:\/\//i.test(u || '') ? u.replace(/["'()\\<>\s]/g,'
 
 /* helpers */
 const initials = h => h.replace(/[^a-zA-Z]/g,'').slice(0,2).toUpperCase() || 'BB';
+/* Pliage pour la recherche : accents, apostrophes et tirets.
+   Sans ça, « biere » ne trouvait pas « Bière » et « chti » ne trouvait pas
+   « Ch'ti » — deux saisies parfaitement naturelles sur un clavier de
+   téléphone, dans un catalogue français où l'accent et l'apostrophe sont
+   partout. Le pliage s'applique des deux côtés, requête et fiche. */
+const sansAccent = s => String(s||'')
+  .normalize('NFD').replace(/[̀-ͯ]/g,'')
+  .replace(/['’\-]/g,'')
+  .toLowerCase();
 const HUES = ['#FF5A1F','#FFB020','#7FD1D9','#8FD14F','#FF5D8F','#B07A4F','#C9E265','#5FC9E8'];
 const hueOf = id => HUES[[...id].reduce((s,c)=>s+c.charCodeAt(0),0) % HUES.length];
 const frDate = d => new Date(d).toLocaleDateString('fr-FR',{day:'numeric',month:'short'});
@@ -1352,9 +1361,11 @@ const Store = {
      cumulent entre eux — on cherche l'un OU l'autre. */
   search(q, filtres, tri) {
     let l = C.beers.filter(b => b.ok || b.mine);
-    if (q) {
-      const t = q.toLowerCase();
-      l = l.filter(b => (b.n+' '+b.br+' '+b.st).toLowerCase().includes(t));
+    if (q && q.trim()) {
+      // sans pliage des accents, « biere » ne trouvait pas « bière » — rédhibitoire
+      // dans un catalogue français, où l'accent est partout
+      const t = sansAccent(q.trim());
+      l = l.filter(b => sansAccent(b.n+' '+b.br+' '+b.st).includes(t));
     }
     const actifs = (filtres || []).filter(Boolean);
     const styles = actifs.filter(f => FILTRES[f] && FILTRES[f].groupe === 'style');
@@ -1369,7 +1380,9 @@ const Store = {
     const prix = b => { const p = Store.bestPrice(b); return p ? p.p : Infinity };
     const cmp = {
       'note-desc':  (a,b) => Store.rating(b.id) - Store.rating(a.id),
-      'note-asc':   (a,b) => Store.rating(a.id) - Store.rating(b.id),
+      // sans note = 0, donc les 133 fiches non notées trustaient la tête du
+      // classement « Moins bien notées ». On les renvoie à la fin.
+      'note-asc':   (a,b) => (Store.rating(a.id) || 99) - (Store.rating(b.id) || 99),
       'prix-asc':   (a,b) => prix(a) - prix(b),
       'prix-desc':  (a,b) => (prix(b)===Infinity?-1:prix(b)) - (prix(a)===Infinity?-1:prix(a)),
       'degre-desc': (a,b) => b.abv - a.abv,
@@ -2092,8 +2105,13 @@ function vHome(){
           +'<span class="eyebrow">7 derniers jours</span></div>'
           +'<div class="grid">'+pop.map(b=>cell(b)).join('')+'</div>'
         : '')
-      +'<div class="sec"><h2>Nouvelles canettes</h2><span class="eyebrow">août 2026</span></div>'
-      +'<div class="rail">'+nv.map(b=>cell(b)).join('')+'</div>'
+      // le mois était écrit en dur — faux dès le mois suivant — alors que le
+      // drapeau « new » est une fenêtre glissante de trente jours
+      +(nv.length
+        ? '<div class="sec"><h2>Nouvelles canettes</h2>'
+          +'<span class="eyebrow">30 derniers jours</span></div>'
+          +'<div class="rail">'+nv.map(b=>cell(b)).join('')+'</div>'
+        : '')
       +'<div class="sec"><h2>Top de l\'année</h2></div>'
       +top.map((b,i)=>'<button class="row tap" onclick="openBeer(\''+esc(b.id)+'\')"><span class="n">'+(i+1)+'</span>'
         +'<span class="vign">'+can(b,0,1)+'</span>'
@@ -3356,7 +3374,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v4.2';
+const APP_VERSION = 'v4.3';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
