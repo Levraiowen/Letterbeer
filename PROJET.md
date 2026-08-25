@@ -15,7 +15,7 @@
 > Les sections sont **pondérées** : `🔴 structurant`, `🟠 important`,
 > `🟡 secondaire`. La pondération dit où porter l'attention quand le temps manque.
 >
-> Dernière mise à jour : 25 août 2026 · app en `v4.3` · 25 migrations.
+> Dernière mise à jour : 25 août 2026 · app en `v4.4` · 25 migrations, toutes passées.
 
 ---
 
@@ -159,6 +159,18 @@ signalements, édition et suppression de fiches — réservé aux administrateur
 - **Descriptions toutes identiques**, générées à l'import. Trois phrases sur les
   cinquante fiches les plus consultées valent mieux que cinq cents fiches
   jumelles.
+
+### Accessibilité — mesuré, pas supposé
+
+- **`--dimmer` (#5C5C63) est à 2,98:1 sur le fond**, sous le seuil AA de
+  4,5:1 et même sous celui du grand texte (3:1). Il sert aux libellés de
+  section (« 7 derniers jours », « selon tes goûts ») et aux étoiles vides,
+  **à 11 px**. Correctif chiffré, teinte bleutée conservée : `#78787F` donne
+  4,51:1, `#808087` donne 5,04:1. `--dim`, `--text` et `--accent` passent tous.
+  *Décision en attente : ça touche la direction artistique.*
+- **Les sous-onglets « Bières / Avis / Journal » font 29 px de haut**, contre
+  44 px recommandés. C'est la navigation la plus utilisée de l'app, au pouce.
+  *Décision en attente, même raison.*
 
 ### Dette technique assumée
 
@@ -377,3 +389,20 @@ plus que le détail.*
 - Recherche insensible aux accents et aux apostrophes.
 - Nettoyage des noms porté de la migration 03 vers `import-beers.mjs`, là où
   il aurait dû être : une migration ne tourne qu'une fois, un import revient.
+
+**25 août 2026 — test complet en session authentifiée (v4.3 → v4.4)**
+
+- Parcours vérifiés de bout en bout : note de mémoire, « +1 », liste d'envies,
+  suivi de prix, bio, goûts, abonnement, avis, réponse, suppression, récap,
+  image partagée, export CSV, filtres, tris, états vides. Aucune erreur
+  console, aucun `undefined` à l'écran.
+- **Confirmé en production** : le classement bayésien place « 8.6 IPA »
+  (4,5 sur 2 notes) devant « 8.6 Originale » (5,0 sur 1 note) — c'était le
+  but. « Populaires cette semaine » remonte 6 canettes sur une vraie fenêtre
+  de 7 jours. Le récap affiche « 6 jours sans » sur 19→25 août.
+- Formatage français terminé : l'en-tête de fiche et le récap gardaient des
+  points décimaux. Accords au singulier corrigés (« 1 notes », « 1 brasseries »)
+  — invisibles avec un jeu de données fourni, d'où un test sur un compte à
+  exactement une note.
+- Contraste et cibles tactiles mesurés, reportés ci-dessus, non corrigés :
+  ils touchent la direction artistique.
