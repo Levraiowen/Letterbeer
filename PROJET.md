@@ -15,7 +15,7 @@
 > Les sections sont **pondérées** : `🔴 structurant`, `🟠 important`,
 > `🟡 secondaire`. La pondération dit où porter l'attention quand le temps manque.
 >
-> Dernière mise à jour : 25 août 2026 · app en `v4.8` · 26 migrations.
+> Dernière mise à jour : 25 août 2026 · app en `v4.9` · 26 migrations.
 
 ---
 
@@ -320,6 +320,17 @@ Chacune a une raison. La rouvrir sans raison nouvelle fait perdre du temps.
   entiers**, jamais une sous-chaîne : avec une sous-chaîne, « La Chouffe »
   masquait « Achouffe », qui est une vraie brasserie. Toute retouche de cette
   règle doit repasser les douze témoins documentés dans le commentaire.
+- **L'écran des copains ne classe jamais par quantité bue.** La liste
+  « Leur semaine » est bornée à dix et ordonnée par **dernière activité**,
+  pas par nombre de canettes — trier par quantité en ferait un podium de
+  consommation, ce que la note affichée sous la liste refuse explicitement.
+  Si quelqu'un redemande « les plus actifs », c'est ce point-là qu'il faut
+  lui opposer.
+- **Le rythme vertical des sections tient dans un rapport, pas dans une
+  valeur.** 36 px au-dessus d'un titre, 12 en dessous : rapport 3, pour que
+  le titre appartienne visiblement au bloc qui suit. À 1,86 — l'ancien
+  réglage — il flottait entre les deux et les sections ne se détachaient
+  pas. Ajouter du vide partout n'aurait rien réglé.
 - **Retaper l'onglet actif ramène à sa racine**, et l'accueil s'y remet aussi
   quand on y revient d'ailleurs : son icône est une canette, elle ouvre le
   catalogue, pas la revue de presse.
