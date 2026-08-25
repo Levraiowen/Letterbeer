@@ -2499,7 +2499,9 @@ function vFriends(){
   const revs=Store.friendReviews();
   const feed=[];foll.forEach(k=>Store.user(k).act.forEach(a=>feed.push({u:k,...a})));
   return '<div class="sec"><h2>Leurs avis</h2><span class="eyebrow">'+revs.length+'</span></div>'
-   +(revs.length ? bornee('avis-copains', revs, revHTML, 5)
+   // douze et non cinq : lire ce que les copains ont écrit est la raison
+   // d'être de cet onglet, pas un aperçu. Ça prend de la place, c'est voulu.
+   +(revs.length ? bornee('avis-copains', revs, revHTML, 12)
      :'<div class="empty">Tes copains n\'ont encore rien écrit.</div>')
    +'<div class="sec" style="padding-top:26px"><h2>Ce qu\'ils ont bu</h2></div>'
    // div et non button : av() renvoie déjà un bouton, et un bouton
@@ -3542,7 +3544,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v5.0';
+const APP_VERSION = 'v5.1';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
