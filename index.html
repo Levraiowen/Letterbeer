@@ -1050,7 +1050,13 @@ async function hydrate() {
 
   /* --- bières --- */
   C.beers = (beers.data||[]).map(b => ({
-    id: b.id, n: b.name, br: b.brewery, st: b.style || 'Non précisé',
+    // Détourage à la source : dix fiches du catalogue portent une espace
+    // en trop (« 8.6 Red  », « Kronenbourg  »), qui ressort partout — jusque
+    // dans les messages, « 8.6 Red  · 3★ ». Le nettoyage de la migration 03
+    // n'a tourné qu'une fois ; l'import, lui, peut en réintroduire.
+    id: b.id, n: (b.name||'').trim().replace(/\s{2,}/g,' '),
+    br: (b.brewery||'').trim().replace(/\s{2,}/g,' '),
+    st: b.style || 'Non précisé',
     abv: +b.abv || 0, cl: b.volume_cl, pays: b.country || '—', c: b.color || '#FF7A2F',
     d: b.description || '', img: b.image_url, ok: b.status === 'approved' ? 1 : 0,
     cont: b.container || null,
@@ -2199,7 +2205,7 @@ function vMe(){
     +'</div></div>'
    +'<div class="counter"><span class="big-n" id="bign">'+w+'</span>'
      +'<span class="lbl"><b>canettes cette semaine</b>'
-     +'<span>'+wu+' unités d\'alcool · ta moyenne : '+s.wkAvg+' canettes/semaine</span></span>'
+     +'<span>'+fmtDec(wu)+' unités d\'alcool · ta moyenne : '+fmtDec(s.wkAvg)+' canettes/semaine</span></span>'
      +'<button class="cbtn" onclick="openLog()" aria-label="Ajouter une canette">+</button></div>'
    +(above?'<div class="note warn">'+I.info+'<span>Semaine au-dessus de ta moyenne habituelle. Rien d\'alarmant en soi, c\'est juste bon à savoir.</span></div>':'')
    +'<div class="sec" style="padding-top:22px"><h2>Tes repères</h2><span class="eyebrow">suivi perso</span></div>'
@@ -2875,7 +2881,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v3.7';
+const APP_VERSION = 'v3.8';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
