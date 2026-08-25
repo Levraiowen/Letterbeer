@@ -1242,8 +1242,8 @@ const initials = h => h.replace(/[^a-zA-Z]/g,'').slice(0,2).toUpperCase() || 'BB
    téléphone, dans un catalogue français où l'accent et l'apostrophe sont
    partout. Le pliage s'applique des deux côtés, requête et fiche. */
 const sansAccent = s => String(s||'')
-  .normalize('NFD').replace(/[̀-ͯ]/g,'')
-  .replace(/['’\-]/g,'')
+  .normalize('NFD').replace(/\p{Diacritic}/gu, '')   // accents
+  .replace(/['’-]/g, '')                       // apostrophes et tirets
   .toLowerCase();
 const HUES = ['#FF5A1F','#FFB020','#7FD1D9','#8FD14F','#FF5D8F','#B07A4F','#C9E265','#5FC9E8'];
 const hueOf = id => HUES[[...id].reduce((s,c)=>s+c.charCodeAt(0),0) % HUES.length];
