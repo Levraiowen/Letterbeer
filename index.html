@@ -2465,7 +2465,9 @@ function vMe(){
   return '<div class="phead">'
     +'<button class="pic" style="'+pst+'" onclick="pickPhoto()">'+(mph?'':esc(me.i))
       +'<span class="badge">'+I.cam+'</span></button>'
-    +'<span class="h">'+esc(me.h)+'</span><span class="s">'+s.n+' canettes · '+s.brews+' brasseries · '+esc(me.ville)+'</span>'
+    +'<span class="h">'+esc(me.h)+'</span><span class="s">'
+      +s.n+' canette'+(s.n>1?'s':'')+' · '+s.brews+' brasserie'+(s.brews>1?'s':'')
+      +(me.ville && me.ville!=='—' ? ' · '+esc(me.ville) : '')+'</span>'
     +(ligneGouts(me)?'<span class="pgouts">'+I.minuscan+esc(ligneGouts(me))+'</span>':'')
     +(me.bio?'<span class="pbio">'+esc(me.bio)+'</span>':'')
     +'<div class="follrow">'
@@ -2691,7 +2693,7 @@ function openRecap(){
      +'<div class="rc-l">jour'+(s.sans>1?'s':'')+' sans alcool sur sept</div></div>'
    +'<div class="rc-grid">'
      +'<div class="rc-c"><b>'+s.n+'</b><span>canette'+(s.n>1?'s':'')+'</span></div>'
-     +'<div class="rc-c"><b>'+s.un+'</b><span>unités d\'alcool</span></div>'
+     +'<div class="rc-c"><b>'+fmtDec(s.un)+'</b><span>unité'+(s.un>1?'s':'')+' d\'alcool</span></div>'
      +'<div class="rc-c"><b>'+fmtEuro(s.eur)+'</b><span>dépensés</span></div>'
      +'<div class="rc-c"><b>'+s.kcal.toLocaleString('fr-FR')+'</b><span>calories</span></div>'
    +'</div>'
@@ -3374,7 +3376,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v4.3';
+const APP_VERSION = 'v4.4';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
@@ -3514,11 +3516,14 @@ function drawSheet(){
    +(img?'<button class="zoomable" onclick="zoomPhoto(\''+img+'\')" aria-label="Agrandir la photo">'
          +can(b)+'<span class="zoomcue">'+I.zoom+'</span></button>':can(b))
    +'<div style="flex:1"><h1>'+esc(b.n)+'</h1><div class="br">'+esc(b.br)+'</div>'
-     +'<div class="fx">'+(b.abv||'?')+'° · canette '+b.cl+' cl · '+esc(b.pays)+' · '+Store.units(b)+' unité'+(Store.units(b)>1?'s':'')
+     +'<div class="fx">'+(b.abv?fmtRate(b.abv):'?')+'° · canette '+b.cl+' cl · '+esc(b.pays)
+     +' · '+fmtDec(Store.units(b),2)+' unité'+(Store.units(b)>1?'s':'')
      +'<br>'+Store.kcal(b)+' kcal'+(Store.kcalIsReal(b)?'':' <span class="est" title="Estimé depuis le degré et le volume">estimé</span>')+'</div>'
-     +'<div class="avgbox"><span class="num">'+(Store.count(b.id)?Store.rating(b.id).toFixed(1):'—')+'</span><span>'
+     +'<div class="avgbox"><span class="num">'+(Store.count(b.id)?fmtDec(Store.rating(b.id)):'—')+'</span><span>'
      +stars(Store.rating(b.id))+'<br><span style="font-size:11px;color:var(--dimmer)">'
-     +(Store.count(b.id)?Store.count(b.id).toLocaleString('fr-FR')+' notes':'pas encore notée')+'</span></span></div></div></div>'
+     +(Store.count(b.id)
+        ? Store.count(b.id).toLocaleString('fr-FR')+' note'+(Store.count(b.id)>1?'s':'')
+        : 'pas encore notée')+'</span></span></div></div></div>'
    +(b.ok?'':'<div class="note warn">'+I.info+'<span>Fiche proposée par un utilisateur, en attente de validation. '
      +'Tu peux déjà la noter, elle restera privée tant qu\'elle n\'est pas validée.</span></div>')
    +'<div class="desc">'+esc(b.d)+'</div>'
