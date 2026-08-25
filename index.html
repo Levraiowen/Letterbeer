@@ -739,6 +739,8 @@ textarea:focus,input.f:focus,select.f:focus{border-color:var(--accent);box-shado
 .seeall{background:none;border:0;cursor:pointer;font-family:inherit;font-size:11px;
   letter-spacing:.06em;text-transform:uppercase;color:var(--accent);padding:2px 0}
 .seeall:hover{text-decoration:underline;text-underline-offset:3px}
+/* le bouton qui déplie une liste bornée */
+.voirplus{margin-top:12px}
 
 /* ---- zone tactile ----
    Plusieurs commandes mesuraient moins de 44 px de haut, la cible
@@ -1322,7 +1324,32 @@ const Store = {
   users: () => Object.keys(C.users).filter(k => k !== 'me' && k !== C.myId),
   following:   () => Store.users().filter(k => C.users[k].foll),
   followers:   () => Store.users().filter(k => C.users[k].fme),
-  suggestions: () => Store.users().filter(k => !C.users[k].foll),
+  /* « À découvrir » renvoyait tout le monde, dans l'ordre des identifiants —
+     donc au hasard. On ordonne par ce qui a du sens dans un réseau d'amis :
+     d'abord ceux qui TE suivent déjà et que tu ne suis pas en retour, ensuite
+     ceux que le plus de tes abonnements suivent — les amis d'amis — puis les
+     comptes les plus récemment actifs. */
+  amisEnCommun(k) {
+    const miens = new Set(Store.following());
+    let n = 0;
+    for (const f of C.follows) if (f.followee_id === k && miens.has(f.follower_id)) n++;
+    return n;
+  },
+  raisonSuggestion(k) {
+    const u = C.users[k];
+    if (u && u.fme) return 'te suit déjà';
+    const n = Store.amisEnCommun(k);
+    if (n) return n + ' ami' + (n>1?'s':'') + ' en commun';
+    return '';
+  },
+  suggestions(n) {
+    const l = Store.users().filter(k => !C.users[k].foll);
+    const score = k => (C.users[k].fme ? 1000 : 0) + Store.amisEnCommun(k) * 10;
+    l.sort((a,b) => score(b) - score(a)
+      || Store.derniereActivite(b) - Store.derniereActivite(a)
+      || (C.users[a].h||'').localeCompare(C.users[b].h||'', 'fr'));
+    return n ? l.slice(0, n) : l;
+  },
 
   async toggleFollow(k) {
     const u = C.users[k];
@@ -2000,7 +2027,7 @@ async function doAuth(){
 /* =========================================================
    ÉTAT + VUES
    ========================================================= */
-const S={tab:'home',sub:'bieres',q:'',filts:[],tri:'note-desc',avisTri:'chauds',dir:1,user:null,back:'home',tousCopains:false};
+const S={tab:'home',sub:'bieres',q:'',filts:[],tri:'note-desc',avisTri:'chauds',dir:1,user:null,back:'home'};
 /* L'onglet Journal ne s'affiche que s'il y a des articles publiés. Un
    onglet vide coûte plus cher qu'un onglet en moins, et celui-ci
    s'allumera tout seul le jour où l'agrégateur publiera. */
@@ -2214,7 +2241,7 @@ function vHome(){
       +'<button class="seeall" onclick="S.avisTri=\''+(chauds?'recents':'chauds')+'\';render()">'
       +(chauds?'Voir les plus récents':'Voir les plus commentés')+'</button></div>'
       +(L.length
-        ? L.map(revHTML).join('')
+        ? bornee('avis-'+S.avisTri, L, revHTML, 8)
         : '<div class="empty">Personne n\'a encore écrit d\'avis.<br><br>'
           +'Ouvre une bière et donne le tien : c\'est ce qui fait vivre cet onglet.</div>');
   }
@@ -2472,17 +2499,17 @@ function vFriends(){
   const revs=Store.friendReviews();
   const feed=[];foll.forEach(k=>Store.user(k).act.forEach(a=>feed.push({u:k,...a})));
   return '<div class="sec"><h2>Leurs avis</h2><span class="eyebrow">'+revs.length+'</span></div>'
-   +(revs.length?revs.map(revHTML).join('')
+   +(revs.length ? bornee('avis-copains', revs, revHTML, 5)
      :'<div class="empty">Tes copains n\'ont encore rien écrit.</div>')
    +'<div class="sec" style="padding-top:26px"><h2>Ce qu\'ils ont bu</h2></div>'
    // div et non button : av() renvoie déjà un bouton, et un bouton
    // imbriqué fait fermer le parent par l'analyseur HTML — la ligne
    // éclatait alors et la vignette prenait tout l'écran.
-   +feed.filter(a=>Store.beer(a.b)).map(a=>{const b=Store.beer(a.b);
+   +bornee('bu-copains', feed.filter(a=>Store.beer(a.b)), a=>{const b=Store.beer(a.b);
      return '<div class="row tap" onclick="openBeer(\''+esc(a.b)+'\')">'+av(a.u)
      +'<span class="vign">'+can(b,0,1)+'</span>'
      +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(Store.user(a.u).h)+' · '+esc(a.d)+'</span></span>'
-     +stars(a.r)+'</div>'}).join('')
+     +stars(a.r)+'</div>'}, 8)
    /* La liste grandissait sans fin avec le nombre d'abonnements. On en montre
       dix, puis on déplie.
 
@@ -2495,34 +2522,60 @@ function vFriends(){
       const ordonnes = [...foll].sort((a,b) =>
         Store.derniereActivite(b) - Store.derniereActivite(a)
         || (Store.user(a)?.h||'').localeCompare(Store.user(b)?.h||'', 'fr'));
-      const tous = S.tousCopains || ordonnes.length <= 12;
-      const montres = tous ? ordonnes : ordonnes.slice(0, 10);
-      const restants = ordonnes.length - montres.length;
       return '<div class="sec" style="padding-top:34px"><h2>Leur semaine</h2>'
-        +'<span class="eyebrow">'+(tous?'7 jours':'les plus récents')+'</span></div>'
-        +montres.map(k=>{const u=Store.user(k);
+        +'<span class="eyebrow">'+(DEPLIE['semaine-copains']?'7 jours':'les plus récents')+'</span></div>'
+        +bornee('semaine-copains', ordonnes, k=>{const u=Store.user(k);
           return '<div class="row">'+av(k)+'<span class="t"><b>'+esc(u.h)+'</b><span>'
             +(u.priv?'stats privées':u.week+' canette'+(u.week>1?'s':'')+' cette semaine')+'</span></span>'
-            +(u.priv?'<span style="color:var(--dimmer)">'+I.lock+'</span>':'')+'</div>'}).join('')
-        +(restants>0
-          ? '<button class="ghost" style="margin-top:12px" onclick="S.tousCopains=true;render()">'
-            +'Voir les '+restants+' autre'+(restants>1?'s':'')+'</button>'
-          : (S.tousCopains && ordonnes.length > 12
-             ? '<button class="ghost" style="margin-top:12px" onclick="S.tousCopains=false;render()">Réduire la liste</button>'
-             : ''));
+            +(u.priv?'<span style="color:var(--dimmer)">'+I.lock+'</span>':'')+'</div>'}, 10);
     })()
    +'<div class="note">'+I.info+'<span>Pas de classement ici : la liste suit les derniers avis écrits, pas le nombre de canettes. Voir la semaine des autres sert à se situer, pas à gagner.</span></div>'
    +'<div class="sec" style="padding-top:26px"><h2>À découvrir</h2></div>'
-   +Store.suggestions().map(userRow).join('')
+   +bornee('a-decouvrir', Store.suggestions(),
+           k=>userRow(k, Store.raisonSuggestion(k)), 5)
    +'<button class="ghost invite" onclick="inviterUnAmi()">'+I.invite
    +' Inviter un ami sur Letterbeer</button>'
    +'<div class="empty" style="padding:12px 34px 0;font-size:11.5px">'
    +"Il te suit dès son inscription, tu n'as rien d'autre à faire.</div>";
 }
-function userRow(k){const u=Store.user(k);
+/* ---------- listes bornées ----------
+   Sept listes se déroulaient sans fin : les avis des copains, ce qu'ils ont
+   bu, les suggestions, le journal, les avis d'un profil, ceux d'une fiche.
+   Avec beaucoup d'amis ou d'historique, le reste de la page devenait
+   inatteignable — il fallait défiler des centaines de lignes pour arriver au
+   bloc suivant.
+
+   Un seul mécanisme plutôt que sept variantes. On ne pagine qu'à partir de
+   max+3 : en dessous, le bouton coûterait un geste pour économiser deux
+   lignes. render() ne remet pas le défilement à zéro, donc déplier ne fait
+   pas sauter la page. */
+const DEPLIE = {};
+function deplier(c, f){ DEPLIE[c] = true;  (window[f] || render)() }
+function replier(c, f){ DEPLIE[c] = false; (window[f] || render)() }
+
+function bornee(cle, items, rendre, max, redessine){
+  max = max || 10;
+  const f = redessine || 'render';
+  const tout = DEPLIE[cle] || items.length <= max + 3;
+  const montres = tout ? items : items.slice(0, max);
+  const reste = items.length - montres.length;
+  let bouton = '';
+  if (reste > 0)
+    bouton = '<button class="ghost voirplus" onclick="deplier(\''+cle+'\',\''+f+'\')">'
+           + 'Voir les ' + reste + ' autre' + (reste > 1 ? 's' : '') + '</button>';
+  else if (DEPLIE[cle] && items.length > max + 3)
+    bouton = '<button class="ghost voirplus" onclick="replier(\''+cle+'\',\''+f+'\')">Réduire</button>';
+  return montres.map(rendre).join('') + bouton;
+}
+
+function userRow(k, raison){const u=Store.user(k);
   return '<div class="row tap" onclick="openUser(\''+esc(k)+'\')">'+av(k)
    +'<span class="t"><b>'+esc(u.h)+'</b><span>'
-   +(u.priv?'stats privées · '+esc(u.ville):u.cans+' canettes · '+esc(u.top)+' · '+esc(u.ville))+'</span></span>'
+   +(raison ? esc(raison)
+            : esc(sousTitre(u.priv ? 'stats privées'
+                                   : u.cans+' canette'+(u.cans>1?'s':''),
+                            u.priv ? '' : (u.top!=='—'?u.top:''),
+                            u.ville!=='—' ? u.ville : '')))+'</span></span>'
    +'<button class="follow'+(u.foll?' on':'')+'" onclick="event.stopPropagation();follow(\''+esc(k)+'\')">'
    +(u.foll?'Suivi':'Suivre')+'</button></div>'}
 async function follow(k){
@@ -2553,7 +2606,7 @@ function vUser(){
         +'<div class="stat"><div class="k">Style dominant</div><div class="v" style="font-size:16px">'+esc(u.top)+'</div></div>'
        +'</div>')
    +'<div class="sec" style="padding-top:24px"><h2>Ses avis</h2><span class="eyebrow">'+revs.length+'</span></div>'
-   +(revs.length?revs.map(revHTML).join(''):'<div class="empty">Aucun avis publié.</div>')
+   +(revs.length?bornee('avis-profil-'+S.user, revs, revHTML, 8):'<div class="empty">Aucun avis publié.</div>')
    +'<div class="sec" style="padding-top:24px"><h2>Ses dernières canettes</h2></div>'
    +u.act.filter(a=>Store.beer(a.b)).map(a=>{const b=Store.beer(a.b);
      return '<button class="row tap" onclick="openBeer(\''+esc(a.b)+'\')">'
@@ -3106,7 +3159,9 @@ function drawJournal(){
    +'.<br><b>Canette barrée</b> : tu n\'avais pas bu, mais tu gardes ta note. '
    +'<b>Corbeille</b> : l\'entrée et sa note partent ensemble.</span></div>'
    +(L.length
-     ? L.filter(l=>Store.beer(l.b)).map(l=>{const b=Store.beer(l.b);
+     // le journal se redessine seul dans sa feuille : c'est drawJournal
+     // qu'il faut rappeler, pas render()
+     ? bornee('journal', L.filter(l=>Store.beer(l.b)), l=>{const b=Store.beer(l.b);
         return '<div class="jrow" id="j-'+esc(l.id)+'">'
          +'<span class="vign">'+can(b,0,1)+'</span>'
          +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(l.d)
@@ -3117,7 +3172,7 @@ function drawJournal(){
            +'aria-label="Retirer la consommation, garder la note" '
            +'title="Retirer la consommation, garder la note">'+I.minuscan+'</button>':'')
          +'<button class="jdel" onclick="doDeleteLog(\''+esc(l.id)+'\')" '
-           +'aria-label="Supprimer cette entrée">'+I.trash+'</button></div>'}).join('')
+           +'aria-label="Supprimer cette entrée">'+I.trash+'</button></div>'}, 12, 'drawJournal')
      : '<div class="empty">Ton journal est vide.</div>');
 }
 async function doDeleteLog(id){
@@ -3487,7 +3542,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v4.9';
+const APP_VERSION = 'v5.0';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
@@ -3708,7 +3763,7 @@ function drawSheet(){
    +'<button class="reportlink" onclick="openReport(\'beer\',\''+esc(b.id)+'\')">'
      +I.flag+' Signaler un problème sur cette fiche</button>'
    +'<div class="sec" style="padding-top:22px"><h2>Les avis</h2><span class="eyebrow">'+revs.length+'</span></div>'
-   +(revs.length?revs.map(revHTML).join(''):'<div class="empty" style="padding:26px 34px">Personne n\'a encore écrit sur celle-ci. À toi de jouer.</div>')
+   +(revs.length?bornee('avis-fiche-'+b.id, revs, revHTML, 6, 'drawSheet'):'<div class="empty" style="padding:26px 34px">Personne n\'a encore écrit sur celle-ci. À toi de jouer.</div>')
    +'</div></div>';
 }
 function preview(v){document.querySelectorAll('.rsw').forEach((w,idx)=>{
