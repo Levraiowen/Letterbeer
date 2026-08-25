@@ -15,3 +15,12 @@ desktop.ini
 # sorties temporaires
 *.log
 *.tmp
+
+# fichiers qui vivent en local et n'ont jamais eu leur place dans le dépôt
+.old_mod.txt
+
+# ancêtre du Store, remplacé par le bloc inline d'index.html
+store-supabase.js
+
+# copies d'avant l'audit du 25 août 2026
+.sauvegarde-audit/
