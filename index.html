@@ -967,7 +967,7 @@ const classerTexte = t => {
 
 /* cache local */
 const C = { me:null, myId:null, email:'', isAdmin:false, users:{}, beers:[], ratings:{}, counts:{}, weekCounts:{},
-            reviews:[], logs:[], follows:[], watch:[], wish:[], arts:[] };
+            reviews:[], logs:[], follows:[], watch:[], wish:[], arts:[], blocks:[] };
 
 /* ============================ AUTHENTIFICATION ============================ */
 const Auth = {
@@ -1093,7 +1093,7 @@ async function hydrate() {
   C.myId = user.id;
   C.email = user.email || '';
 
-  const [profiles, beers, ratings, reviews, replies, reactions, logs, prices, follows, watch, wish] =
+  const [profiles, beers, ratings, reviews, replies, reactions, logs, prices, follows, watch, wish, blocks] =
     await Promise.all([
       chargerProfils(),
       chargerTout('bières',  () => sb.from('beers').select('*').order('id')),
@@ -1109,9 +1109,13 @@ async function hydrate() {
       chargerTout('abonnements', () => sb.from('follows').select('*')
                                           .order('follower_id').order('followee_id')),
       chargerTout('prix suivis', () => sb.from('beer_watchers').select('*').order('beer_id')),
-      chargerTout('liste d\'envies', () => sb.from('wishlist').select('beer_id').order('beer_id'))
+      chargerTout('liste d\'envies', () => sb.from('wishlist').select('beer_id').order('beer_id')),
+      // la table arrive avec la migration 28 ; sans elle on continue sans blocages
+      chargerTout('blocages', () => sb.from('blocks').select('blocked_id').order('blocked_id'))
+        .catch(e => { console.warn('blocages indisponibles', e.message); return { data: [] } })
     ]);
   C.wish = (wish.data||[]).map(w => w.beer_id);
+  C.blocks = (blocks.data||[]).map(b => b.blocked_id);
 
   /* --- profils --- */
   const followingIds = (follows.data||[]).filter(f => f.follower_id === C.myId).map(f => f.followee_id);
@@ -1342,8 +1346,31 @@ const Store = {
     if (n) return n + ' ami' + (n>1?'s':'') + ' en commun';
     return '';
   },
+  /* ---- blocage ----
+     La base filtre déjà les avis et les réponses dans les deux sens
+     (migration 28). Ce qui suit ne sert qu'à l'interface : ne pas proposer
+     quelqu'un qu'on a bloqué, et savoir quoi afficher sur son profil. */
+  estBloque: k => C.blocks.includes(k),
+  bloques: () => C.blocks.map(k => C.users[k] ? k : null).filter(Boolean),
+  async bloquer(k) {
+    const { error } = await sb.from('blocks').insert({ blocker_id: C.myId, blocked_id: k });
+    if (error) throw error;
+    C.blocks.push(k);
+    // le déclencheur a délié les abonnements en base : on suit en mémoire
+    const u = C.users[k]; if (u) { u.foll = 0; u.fme = 0 }
+    C.follows = C.follows.filter(f =>
+      !((f.follower_id === C.myId && f.followee_id === k) ||
+        (f.follower_id === k && f.followee_id === C.myId)));
+  },
+  async debloquer(k) {
+    const { error } = await sb.from('blocks').delete()
+      .eq('blocker_id', C.myId).eq('blocked_id', k);
+    if (error) throw error;
+    C.blocks = C.blocks.filter(x => x !== k);
+  },
+
   suggestions(n) {
-    const l = Store.users().filter(k => !C.users[k].foll);
+    const l = Store.users().filter(k => !C.users[k].foll && !Store.estBloque(k));
     const score = k => (C.users[k].fme ? 1000 : 0) + Store.amisEnCommun(k) * 10;
     l.sort((a,b) => score(b) - score(a)
       || Store.derniereActivite(b) - Store.derniereActivite(a)
@@ -1850,6 +1877,24 @@ const Store = {
     C.beers = C.beers.filter(b => b.id !== id);
   },
 
+  /* La liste des termes refusés. Seul un administrateur la lit : une liste
+     consultable est une liste contournable. */
+  async motsBloques() {
+    const { data, error } = await sb.from('mots_bloques').select('*').order('mot');
+    if (error) throw error;
+    return data || [];
+  },
+  async ajouterMot(m) {
+    const mot = String(m||'').trim().toLowerCase();
+    if (mot.length < 3) throw new Error('Trois lettres minimum');
+    const { error } = await sb.from('mots_bloques').insert({ mot });
+    if (error) throw error;
+  },
+  async retirerMot(m) {
+    const { error } = await sb.from('mots_bloques').delete().eq('mot', m);
+    if (error) throw error;
+  },
+
   async supprimerPrix(id) {
     const { data, error } = await sb.from('prices').delete().eq('id', id).select('id');
     if (error) throw error;
@@ -2337,9 +2382,19 @@ function revHTML(r){
 function repaint(id){const r=Store.review(id);const el=document.getElementById('rev-'+id);if(el)el.outerHTML=revHTML(r)}
 /* Chaque action écrit en base : si ça échoue, il faut le dire plutôt que
    laisser l'écran afficher un état que la base ne connaît pas. */
+/* Le déclencheur de modération (migration 29) lève « moderation ». Sans ce
+   décodage, l'utilisateur lirait « Action impossible — réessaie » et
+   réessaierait indéfiniment le même texte refusé. On ne dit pas QUEL terme
+   a bloqué : ce serait aider à cartographier la liste. */
+function messageErreur(e, defaut){
+  const m = String((e && (e.message || e.hint)) || e || '');
+  if (/moderation/i.test(m))
+    return 'Message refusé : il contient un terme que l\'application n\'accepte pas.';
+  return defaut || 'Action impossible — réessaie';
+}
 async function act(fn, msg){
   try { return await fn() }
-  catch(e){ console.error(e); toast(msg || 'Action impossible — réessaie'); return null }
+  catch(e){ console.error(e); toast(messageErreur(e, msg)); return null }
 }
 async function doCheer(id){ const r = await act(()=>Store.cheer(id)); if(!r)return; repaint(id); if(r.mych) toast('Tu as trinqué à cet avis') }
 async function doBof(id){ const r = await act(()=>Store.bof(id)); if(!r)return; repaint(id); toast(r.mybof?'Noté, tu en verras moins comme ça':'Bof retiré') }
@@ -2605,6 +2660,44 @@ function userRow(k, raison){const u=Store.user(k);
                             u.ville!=='—' ? u.ville : '')))+'</span></span>'
    +'<button class="follow'+(u.foll?' on':'')+'" onclick="event.stopPropagation();follow(\''+esc(k)+'\')">'
    +(u.foll?'Suivi':'Suivre')+'</button></div>'}
+async function doBloquer(k){
+  const u = Store.user(k); if(!u) return;
+  if(!confirm('Bloquer ' + u.h + ' ?\n\n'
+    + 'Vous ne verrez plus vos avis ni vos réponses, ni l\'un ni l\'autre. '
+    + 'Vos abonnements réciproques seront retirés.\n\n'
+    + 'Tu pourras le débloquer depuis ton Compte.')) return;
+  const r = await act(()=>Store.bloquer(k), 'Blocage impossible — réessaie');
+  if(r===null) return;
+  toast(u.h + ' est bloqué');
+  await hydrate();          // les avis masqués disparaissent du cache
+  render();
+}
+async function doDebloquer(k){
+  const u = Store.user(k); if(!u) return;
+  const r = await act(()=>Store.debloquer(k), 'Déblocage impossible — réessaie');
+  if(r===null) return;
+  toast(u.h + ' est débloqué');
+  await hydrate();
+  render();
+}
+
+/* ---------- la liste des comptes bloqués ---------- */
+function openBloques(){
+  const l = Store.bloques();
+  const sh=$('#sheet'); sh.classList.add('open');
+  sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
+   +'<div class="sheet-bar"><b>Comptes bloqués</b><button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
+   +'<div class="sheet-body">'
+   +'<div class="note">'+I.info+'<span>Vous ne voyez plus vos avis ni vos réponses, '
+     +'ni l\'un ni l\'autre. Le blocage ne les prévient pas.</span></div>'
+   +(l.length
+     ? l.map(k=>{const u=Store.user(k);
+        return '<div class="row">'+av(k)+'<span class="t"><b>'+esc(u.h)+'</b><span>'+esc(u.ville)+'</span></span>'
+         +'<button class="follow" onclick="doDebloquer(\''+esc(k)+'\')">Débloquer</button></div>'}).join('')
+     : '<div class="empty">Tu n\'as bloqué personne.</div>')
+   +'</div></div>';
+}
+
 async function follow(k){
   const on = await act(()=>Store.toggleFollow(k), 'Impossible pour le moment — réessaie');
   if(on===null) return;
@@ -2622,8 +2715,10 @@ function vUser(){
     +'<span class="h">'+esc(u.h)+'</span><span class="s">'+esc(u.ville)+'</span>'
     +(ligneGouts(u)?'<span class="pgouts">'+I.minuscan+esc(ligneGouts(u))+'</span>':'')
     +(u.bio?'<span class="pbio">'+esc(u.bio)+'</span>':'')
-    +'<button class="follow lg'+(u.foll?' on':'')+'" onclick="follow(\''+esc(k)+'\')">'
-      +(u.foll?'Abonné':'S\'abonner')+'</button></div>'
+    +(Store.estBloque(k)
+       ? '<div class="empty" style="padding:14px 30px 0;font-size:12px">Tu as bloqué ce compte.</div>'
+       : '<button class="follow lg'+(u.foll?' on':'')+'" onclick="follow(\''+esc(k)+'\')">'
+         +(u.foll?'Abonné':'S\'abonner')+'</button>')+'</div>'
    +(u.priv
      ? '<div class="locked">'+I.lock_l+'<br>'+esc(u.h)+' garde ses stats privées.<br>Ses avis restent publics.</div>'
      : '<div class="statgrid">'
@@ -2632,14 +2727,21 @@ function vUser(){
         +'<div class="stat"><div class="k">Cette semaine</div><div class="v">'+u.week+' <small>canettes</small></div></div>'
         +'<div class="stat"><div class="k">Style dominant</div><div class="v" style="font-size:16px">'+esc(u.top)+'</div></div>'
        +'</div>')
-   +'<div class="sec" style="padding-top:24px"><h2>Ses avis</h2><span class="eyebrow">'+revs.length+'</span></div>'
+   +(Store.estBloque(k)
+     ? '<div class="empty" style="padding:30px 34px">Ses avis et ses réponses sont masqués, '
+       +'et les tiens le sont pour lui.</div>'
+       +'<button class="reportlink" onclick="doDebloquer(\''+esc(k)+'\')">Débloquer '+esc(u.h)+'</button>'
+     :
+      '<div class="sec" style="padding-top:24px"><h2>Ses avis</h2><span class="eyebrow">'+revs.length+'</span></div>'
    +(revs.length?bornee('avis-profil-'+S.user, revs, revHTML, 8):'<div class="empty">Aucun avis publié.</div>')
    +'<div class="sec" style="padding-top:24px"><h2>Ses dernières canettes</h2></div>'
    +u.act.filter(a=>Store.beer(a.b)).map(a=>{const b=Store.beer(a.b);
      return '<button class="row tap" onclick="openBeer(\''+esc(a.b)+'\')">'
      +'<span class="vign">'+can(b,0,1)+'</span>'
      +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(sousTitre(brasserieUtile(b), a.d))+'</span></span>'
-     +stars(a.r)+'</button>'}).join('');
+     +stars(a.r)+'</button>'}).join('')
+   +'<button class="reportlink" onclick="openReport(\'profile\',\''+esc(k)+'\')">'+I.flag+' Signaler ce compte</button>'
+   +'<button class="reportlink" onclick="doBloquer(\''+esc(k)+'\')">'+I.lock+' Bloquer '+esc(u.h)+'</button>');
 }
 
 /* ---------- mon profil ---------- */
@@ -2750,6 +2852,7 @@ function vAccount(){
   const rows=[
     ['Infos perso','Pseudo, ville, bio et adresse e-mail','openProfileEdit()'],
     ['Mes goûts', ligneGouts(Store.me()) || 'Pas encore renseignés','ouvrirGouts()'],
+    ['Comptes bloqués', C.blocks.length ? C.blocks.length+' compte'+(C.blocks.length>1?'s':'')+' bloqué'+(C.blocks.length>1?'s':'') : 'Tu n\'as bloqué personne','openBloques()'],
     ['Confidentialité','Ce qui est collecté, où c\'est hébergé, tes droits','openAbout(\'data\')'],
     ['À goûter', nWish?nWish+' canette'+(nWish>1?'s':'')+' sur ta liste':'Ta liste d\'envies est vide','openWishlist()'],
     ['Mes propositions de bières', nMine?nMine+' fiche'+(nMine>1?'s':'')+' proposée'+(nMine>1?'s':''):'Aucune fiche proposée','openMyBeers()'],
@@ -2762,7 +2865,8 @@ function vAccount(){
     const i = rows.findIndex(r => r[0] === 'Mes propositions de bières');
     rows.splice(i < 0 ? rows.length : i + 1, 0,
       ['Fiches à valider','Propositions en attente de modération','openModeration()'],
-      ['Signalements','Avis, fiches et prix signalés par les autres','openSignalements()']);
+      ['Signalements','Avis, fiches et prix signalés par les autres','openSignalements()'],
+      ['Termes refusés','La modération automatique, volontairement minimale','openMots()']);
   }
   const mph=safeUrl(me.photo);
   const pst=mph?'background-image:url('+mph+')':'';
@@ -3138,14 +3242,16 @@ function openMyBeers(){
    cliquait. Règle générale : une donnée de la base ne va jamais dans un
    attribut d'événement, seulement un identifiant. */
 function openReport(type, id){
-  const quoi = type==='review'
-    ? (() => { const r = Store.review(id), u = r && (Store.user(r.u) || Store.me());
-               return u ? "l'avis de " + u.h : 'cet avis' })()
-    : (() => { const b = Store.beer(id); return b ? 'la fiche ' + b.n : 'cette fiche' })();
+  const quoi =
+      type==='review'  ? (() => { const r = Store.review(id), u = r && (Store.user(r.u) || Store.me());
+                                  return u ? "l'avis de " + u.h : 'cet avis' })()
+    : type==='profile' ? (() => { const u = Store.user(id); return u ? 'le compte de ' + u.h : 'ce compte' })()
+    :                    (() => { const b = Store.beer(id); return b ? 'la fiche ' + b.n : 'cette fiche' })();
   const sh=$('#sheet'); sh.classList.add('open');
-  const motifs = type==='review'
-    ? ['Propos haineux ou insultants','Hors sujet ou publicité','Faux avis','Autre']
-    : ['Informations fausses','Doublon d\'une fiche existante','Photo inappropriée','Autre'];
+  const motifs =
+      type==='review'  ? ['Propos haineux ou insultants','Hors sujet ou publicité','Faux avis','Autre']
+    : type==='profile' ? ['Propos haineux ou insultants','Harcèlement','Usurpation d\'identité','Autre']
+    :                    ['Informations fausses','Doublon d\'une fiche existante','Photo inappropriée','Autre'];
   sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
    +'<div class="sheet-bar"><b>Signaler</b><button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
    +'<div class="sheet-body">'
@@ -3282,6 +3388,51 @@ function cibleSignalement(r){
   const p = b && b.pr.find(x => x._id === r.target_id);
   return p ? { quoi:'Prix', titre:fmtEuro(p.p)+' — '+p.s, detail:b.n, vivant:true }
            : { quoi:'Prix', titre:'Relevé disparu', detail:'', vivant:false };
+}
+
+/* ---------- termes refusés (administrateurs) ---------- */
+let MOTS = [];
+async function openMots(){
+  const sh=$('#sheet'); sh.classList.add('open');
+  sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
+   +'<div class="sheet-bar"><b>Termes refusés</b><button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
+   +'<div class="sheet-body"><div class="empty">Chargement…</div></div></div>';
+  try { MOTS = await Store.motsBloques() }
+  catch(e){ console.error(e); closeSheet(); toast('Liste indisponible'); return }
+  drawMots();
+}
+function drawMots(){
+  const corps = document.querySelector('#sheet .sheet-body');
+  if (!corps) return;
+  corps.innerHTML =
+    '<div class="note">'+I.info+'<span>Un avis ou une réponse contenant l\'un de ces termes '
+     +'est refusé par la base, quel que soit le chemin emprunté. Reste très permissif : '
+     +'la vulgarité ordinaire n\'a rien à faire ici, le signalement s\'occupe du reste.</span></div>'
+   +'<div class="field" style="margin-top:14px"><label>Ajouter un terme</label>'
+     +'<input class="f" id="mot-n" maxlength="40" placeholder="en minuscules, sans accent" '
+     +'onkeydown="if(event.key===\'Enter\')doAjouterMot()"></div>'
+   +'<div class="hint">Interprété comme une expression régulière : « pede?s? » couvre '
+     +'les variantes sans multiplier les entrées. Le terme doit apparaître en mot entier.</div>'
+   +'<button class="cta" style="margin-top:14px" onclick="doAjouterMot()">Ajouter</button>'
+   +'<div class="sec" style="padding-top:26px"><h2>Liste</h2>'
+     +'<span class="eyebrow">'+MOTS.length+' terme'+(MOTS.length>1?'s':'')+'</span></div>'
+   +(MOTS.length
+     ? MOTS.map(m=>'<div class="row"><span class="t"><b>'+esc(m.mot)+'</b></span>'
+         +'<button class="modbtn no" onclick="doRetirerMot(\''+esc(m.mot)+'\')">Retirer</button></div>').join('')
+     : '<div class="empty">La liste est vide : rien n\'est refusé automatiquement.</div>');
+}
+async function doAjouterMot(){
+  const champ = document.getElementById('mot-n');
+  const r = await act(()=>Store.ajouterMot(champ.value), 'Ajout impossible');
+  if(r===null) return;
+  champ.value=''; toast('Terme ajouté');
+  MOTS = await Store.motsBloques(); drawMots();
+}
+async function doRetirerMot(m){
+  const r = await act(()=>Store.retirerMot(m), 'Retrait impossible');
+  if(r===null) return;
+  toast('Terme retiré');
+  MOTS = await Store.motsBloques(); drawMots();
 }
 
 async function openSignalements(onglet){
@@ -3569,7 +3720,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v5.4';
+const APP_VERSION = 'v5.5';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
@@ -3946,7 +4097,7 @@ async function saveLog(){
     else if(monAvis)  { await Store.deleteReview(monAvis.id); avisRetire = true; }
   } catch(e){
     console.error(e);
-    toast('Enregistrement impossible — réessaie');
+    toast(messageErreur(e, 'Enregistrement impossible — réessaie'));
     return;
   }
   const verbe = SH.already ? ' mise à jour'

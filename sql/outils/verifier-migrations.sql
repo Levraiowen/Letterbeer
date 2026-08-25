@@ -131,6 +131,18 @@ with controles as (
   union all select 25, 'Vue des notes fermée aux visiteurs',
     not has_table_privilege('anon', 'beer_ratings', 'select'),
     'sql/26-vue-notes.sql'
+
+  union all select 26, 'Invitation côté serveur',
+    exists (select 1 from pg_proc where proname='handle_new_user' and prosrc like '%parrain%'),
+    'sql/27-invitation-serveur.sql'
+
+  union all select 27, 'Blocage entre comptes',
+    exists (select 1 from pg_proc where proname='est_bloque'),
+    'sql/28-blocage.sql'
+
+  union all select 28, 'Modération automatique',
+    exists (select 1 from pg_trigger where tgname='reviews_moderation'),
+    'sql/29-moderation-auto.sql'
 )
 select ordre,
        quoi,

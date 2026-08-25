@@ -102,6 +102,8 @@ sql/24-populaires-semaine.sql  la semaine devient une vraie fenêtre de 7 jours
 sql/25-moderation.sql          droits de modération — lire l'entête
 sql/26-vue-notes.sql           beer_ratings fermée aux visiteurs — lire l'entête
 sql/27-invitation-serveur.sql  l'invitation ne dépend plus du navigateur
+sql/28-blocage.sql             bloquer quelqu'un — filtrage par la base
+sql/29-moderation-auto.sql     modération automatique, volontairement faible
 ```
 
 La migration `19` retire le droit de lire certaines colonnes de `profiles`
