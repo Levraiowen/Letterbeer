@@ -2013,9 +2013,17 @@ async function doAuth(){
       return toast('Pseudo : 3 à 20 signes, sans accent — lettres, chiffres, point ou _');
     if(!document.getElementById('lg-a').classList.contains('on'))
       return toast('Il faut confirmer que tu as 18 ans ou plus');
-    const { error } = await sb.auth.signUp({
-      email:e, password:p, options:{ data:{ handle:h, age_ok:true } }
-    });
+    /* Le parrain part AVEC l'inscription, et c'est le déclencheur en base qui
+       crée l'abonnement. Il transitait avant par le localStorage, entre le
+       clic sur le lien et la première ouverture connectée : cette chaîne
+       cassait dès que le parcours changeait de navigateur — lien ouvert sur
+       le téléphone et inscription finie ailleurs, ou confirmation d'e-mail
+       ouverte dans le navigateur intégré de Gmail. */
+    let parrain = null;
+    try { parrain = localStorage.getItem(CLE_INVIT) } catch(_){}
+    const meta = { handle:h, age_ok:true };
+    if (estUUID(parrain)) meta.parrain = parrain;
+    const { error } = await sb.auth.signUp({ email:e, password:p, options:{ data: meta } });
     if(error) return toast(error.message.includes('already') ? 'Cette adresse a déjà un compte' : error.message);
   } else {
     const { error } = await sb.auth.signInWithPassword({ email:e, password:p });
@@ -3561,7 +3569,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v5.3';
+const APP_VERSION = 'v5.4';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
@@ -4100,16 +4108,22 @@ function capterInvitation(){
   }
 }
 
+/* Filet de secours pour les liens déjà distribués, et pour le cas où l'on
+   ouvre une invitation alors qu'on a DÉJÀ un compte : le déclencheur de la
+   migration 27 ne se déclenche qu'à l'inscription.
+   La clé n'est plus vidée avant d'avoir réussi — sinon un échec passager
+   perdait l'invitation pour de bon. */
 async function honorerInvitation(){
   let parrain;
   try { parrain = localStorage.getItem(CLE_INVIT) } catch(e){ return }
   if (!parrain) return;
-  try { localStorage.removeItem(CLE_INVIT) } catch(e){}
-  if (!estUUID(parrain) || parrain === C.myId) return;
-  if (C.follows.some(f => f.follower_id===C.myId && f.followee_id===parrain)) return;
+  const oublier = () => { try { localStorage.removeItem(CLE_INVIT) } catch(e){} };
+  if (!estUUID(parrain) || parrain === C.myId) { oublier(); return }
+  if (C.follows.some(f => f.follower_id===C.myId && f.followee_id===parrain)) { oublier(); return }
   const { error } = await sb.from('follows')
     .insert({ follower_id:C.myId, followee_id:parrain });
   if (error) { console.warn('invitation non honorée', error.message); return }
+  oublier();
   const u = C.users[parrain];
   if (u) { u.foll = 1; C.follows.push({ follower_id:C.myId, followee_id:parrain }) }
   toast(u ? 'Tu suis maintenant ' + u.h : 'Invitation acceptée');

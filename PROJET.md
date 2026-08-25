@@ -15,7 +15,7 @@
 > Les sections sont **pondérées** : `🔴 structurant`, `🟠 important`,
 > `🟡 secondaire`. La pondération dit où porter l'attention quand le temps manque.
 >
-> Dernière mise à jour : 25 août 2026 · app en `v5.3` · 26 migrations · non ouvert aux testeurs.
+> Dernière mise à jour : 25 août 2026 · app en `v5.3` · 27 migrations · non ouvert aux testeurs.
 
 ---
 
@@ -396,25 +396,29 @@ Chacune a une raison. La rouvrir sans raison nouvelle fait perdre du temps.
 Rien de ce qui suit n'a jamais été exercé. Ce sont les chemins par lesquels
 un testeur ENTRE dans l'app : s'ils cassent, il n'y a pas de contournement.
 
-**1. Le plafond d'e-mails — le piège de la journée d'onboarding.**
-L'offre gratuite de Supabase envoie **2 e-mails d'authentification par
-heure**, toutes catégories confondues : confirmations d'inscription,
-réinitialisations de mot de passe, liens magiques. Douze personnes qui
-s'inscrivent le même soir, et dix restent dehors. Deux issues :
-- couper « Confirm email » dans Auth → l'inscription passe sans e-mail
-  (mais la réinitialisation de mot de passe, elle, en aura toujours besoin) ;
-- brancher un SMTP externe — Resend, Brevo, offres gratuites — ce qui monte
-  la limite à 30 inscriptions par heure. **C'est la bonne réponse**, et elle
-  reste à coût nul.
+**1. Les e-mails — décision prise le 25 août 2026.**
+La confirmation d'e-mail est **désactivée** : l'adresse ne sert qu'à se
+connecter et à récupérer son mot de passe. À revoir au lancement.
+
+Le plafond reste à connaître : l'offre gratuite de Supabase envoie **2
+e-mails d'authentification par heure**, réinitialisations de mot de passe
+comprises. Confirmation coupée, l'inscription n'en consomme plus — mais si
+trois testeurs oublient leur mot de passe le même soir, le troisième
+attendra. La sortie, le jour du lancement, est un SMTP externe (Resend,
+Brevo, offres gratuites) qui monte à 30 par heure et reste à coût nul.
 
 **2. L'inscription de bout en bout.** Jamais testée : créer un compte n'est
-pas une chose qu'un agent fait. Or les migrations 20 ET 21 ont toutes deux
+pas une chose qu'un agent fait. Or les migrations 20, 21 ET 27 ont toutes
 réécrit `handle_new_user`. Si le déclencheur casse, **personne n'entre**.
 À essayer : un pseudo accentué (« José »), un de 20 signes, un déjà pris.
 
-**3. Le lien d'invitation.** La capture du `?inv=` est vérifiée ; la
-création de l'abonnement après une vraie inscription ne l'est pas. C'est
-pourtant le chemin exact par lequel les douze arrivent.
+**3. Le lien d'invitation — corrigé le 25 août 2026, à re-tester.**
+Il ne marchait pas : on n'était pas amis à l'arrivée. Le parrain transitait
+par le `localStorage`, entre le clic sur le lien et la première ouverture
+connectée — chaîne qui casse dès que le parcours change de navigateur.
+Il voyage désormais dans les métadonnées de l'inscription, et c'est le
+déclencheur en base qui pose l'abonnement (migration 27). **À vérifier avec
+un vrai compte jetable.**
 
 **4. La réinitialisation du mot de passe.** Jamais parcourue en entier.
 Des testeurs oublieront leur mot de passe — c'est certain, pas probable.
