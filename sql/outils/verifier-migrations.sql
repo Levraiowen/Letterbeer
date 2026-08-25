@@ -106,6 +106,11 @@ with controles as (
                   and policyname in ('read_avatars','read_beers')
                   and roles::text like '%public%'),
     'sql/20-correctifs-audit.sql'
+
+  union all select 21, 'Pseudo gardé jusqu''à 20 signes',
+    exists (select 1 from pg_proc
+            where proname='handle_new_user' and prosrc like '%left(base_handle, 20)%'),
+    'sql/21-pseudo-non-tronque.sql'
 )
 select ordre,
        quoi,

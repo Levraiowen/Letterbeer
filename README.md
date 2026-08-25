@@ -87,6 +87,7 @@ sql/17-durcissement-stockage.sql dossier par personne, taille et types
 sql/18-durcissement-ecritures.sql prix et profil : colonnes gelées
 sql/19-colonnes-privees.sql    colonnes retirées à la lecture — lire l'entête
 sql/20-correctifs-audit.sql    correctifs d'audit — lire le contrôle préalable
+sql/21-pseudo-non-tronque.sql  pseudo gardé jusqu'à 20 signes
 ```
 
 La migration `19` retire le droit de lire certaines colonnes de `profiles`

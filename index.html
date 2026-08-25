@@ -1346,6 +1346,17 @@ const Store = {
       mybof: old?old.mybof:0, pass: old?old.pass:0, rep: old?old.rep:[] };
     if (i >= 0) C.reviews[i] = rec; else C.reviews.unshift(rec);
   },
+  /* Retirer son propre avis. La règle r_delete l'autorise depuis le premier
+     schéma, mais rien ne l'appelait : quelqu'un qui regrettait un avis n'avait
+     d'autre issue que de supprimer son compte. C'est le raisonnement de la
+     migration 16 pour les réponses, jamais appliqué aux avis — qui sont
+     pourtant bien plus visibles.
+     Les réponses reçues partent avec, par cascade en base. */
+  async deleteReview(id) {
+    const { error } = await sb.from('reviews').delete().eq('id', id).eq('user_id', C.myId);
+    if (error) throw error;
+    C.reviews = C.reviews.filter(r => r.id !== id);
+  },
 
   logs: () => C.logs,
   /* la ligne de journal qui porte la note pour cette bière, s'il y en a une */
@@ -1655,7 +1666,11 @@ async function doAuth(){
     const p2 = document.getElementById('lg-p2').value;
     if(p !== p2) return toast('Les deux mots de passe ne correspondent pas');
     const h = document.getElementById('lg-h').value.trim().toLowerCase().replace(/\s+/g,'_');
-    if(!/^[a-z0-9_.]{3,20}$/.test(h)) return toast('Pseudo : 3 à 20 caractères, sans espace');
+    // L'ancien message parlait d'espaces, qui sont en fait acceptés (convertis
+    // en _ juste au-dessus), et taisait ce qui bloque vraiment : les accents.
+    // « José » et « Jérôme » étaient refusés avec une explication fausse.
+    if(!/^[a-z0-9_.]{3,20}$/.test(h))
+      return toast('Pseudo : 3 à 20 signes, sans accent — lettres, chiffres, point ou _');
     if(!document.getElementById('lg-a').classList.contains('on'))
       return toast('Il faut confirmer que tu as 18 ans ou plus');
     const { error } = await sb.auth.signUp({
@@ -1689,6 +1704,10 @@ function stars(n,cls){let s='';
   return '<span class="stars '+(cls||'')+'">'+s+'</span>'}
 const fmtRate = r => String(r).replace('.',',');
 const fmtEuro = v => v.toFixed(2).replace('.',',') + ' €';
+/* L'écran des repères fabriquait ses nombres à la main, avec le point décimal
+   anglais : « 3.5 L », « 17.2 unités », « 0.00 € » — au milieu de calories
+   pourtant écrites « 1 704 ». Un seul écran, deux conventions. */
+const fmtDec  = (v, n=1) => Number(v || 0).toFixed(n).replace('.',',');
 function shortName(n){ return n.length > 42 ? n.slice(0,40).trim()+'…' : n }
 /* x = afficher le degré · mini = vignette de liste.
    En dessous de ~40 px, le bandeau nom + brasserie devient illisible et
@@ -1883,8 +1902,11 @@ function revHTML(r){
      +'<button class="act'+(r.pass?' on':'')+'" onclick="doPass(\''+id+'\')">'+I.pass+'</button>'
      +'<button class="act bof'+(r.mybof?' on':'')+'" onclick="doBof(\''+id+'\')" '
        +'aria-label="Bof, moins d\'avis comme celui-ci">'+I.flat+'</button>'
-     +(mine?'':'<button class="act flag" onclick="openReport(\'review\',\''+id+'\')"'
-       +' aria-label="Signaler cet avis">'+I.flag+'</button>')
+     +(mine
+       ? '<button class="act flag" onclick="doDeleteReview(\''+id+'\')"'
+         +' aria-label="Supprimer mon avis">'+I.x+'</button>'
+       : '<button class="act flag" onclick="openReport(\'review\',\''+id+'\')"'
+         +' aria-label="Signaler cet avis">'+I.flag+'</button>')
    +'</div>'
    +(r.mybof?'<div class="privcount">'+I.lock+'Bof enregistré — personne d\'autre ne le voit</div>':'')
    +(mine&&r.bof?'<div class="privcount">'+I.lock+r.bof+' bof sur ton avis — visible par toi seul</div>':'')
@@ -2143,7 +2165,7 @@ function vUser(){
      ? '<div class="locked">'+I.lock_l+'<br>'+esc(u.h)+' garde ses stats privées.<br>Ses avis restent publics.</div>'
      : '<div class="statgrid">'
         +'<div class="stat"><div class="k">Canettes</div><div class="v">'+u.cans+'</div></div>'
-        +'<div class="stat"><div class="k">Note moyenne</div><div class="v">'+u.avg.toFixed(1)+' <small>/5</small></div></div>'
+        +'<div class="stat"><div class="k">Note moyenne</div><div class="v">'+fmtDec(u.avg)+' <small>/5</small></div></div>'
         +'<div class="stat"><div class="k">Cette semaine</div><div class="v">'+u.week+' <small>canettes</small></div></div>'
         +'<div class="stat"><div class="k">Style dominant</div><div class="v" style="font-size:16px">'+esc(u.top)+'</div></div>'
        +'</div>')
@@ -2182,11 +2204,11 @@ function vMe(){
    +(above?'<div class="note warn">'+I.info+'<span>Semaine au-dessus de ta moyenne habituelle. Rien d\'alarmant en soi, c\'est juste bon à savoir.</span></div>':'')
    +'<div class="sec" style="padding-top:22px"><h2>Tes repères</h2><span class="eyebrow">suivi perso</span></div>'
    +'<div class="repere">'
-     +'<div class="rp-row"><span class="k">Volume total</span><span class="v">'+(s.cl/100).toFixed(1)+' <small>L</small></span></div>'
-     +'<div class="rp-row"><span class="k">Unités d\'alcool</span><span class="v">'+s.un+' <small>· '+s.unAvg+'/semaine</small></span></div>'
-     +'<div class="rp-row"><span class="k">Dépenses</span><span class="v">'+s.eur.toFixed(2)+' € <small>· '+s.eurAvg+' €/semaine</small></span></div>'
+     +'<div class="rp-row"><span class="k">Volume total</span><span class="v">'+fmtDec(s.cl/100)+' <small>L</small></span></div>'
+     +'<div class="rp-row"><span class="k">Unités d\'alcool</span><span class="v">'+fmtDec(s.un)+' <small>· '+fmtDec(s.unAvg)+'/semaine</small></span></div>'
+     +'<div class="rp-row"><span class="k">Dépenses</span><span class="v">'+fmtEuro(s.eur)+' <small>· '+fmtEuro(s.eurAvg)+'/semaine</small></span></div>'
      +'<div class="rp-row"><span class="k">Calories</span><span class="v">'+s.kcal.toLocaleString('fr-FR')+' <small>kcal · '+s.kcalAvg.toLocaleString('fr-FR')+'/semaine</small></span></div>'
-     +'<div class="rp-row"><span class="k">Prix moyen la canette</span><span class="v">'+(s.eur/Math.max(s.n,1)).toFixed(2)+' €</span></div>'
+     +'<div class="rp-row"><span class="k">Prix moyen la canette</span><span class="v">'+fmtEuro(s.eur/Math.max(s.n,1))+'</span></div>'
    +'</div>'
    +'<div class="note">'+I.info+'<span>Repère de Santé publique France : pas plus de 10 verres par semaine, pas plus de 2 par jour, et des jours sans. Un verre standard = 1 unité.</span></div>'
    +'<div class="lockrow" style="margin-top:16px"><span class="t">'
@@ -2195,7 +2217,7 @@ function vMe(){
      +'<span class="sw'+(me.priv?' on':'')+'" onclick="togglePriv()"></span></div>'
    +'<div class="statgrid">'
     +'<div class="stat"><div class="k">Total</div><div class="v">'+s.n+' <small>canettes</small></div></div>'
-    +'<div class="stat"><div class="k">Note moyenne</div><div class="v">'+s.avg.toFixed(1)+' <small>/5</small></div></div>'
+    +'<div class="stat"><div class="k">Note moyenne</div><div class="v">'+fmtDec(s.avg)+' <small>/5</small></div></div>'
    +'</div>'
    +'<div class="sec" style="padding-top:24px"><h2>Répartition de tes notes</h2></div>'
    +'<div class="histo">'+h.map((v,i)=>'<div class="bar'+(v===mx?' hi':'')+'" style="height:'+(v/mx*100)+'%;animation-delay:'+(i*.05)+'s"></div>').join('')+'</div>'
@@ -2324,8 +2346,27 @@ async function saveProfileEdit(){
    l'alcool : il met en avant les jours sans, pas le nombre de canettes.
    Récompenser la quantité serait à la fois malsain et intenable en France. */
 function semaine(){
-  const debut = Date.now() - 7*864e5;
-  const L = Store.drunk().filter(l => new Date(l.at).getTime() > debut);
+  /* Sept jours CALENDAIRES : d'il y a six jours à minuit, jusqu'à maintenant.
+
+     La version précédente prenait une fenêtre glissante de 168 heures. Or une
+     telle fenêtre chevauche HUIT jours du calendrier dès qu'elle ne démarre
+     pas à minuit pile. Quelqu'un qui boit chaque soir et ouvre son récap dans
+     la journée touchait donc huit jours, et lisait « -1 jour sans alcool sur
+     sept » — sur l'écran même qui est censé mettre en avant les jours sans.
+     Le chiffre partait aussi dans l'image partagée.
+
+     Cet écran raisonne en jours, il compte donc en jours. Le « cette semaine »
+     du profil et des copains reste, lui, sur 168 heures glissantes : c'est ce
+     que calcule all_public_stats côté base, et une bascule en jours
+     calendaires y introduirait un décalage de fuseau entre le serveur, qui
+     vit en UTC, et le téléphone. */
+  const aube = new Date(); aube.setHours(0,0,0,0);
+  const debut = aube.getTime() - 6*864e5;
+  const fin = Date.now();
+  const L = Store.drunk().filter(l => {
+    const t = new Date(l.at).getTime();
+    return t >= debut && t <= fin;      // borne haute : une date future ne compte pas
+  });
   const jours = new Set(L.map(l => new Date(l.at).toDateString()));
   const st = {};
   L.forEach(l => { const b=Store.beer(l.b); if(b) st[b.st]=(st[b.st]||0)+1 });
@@ -2336,7 +2377,9 @@ function semaine(){
     eur: L.reduce((s,l)=>s+(l.paid||0),0),
     un: +L.reduce((s,l)=>{const b=Store.beer(l.b);return s+(b?Store.units(b):0)},0).toFixed(1),
     kcal: L.reduce((s,l)=>s+Store.kcal(Store.beer(l.b)),0),
-    sans: 7 - jours.size,
+    // jours.size ne peut plus dépasser 7 ; le garde-fou reste, un chiffre
+    // négatif sur cet écran-là ne doit jamais pouvoir réapparaître
+    sans: Math.max(0, 7 - jours.size),
     style: top ? top[0] : '—',
     du: new Date(debut).toLocaleDateString('fr-FR',{day:'numeric',month:'short'}),
     au: new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'short'})
@@ -2394,7 +2437,7 @@ function dessinerSemaine(s){
   x.fillStyle='#8D8D93'; x.font='400 34px Inter, sans-serif';
   x.fillText('sur les sept derniers', W/2, 634);
 
-  const cases=[[s.n,'canettes'],[s.un,'unités'],[fmtEuro(s.eur),'dépensés'],
+  const cases=[[s.n,'canettes'],[fmtDec(s.un),'unités'],[fmtEuro(s.eur),'dépensés'],
                [s.kcal.toLocaleString('fr-FR'),'calories']];
   cases.forEach((v,i)=>{
     const cx = W/2 + (i%2 ? 230 : -230), cy = 800 + Math.floor(i/2)*200;
@@ -2661,6 +2704,21 @@ async function doDeleteLog(id){
   render();
 }
 
+/* Retirer son propre avis. Il n'existait aucun chemin pour le faire : ni
+   bouton, ni geste. Vider le texte et enregistrer ne faisait rien non plus,
+   en silence — l'avis restait publié. */
+async function doDeleteReview(id){
+  const r = Store.review(id);
+  const n = r ? r.rep.length : 0;
+  if(!confirm('Supprimer ton avis ?\n\n'
+    + (n ? 'Les ' + n + ' réponse' + (n>1?'s':'') + ' qu\'il a reçue' + (n>1?'s':'') + ' partiront avec.\n\n' : '')
+    + 'Ta note sur cette bière, elle, reste — c\'est le journal qui la porte.')) return;
+  const ok = await act(()=>Store.deleteReview(id), 'Suppression impossible — réessaie');
+  if(ok===null) return;
+  toast('Avis supprimé');
+  closeSheet(); render();
+}
+
 async function doUncountLog(id){
   const r = await act(()=>Store.uncountLog(id), 'Modification impossible — réessaie');
   if(r===null) return;
@@ -2817,7 +2875,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v3.6';
+const APP_VERSION = 'v3.7';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
@@ -2999,7 +3057,15 @@ function drawSheet(){
          +'<div><input class="f" placeholder="Achetée où ?" value="'+esc(SH.shop)+'" oninput="SH.shop=this.value"></div>'
          +'<div><input class="f" inputmode="decimal" placeholder="Prix payé €" value="'+esc(SH.paid)+'" oninput="SH.paid=this.value"></div>'
          +'</div>'
-         +'<div class="hint" style="margin-top:8px">Le prix payé alimente le suivi communautaire et tes dépenses. Laisse vide si tu ne veux pas.</div>'
+         // Laisser vide n'annule pas la dépense : le meilleur relevé
+         // communautaire sert d'estimation. Autant le dire, et montrer le
+         // montant qui sera retenu — l'ancien texte laissait croire
+         // l'inverse (« Laisse vide si tu ne veux pas »).
+         +'<div class="hint" style="margin-top:8px">Ton prix alimente le suivi communautaire.'
+           +(bp ? ' Si tu le laisses vide, on estime ta dépense à <b>'+fmtEuro(bp.p)
+                  +'</b>, le meilleur relevé du moment.'
+                : ' Si tu le laisses vide et que personne n\'a encore relevé cette canette, la dépense comptera zéro.')
+         +'</div>'
        : '<div class="hint" style="margin-top:10px">Note de mémoire : ni prix ni magasin à renseigner.</div>')
    +'</div>'
    +'<button class="cta" onclick="saveLog()">'+(SH.already?'Enregistrer les modifications':'Enregistrer')+'</button>'
@@ -3165,6 +3231,7 @@ async function saveLog(){
   if(!SH.rate && !paid){ toast('Mets au moins une note pour enregistrer'); return }
   const bp = Store.bestPrice(b);
   const compte = SH.already ? 1 : SH.counted;
+  let avisRetire = false;
   try {
     if (SH.already && SH.logId) {
       // la note existe déjà : on la corrige, on n'en crée pas une seconde
@@ -3174,7 +3241,11 @@ async function saveLog(){
                            paid: compte ? (paid || (bp?bp.p:0)) : 0, shop: compte ? (SH.shop||null) : null });
     }
     if(compte && SH.shop && paid) await Store.addPrice(b.id, SH.shop, paid);
-    if(SH.txt.trim()) await Store.addReview({ b:b.id, r:SH.rate, liked:SH.liked, t:SH.txt.trim() });
+    // Vider le champ et enregistrer, c'est retirer son avis. Avant, ce geste
+    // ne faisait rien du tout et l'avis restait en ligne sans le dire.
+    const monAvis = Store.myReview(b.id);
+    if(SH.txt.trim())   await Store.addReview({ b:b.id, r:SH.rate, liked:SH.liked, t:SH.txt.trim() });
+    else if(monAvis)  { await Store.deleteReview(monAvis.id); avisRetire = true; }
   } catch(e){
     console.error(e);
     toast('Enregistrement impossible — réessaie');
@@ -3184,7 +3255,7 @@ async function saveLog(){
               : compte ? ' enregistrée'
               : ' notée · pas comptée comme bue';
   closeSheet();
-  toast(b.n + (SH.rate?' · '+fmtRate(SH.rate)+'★':'') + verbe);
+  toast(b.n + (SH.rate?' · '+fmtRate(SH.rate)+'★':'') + verbe + (avisRetire ? ' · avis retiré' : ''));
   render(); bump();
 }
 
