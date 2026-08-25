@@ -15,7 +15,7 @@
 > Les sections sont **pondérées** : `🔴 structurant`, `🟠 important`,
 > `🟡 secondaire`. La pondération dit où porter l'attention quand le temps manque.
 >
-> Dernière mise à jour : 25 août 2026 · app en `v5.0` · 26 migrations.
+> Dernière mise à jour : 25 août 2026 · app en `v5.1` · 26 migrations.
 
 ---
 
@@ -380,6 +380,42 @@ Chacune a une raison. La rouvrir sans raison nouvelle fait perdre du temps.
 - **`sql/outils/verifier-migrations.sql`** dit à tout moment quelles migrations
   sont passées. Il ne modifie rien. **Le lancer avant de conclure qu'un bug est
   dans le code** : il a déjà évité une fausse piste.
+
+---
+
+## 8 bis. 🟠 Connecter un agent à Supabase (MCP) — envisagé, non fait
+
+Supabase propose un serveur MCP hébergé qui laisse un agent interroger la
+base. **Décision : à faire en lecture seule uniquement.**
+
+```bash
+claude mcp add --scope project --transport http supabase   "https://mcp.supabase.com/mcp?project_ref=wleilfzebdkudkteezht&read_only=true&features=database,docs,debugging"
+```
+puis `/mcp` dans Claude Code pour l'authentification OAuth.
+
+**Ce que ça apporte ici**, concrètement : vérifier l'état réel du schéma au
+lieu de le déduire de 26 migrations, détecter une dérive entre les fichiers
+et la base — on a perdu du temps une fois sur `prices_figer` faute de
+pouvoir regarder —, lire les alertes du Security Advisor directement, et
+travailler la qualité du catalogue sur des requêtes plutôt qu'à l'aveugle.
+
+**Les garde-fous, non négociables :**
+
+- `read_only=true`. Supabase déconseille explicitement de brancher un agent
+  sur une base de production, et celle-ci **est** la production : il n'y a
+  qu'un projet, avec les journaux réels de vraies personnes.
+- `project_ref` renseigné, pour qu'un agent ne voie pas d'autres projets.
+- `features` limité — surtout pas `account`.
+- **Les migrations restent manuelles.** Les fichiers numérotés et commentés
+  sont la mémoire du projet ; un agent qui applique du SQL directement
+  effacerait cette trace, et supprimerait l'étape de relecture qui a déjà
+  rattrapé des erreurs.
+
+**Le risque propre à ce projet** : l'injection par le contenu. Les noms de
+bières viennent d'Open Food Facts, un wiki public — c'est exactement le
+canal qui a porté la faille XSS. Un agent qui lit la base lit donc du texte
+écrit par des inconnus. Ce texte est une **donnée**, jamais une consigne :
+un agent ne doit jamais exécuter ce qu'il y trouve écrit.
 
 ---
 
