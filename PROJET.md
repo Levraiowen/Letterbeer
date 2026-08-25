@@ -15,7 +15,7 @@
 > Les sections sont **pondérées** : `🔴 structurant`, `🟠 important`,
 > `🟡 secondaire`. La pondération dit où porter l'attention quand le temps manque.
 >
-> Dernière mise à jour : 25 août 2026 · app en `v4.4` · 25 migrations, toutes passées.
+> Dernière mise à jour : 25 août 2026 · app en `v4.6` · 25 migrations, toutes passées.
 
 ---
 
@@ -159,18 +159,6 @@ signalements, édition et suppression de fiches — réservé aux administrateur
 - **Descriptions toutes identiques**, générées à l'import. Trois phrases sur les
   cinquante fiches les plus consultées valent mieux que cinq cents fiches
   jumelles.
-
-### Accessibilité — mesuré, pas supposé
-
-- **`--dimmer` (#5C5C63) est à 2,98:1 sur le fond**, sous le seuil AA de
-  4,5:1 et même sous celui du grand texte (3:1). Il sert aux libellés de
-  section (« 7 derniers jours », « selon tes goûts ») et aux étoiles vides,
-  **à 11 px**. Correctif chiffré, teinte bleutée conservée : `#78787F` donne
-  4,51:1, `#808087` donne 5,04:1. `--dim`, `--text` et `--accent` passent tous.
-  *Décision en attente : ça touche la direction artistique.*
-- **Les sous-onglets « Bières / Avis / Journal » font 29 px de haut**, contre
-  44 px recommandés. C'est la navigation la plus utilisée de l'app, au pouce.
-  *Décision en attente, même raison.*
 
 ### Dette technique assumée
 
@@ -316,6 +304,19 @@ Chacune a une raison. La rouvrir sans raison nouvelle fait perdre du temps.
   dans le récap (l'écran parle de jours), fenêtre glissante de 168 h ailleurs
   (c'est ce que calcule `all_public_stats`, et passer en jours calendaires y
   introduirait un décalage de fuseau serveur/téléphone).
+- **L'échelle de gris est calibrée sur l'accessibilité, pas à l'œil.**
+  `--dimmer` était à 2,98:1 — sous le seuil AA, et utilisé à la fois pour les
+  libellés à 11 px et pour la barre de navigation inactive. Remonter cette
+  seule valeur l'aurait collée à `--dim` : on a écarté **les deux** pour
+  garder 10 L\* entre elles. Toute retouche de `--dim` ou `--dimmer` doit
+  vérifier ces deux choses ensemble — le contraste ET l'écart perçu.
+- **Les cibles tactiles sont étendues par pseudo-élément, jamais par la
+  taille visuelle**, et verticalement seulement : élargir des commandes
+  posées côte à côte leur ferait se voler des clics au bord.
+- **Les avatars de 28 px sont conformes et restent tels quels.** Le critère
+  WCAG 2.2 AA demande 24×24 px ; le 44 est la recommandation d'Apple, donc
+  du AAA. Ils bénéficient en plus de l'exception « commande équivalente à
+  côté » : le pseudo adjacent porte la même action.
 - **La déduction de famille ne touche pas `beers.style`.** Le style reste la
   donnée d'Open Food Facts, jamais une supposition de notre part.
 
