@@ -15,7 +15,7 @@
 > Les sections sont **pondérées** : `🔴 structurant`, `🟠 important`,
 > `🟡 secondaire`. La pondération dit où porter l'attention quand le temps manque.
 >
-> Dernière mise à jour : 25 août 2026 · app en `v5.2` · 26 migrations.
+> Dernière mise à jour : 25 août 2026 · app en `v5.3` · 26 migrations.
 
 ---
 
@@ -331,6 +331,10 @@ Chacune a une raison. La rouvrir sans raison nouvelle fait perdre du temps.
   atteindre, et borner l'unique contenu d'un écran reviendrait à mettre un
   bouton devant sa raison d'être. Le jour où le volume rendra le rendu lourd,
   la réponse sera un chargement progressif au défilement, pas un « voir plus ».
+  **Et « Top de l'année » non plus** : il en montre dix et renvoie au
+  classement complet par un lien. Un Top qui se déplie à trois cents n'est
+  plus un classement, c'est le catalogue trié par note — l'onglet Recherche
+  le fait déjà, on n'en fait pas une seconde version.
 - **« À découvrir » suit le réseau, pas le hasard** : ceux qui te suivent
   sans réciprocité d'abord, puis les amis d'amis par nombre de liens
   communs, puis les comptes récemment actifs. Chaque ligne affiche sa
