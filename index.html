@@ -1290,6 +1290,10 @@ const motsUtiles = t => sansAccent(String(t||'')).split(/[^a-z0-9.]+/)
   .filter(w => w && !MOTS_VIDES.has(w));
 function brasserieUtile(b){
   if (!b || !b.br) return '';
+  // « Inconnue » est le remplacement posé par la migration 03 quand la
+  // brasserie n'était que le nom du produit recopié. L'afficher n'apprend
+  // rien : autant ne rien mettre. Onze fiches sont dans ce cas.
+  if (/^inconnue?$/i.test(b.br.trim())) return '';
   const nom = motsUtiles(b.n), br = motsUtiles(b.br).filter(w => w.length >= 3);
   if (!nom.length || !br.length) return b.br;
   const couvert = m => nom.some(n => n === m || (m.length >= 4 && (n.startsWith(m) || m.startsWith(n))));
@@ -3446,7 +3450,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v4.7';
+const APP_VERSION = 'v4.8';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
