@@ -507,17 +507,17 @@ textarea:focus,input.f:focus,select.f:focus{border-color:var(--accent);box-shado
    s'applique pas à un span resté en display:inline */
 .vign{flex:0 0 32px;width:32px;display:block}
 .can.mini{aspect-ratio:2/3;border-radius:7px}
-.can.mini .ph-fg{padding:8% 8%;background-position:center}
+.can.mini .ph-fg{padding:8%;object-position:center}
 .can.mini .rim{height:20%}
 .can.mini .pull{width:9px;height:4px}
 .can .ph{position:absolute;inset:0;background:#0E0E11;overflow:hidden}
 /* fond : la photo agrandie et floutée, pour qu'aucune bande vide n'apparaisse */
-.can .ph-bg{position:absolute;inset:-12%;background-size:cover;background-position:center;
+.can .ph-bg{position:absolute;inset:-12%;width:124%;height:124%;object-fit:cover;
   filter:blur(15px) saturate(1.35) brightness(.5);transform:scale(1.08)}
 /* premier plan : la photo entière, jamais rognée, donc un cadrage
    identique d'une bière à l'autre quel que soit le format d'origine */
-.can .ph-fg{position:absolute;inset:0;background-size:contain;background-repeat:no-repeat;
-  background-position:center 42%;padding:6% 8% 22%;background-origin:content-box}
+.can .ph-fg{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;
+  object-position:center 42%;padding:6% 8% 22%}
 .can.hasph .ph::after{content:'';position:absolute;inset:0;pointer-events:none;
   background:linear-gradient(to bottom,rgba(14,14,17,.45),transparent 30%)}
 .can.hasph .band{background:linear-gradient(to top,rgba(0,0,0,.94),rgba(0,0,0,.6) 72%,transparent)!important;
@@ -711,6 +711,8 @@ textarea:focus,input.f:focus,select.f:focus{border-color:var(--accent);box-shado
 @media (hover:hover){.onb-c:hover{border-color:#3a3a41}}
 /* --- prix suivis --- */
 .tprix{flex:0 0 auto;font-family:'Space Grotesk';font-size:13.5px;font-weight:600;color:var(--accent)}
+.lienclair{background:none;border:0;padding:0;cursor:pointer;font-family:inherit;
+  font-size:inherit;color:var(--accent);text-decoration:underline;text-underline-offset:2px}
 .seeall{background:none;border:0;cursor:pointer;font-family:inherit;font-size:11px;
   letter-spacing:.06em;text-transform:uppercase;color:var(--accent);padding:2px 0}
 .seeall:hover{text-decoration:underline;text-underline-offset:3px}
@@ -798,7 +800,7 @@ const logoLockup = (px, home) =>
    fait office de « remonter en haut ». */
 function goHome(){
   const dejaLa = S.tab==='home' && S.sub==='bieres';
-  S.tab='home'; S.sub='bieres'; S.dir=1; S.q=''; S.filt=null;
+  S.tab='home'; S.sub='bieres'; S.dir=1; S.q=''; S.filts=[];
   $('#view').scrollTop=0;
   render(!dejaLa);
 }
@@ -853,6 +855,35 @@ if (typeof supabase === 'undefined' || !supabase.createClient) {
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const PRICE_TTL = 21;
+
+/* Catalogue des filtres. Le groupe sert à savoir lesquels s'excluent :
+   choisir « moins de 5° » doit désactiver « plus de 8° », sinon on offre
+   une combinaison qui ne peut rien renvoyer. */
+const FILTRES = {
+  'IPA':            { groupe:'style',  test: b => /ipa/i.test(b.st) },
+  'Lager':          { groupe:'style',  test: b => /lager|pils|blonde/i.test(b.st) },
+  'Stout':          { groupe:'style',  test: b => /stout|porter/i.test(b.st) },
+  'Sour':           { groupe:'style',  test: b => /sour|gose/i.test(b.st) },
+  'Blanche':        { groupe:'style',  test: b => /blanche/i.test(b.st) },
+  'Ambrée':         { groupe:'style',  test: b => /ambr|brune|double|triple/i.test(b.st) },
+  'Sans alcool':    { groupe:'degre',  test: b => b.abv < 1.2 },
+  'Moins de 5°':    { groupe:'degre',  test: b => b.abv >= 1.2 && b.abv < 5 },
+  'Plus de 8°':     { groupe:'degre',  test: b => b.abv > 8 },
+  'France':         { groupe:'pays',   test: b => b.pays === 'France' },
+  'Moins de 3 €':   { groupe:'prix',   test: b => { const p = Store.bestPrice(b); return p && p.p < 3 } },
+  '33 cl':          { groupe:'format', test: b => b.cl === 33 },
+  '50 cl':          { groupe:'format', test: b => b.cl === 50 }
+};
+
+const TRIS = {
+  'note-desc':  'Mieux notées',
+  'note-asc':   'Moins bien notées',
+  'prix-asc':   'Moins chères',
+  'prix-desc':  'Plus chères',
+  'degre-desc': 'Plus fortes',
+  'degre-asc':  'Plus légères',
+  'nom':        'Ordre alphabétique'
+};
 
 /* Familles de goûts du premier lancement, traduites en styles réels du
    catalogue. Regrouper évite de faire choisir entre dix-huit styles à
@@ -975,7 +1006,7 @@ async function hydrate() {
   C.reviews = (reviews.data||[]).map(r => ({
     id: r.id,
     u: r.user_id === C.myId ? 'me' : r.user_id,     // les vues testent u === 'me'
-    b: r.beer_id, r: r.rating, liked: r.liked, t: r.body,
+    b: r.beer_id, r: r.rating, liked: r.liked, t: r.body, at: r.created_at,
     ch: r.cheers_count,
     bof: r.user_id === C.myId ? r.bofs_count : 0,   // total visible par l'auteur seul
     mych: (reactions.data||[]).some(x => x.review_id===r.id && x.kind==='cheer') ? 1 : 0,
@@ -1082,17 +1113,37 @@ const Store = {
   beer:     id => C.beers.find(b => b.id === id),
   rating:   id => C.ratings[id] || 0,
   count:    id => C.counts[id] || 0,
-  search(q, f) {
+  /* Les filtres se cumulent, sauf à l'intérieur d'un même groupe : deux
+     tranches de degré ne peuvent pas être vraies en même temps, et les
+     proposer ensemble ne renverrait jamais rien. Les styles, eux, se
+     cumulent entre eux — on cherche l'un OU l'autre. */
+  search(q, filtres, tri) {
     let l = C.beers.filter(b => b.ok || b.mine);
-    if (q) l = l.filter(b => (b.n+' '+b.br+' '+b.st).toLowerCase().includes(q.toLowerCase()));
-    if (f && f !== 'Toutes') l = l.filter(b => {
-      if (f === '< 5°') return b.abv < 5;
-      if (f === '> 8°') return b.abv > 8;
-      if (f === 'France') return b.pays === 'France';
-      if (f === 'Moins de 3 €') { const p = Store.bestPrice(b); return p && p.p < 3; }
-      return b.st.toLowerCase().includes(f.toLowerCase());
-    });
-    return l;
+    if (q) {
+      const t = q.toLowerCase();
+      l = l.filter(b => (b.n+' '+b.br+' '+b.st).toLowerCase().includes(t));
+    }
+    const actifs = (filtres || []).filter(Boolean);
+    const styles = actifs.filter(f => FILTRES[f] && FILTRES[f].groupe === 'style');
+    const autres = actifs.filter(f => FILTRES[f] && FILTRES[f].groupe !== 'style');
+    if (styles.length)
+      l = l.filter(b => styles.some(f => FILTRES[f].test(b)));
+    autres.forEach(f => { l = l.filter(b => FILTRES[f].test(b)) });
+    return Store.trier(l, tri);
+  },
+
+  trier(l, tri) {
+    const prix = b => { const p = Store.bestPrice(b); return p ? p.p : Infinity };
+    const cmp = {
+      'note-desc':  (a,b) => Store.rating(b.id) - Store.rating(a.id),
+      'note-asc':   (a,b) => Store.rating(a.id) - Store.rating(b.id),
+      'prix-asc':   (a,b) => prix(a) - prix(b),
+      'prix-desc':  (a,b) => (prix(b)===Infinity?-1:prix(b)) - (prix(a)===Infinity?-1:prix(a)),
+      'degre-desc': (a,b) => b.abv - a.abv,
+      'degre-asc':  (a,b) => a.abv - b.abv,
+      'nom':        (a,b) => a.n.localeCompare(b.n, 'fr')
+    }[tri || 'note-desc'];
+    return [...l].sort(cmp);
   },
   async submitBeer(d) {
     const { data, error } = await sb.from('beers').insert({
@@ -1143,7 +1194,36 @@ const Store = {
   },
 
   reviews: () => C.reviews,
-  popular: () => [...C.reviews].sort((a,b) => b.ch - a.ch),
+  /* ---- classement des avis ----
+     Modèle de Hacker News, éprouvé depuis vingt ans : un score d'intérêt
+     divisé par l'âge élevé à une puissance. Il donne exactement ce qu'on
+     cherche ici — un avis qui récolte cinq trinques en deux heures passe
+     devant un avis qui en a récolté cinq en une semaine, et tout finit
+     par redescendre, ce qui renouvelle la liste sans intervention.
+
+     Deux écarts assumés par rapport à l'original :
+
+     · La gravité est à 1,35 et non 1,8. Hacker News reçoit des milliers
+       de contributions par jour et doit faire de la place vite ; entre
+       amis, un bon avis mérite de tenir plusieurs jours.
+
+     · Le logarithme amortit les trinques : passer de une à deux compte
+       davantage que de vingt à vingt et une. Sans ça, à cette échelle,
+       un seul avis capterait toute la première place durablement.
+
+     Les « bofs » n'entrent pas dans le calcul, et c'est délibéré : ils
+     sont privés. Les faire peser sur un classement public les rendrait
+     déductibles en observant les mouvements de la liste. */
+  chaleur(r) {
+    const trinques = Math.max(0, r.ch || 0);
+    const echanges = (r.rep || []).length;
+    // les réponses valent moins qu'une approbation, mais comptent
+    const interet = Math.log10(trinques + 1) * 2 + Math.log10(echanges + 1);
+    const heures = r.at ? Math.max(0, (Date.now() - new Date(r.at)) / 36e5) : 0;
+    return (interet + 0.15) / Math.pow(heures + 2, 1.35);
+  },
+  populaires: () => [...C.reviews].sort((a,b) => Store.chaleur(b) - Store.chaleur(a)),
+  recents:    () => [...C.reviews].sort((a,b) => new Date(b.at||0) - new Date(a.at||0)),
   byBeer:  id => C.reviews.filter(r => r.b === id),
   byUser:  k  => C.reviews.filter(r => r.u === k),
   friendReviews() { const f = Store.following(); return C.reviews.filter(r => f.includes(r.u)); },
@@ -1174,7 +1254,7 @@ const Store = {
     if (error) throw error;
     const i = C.reviews.findIndex(r => r.u === 'me' && r.b === o.b);
     const old = i >= 0 ? C.reviews[i] : null;
-    const rec = { id:data.id, u:'me', b:o.b, r:o.r, liked:o.liked?1:0, t:o.t,
+    const rec = { id:data.id, u:'me', b:o.b, r:o.r, liked:o.liked?1:0, t:o.t, at:data.created_at,
       ch: old?old.ch:0, bof: old?old.bof:0, mych: old?old.mych:0,
       mybof: old?old.mybof:0, pass: old?old.pass:0, rep: old?old.rep:[] };
     if (i >= 0) C.reviews[i] = rec; else C.reviews.unshift(rec);
@@ -1505,7 +1585,7 @@ async function doAuth(){
 /* =========================================================
    ÉTAT + VUES
    ========================================================= */
-const S={tab:'home',sub:'bieres',q:'',filt:null,dir:1,user:null,back:'home'};
+const S={tab:'home',sub:'bieres',q:'',filts:[],tri:'note-desc',avisTri:'chauds',dir:1,user:null,back:'home'};
 /* L'onglet Journal ne s'affiche que s'il y a des articles publiés. Un
    onglet vide coûte plus cher qu'un onglet en moins, et celui-ci
    s'allumera tout seul le jour où l'agrégateur publiera. */
@@ -1526,21 +1606,36 @@ function shortName(n){ return n.length > 42 ? n.slice(0,40).trim()+'…' : n }
 /* x = afficher le degré · mini = vignette de liste.
    En dessous de ~40 px, le bandeau nom + brasserie devient illisible et
    recouvre la photo : on ne garde que l'image. */
+/* Open Food Facts sert plusieurs tailles de la même photo, distinguées
+   par un nombre en fin d'adresse : 100, 200, 400. La 400 pèse 20 Ko, la
+   100 en pèse 2,5. Une vignette de 32 px n'a aucun besoin de la grande. */
+function photoTaille(url, px){
+  return url ? url.replace(/\.(100|200|400|full)\.jpg$/i, '.'+px+'.jpg') : url;
+}
+
+/* Les images sont des <img loading="lazy"> et non des fonds CSS : un fond
+   se télécharge toujours, même hors écran. Sur une liste de cinq cents
+   bières, ça faisait cinq cents requêtes au chargement. */
+function couche(img, classe){
+  return '<img class="'+classe+'" src="'+esc(img)+'" alt="" loading="lazy" decoding="async">';
+}
+
 function can(b,x,mini){
   if(!b) return '<div class="can'+(mini?' mini':'')+'"><div class="rim"><span class="pull"></span></div></div>';
   const img = safeUrl(b.img);
-  if(mini) return '<div class="can mini'+(img?' hasph':'')+'">'
-    + (img ? '<div class="ph"><div class="ph-bg" style="background-image:url('+img+')"></div>'
-             +'<div class="ph-fg" style="background-image:url('+img+')"></div></div>'
+  if(mini){
+    const p = photoTaille(img, 100);
+    return '<div class="can mini'+(img?' hasph':'')+'">'
+    + (img ? '<div class="ph">'+couche(p,'ph-bg')+couche(p,'ph-fg')+'</div>'
            : '<div class="rim"><span class="pull"></span></div>')
     + '</div>';
+  }
   // Deux couches : la photo entière au premier plan, et la même en fond
   // flouté pour remplir la case. Les photos d'Open Food Facts ont des
   // cadrages très variables — sans ça, l'une montre la canette entière
   // et la voisine un gros plan sur trois lettres.
   return '<div class="can'+(img?' hasph':'')+'">'
-   + (img ? '<div class="ph"><div class="ph-bg" style="background-image:url('+img+')"></div>'
-            +'<div class="ph-fg" style="background-image:url('+img+')"></div></div>'
+   + (img ? '<div class="ph">'+couche(img,'ph-bg')+couche(img,'ph-fg')+'</div>'
           : '<div class="rim"><span class="pull"></span></div>')
    + (b.ok ? '' : '<span class="pend">en attente</span>')
    + '<div class="body"><div class="band" style="background:'+safeColor(b.c)+'"><div class="brow">'
@@ -1649,8 +1744,17 @@ function vHome(){
         +'<span style="text-align:right">'+stars(Store.rating(b.id))
         +'<br><span style="font-size:10.5px;color:var(--dimmer)">'+Store.rating(b.id).toFixed(1)+'</span></span></button>').join('');
   }
-  if(S.sub==='avis') return '<div class="sec"><h2>Avis populaires</h2><span class="eyebrow">tout le monde</span></div>'
-    +Store.popular().map(revHTML).join('');
+  if(S.sub==='avis'){
+    const chauds = S.avisTri !== 'recents';
+    const L = chauds ? Store.populaires() : Store.recents();
+    return '<div class="sec"><h2>'+(chauds?'En ce moment':'Les derniers')+'</h2>'
+      +'<button class="seeall" onclick="S.avisTri=\''+(chauds?'recents':'chauds')+'\';render()">'
+      +(chauds?'Voir les plus récents':'Voir les plus commentés')+'</button></div>'
+      +(L.length
+        ? L.map(revHTML).join('')
+        : '<div class="empty">Personne n\'a encore écrit d\'avis.<br><br>'
+          +'Ouvre une bière et donne le tien : c\'est ce qui fait vivre cet onglet.</div>');
+  }
   return '<div class="sec"><h2>Le journal</h2><span class="eyebrow">la canette dans la presse</span></div>'
     +Store.arts().map(a=>{
       const c=safeColor(a.c), url=safeUrl(a.url);
@@ -1823,28 +1927,59 @@ async function envoyerReponse(){
   fermerReponse();
 }
 
-/* Un filtre déjà actif se désactive au second appui : « Toutes » n'est
-   qu'un affichage de l'absence de filtre, pas une valeur à part. */
-function setFilt(c){
-  S.filt = (c === 'Toutes' || S.filt === c) ? null : c;
+
+/* ---------- recherche ---------- */
+function vSearch(){
+  const list = Store.search(S.q, S.filts, S.tri);
+  const actifs = S.filts.length;
+  return '<div class="searchbar">'+I.search
+    +'<input id="q" placeholder="Bière, brasserie, style…" value="'+esc(S.q)+'" oninput="S.q=this.value;live()">'
+    +(S.q?'<button class="icon-btn" style="padding:2px" onclick="S.q=\'\';render()">'+I.x+'</button>':'')+'</div>'
+    +'<div class="chips">'
+      +'<button class="chip'+(actifs?'':' on')+'" onclick="videFiltres()">Toutes</button>'
+      +Object.keys(FILTRES).map(c=>'<button class="chip'+(S.filts.includes(c)?' on':'')
+        +'" onclick="basculeFiltre(\''+esc(c)+'\')">'+esc(c)+'</button>').join('')
+    +'</div>'
+    +'<div class="sec"><h2>'+list.length+' canette'+(list.length>1?'s':'')+'</h2>'
+      +'<button class="seeall" onclick="ouvrirTri()">'+esc(TRIS[S.tri]||TRIS['note-desc'])+' ▾</button></div>'
+    +(actifs>1?'<div class="hint" style="text-align:left;padding:0 20px 6px">'
+      +actifs+' filtres combinés · <button class="lienclair" onclick="videFiltres()">tout effacer</button></div>':'')
+    +(list.length?'<div class="grid">'+list.map(b=>cell(b)).join('')+'</div>'
+      :'<div class="empty">Rien ne correspond'+(actifs?' à cette combinaison':'')+'.<br><br>'
+       +(actifs?'<button class="chip" onclick="videFiltres()">Effacer les filtres</button>'
+              :'<button class="chip" onclick="openNewBeer(S.q)">Proposer cette bière</button>')+'</div>');
+}
+
+/* Un filtre s'ajoute aux autres, sauf s'il appartient au même groupe :
+   il remplace alors son voisin plutôt que de créer une combinaison
+   impossible — on ne peut pas être à la fois sous 5° et au-dessus de 8°. */
+function basculeFiltre(c){
+  const def = FILTRES[c]; if(!def) return;
+  if (S.filts.includes(c)) {
+    S.filts = S.filts.filter(f => f !== c);
+  } else if (def.groupe === 'style') {
+    S.filts = [...S.filts, c];                       // les styles se cumulent
+  } else {
+    S.filts = S.filts.filter(f => !FILTRES[f] || FILTRES[f].groupe !== def.groupe).concat(c);
+  }
   $('#view').scrollTop = 0;
   render();
 }
 
-/* ---------- recherche ---------- */
-function vSearch(){
-  const cats=['Toutes','IPA','Lager','Stout','Sour','Saison','Blanche','< 5°','> 8°','France','Moins de 3 €'];
-  const list=Store.search(S.q,S.filt);
-  return '<div class="searchbar">'+I.search
-    +'<input id="q" placeholder="Bière, brasserie, style…" value="'+esc(S.q)+'" oninput="S.q=this.value;live()">'
-    +(S.q?'<button class="icon-btn" style="padding:2px" onclick="S.q=\'\';render()">'+I.x+'</button>':'')+'</div>'
-    +'<div class="chips">'+cats.map(c=>'<button class="chip'+((S.filt||'Toutes')===c?' on':'')
-      +'" onclick="setFilt(\''+esc(c)+'\')">'+esc(c)+'</button>').join('')+'</div>'
-    +'<div class="sec"><h2>'+list.length+' canette'+(list.length>1?'s':'')+'</h2><span class="eyebrow">trié par note</span></div>'
-    +(list.length?'<div class="grid">'+[...list].sort((a,b)=>Store.rating(b.id)-Store.rating(a.id)).map(b=>cell(b)).join('')+'</div>'
-      :'<div class="empty">Rien ne correspond.<br><br>'
-       +'<button class="chip" onclick="openNewBeer(S.q)">Proposer cette bière</button></div>');
+function videFiltres(){ S.filts = []; $('#view').scrollTop = 0; render() }
+
+function ouvrirTri(){
+  const sh=$('#sheet'); sh.classList.add('open');
+  sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
+   +'<div class="sheet-bar"><b>Trier par</b><button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
+   +'<div class="sheet-body"><div class="onb-l" style="margin-top:16px">'
+   +Object.keys(TRIS).map(k=>'<button class="onb-c'+(S.tri===k?' on':'')
+     +'" onclick="choisirTri(\''+k+'\')"><b>'+esc(TRIS[k])+'</b></button>').join('')
+   +'</div><div class="hint" style="margin-top:14px">Les bières sans relevé de prix '
+   +'passent en fin de liste sur les tris par prix.</div></div></div>';
 }
+function choisirTri(k){ S.tri=k; closeSheet(); $('#view').scrollTop=0; render() }
+
 /* La recherche redessine tout l'écran : on attend la fin de la frappe
    plutôt que de le faire à chaque caractère. */
 let _liveT;
@@ -2808,6 +2943,36 @@ async function confirmPrice(i){
   drawSheet(); toast('Merci, relevé confirmé');
 }
 function closeSheet(){$('#sheet').classList.remove('open');$('#sheet').innerHTML=''}
+
+/* ---------- changer d'onglet en glissant ----------
+   Uniquement sur l'accueil, où les onglets forment une suite. Le geste
+   doit être franchement horizontal : sinon il volerait le défilement
+   vertical, qui est de loin le plus fréquent. */
+(function glisserEntreOnglets(){
+  const DISTANCE = 60;   // px minimum pour valider
+  const RATIO    = 1.7;  // le mouvement doit être 1,7 fois plus horizontal que vertical
+  let x0=0, y0=0, suit=false;
+
+  document.addEventListener('touchstart', e => {
+    suit = false;
+    if (S.tab !== 'home' || e.touches.length !== 1) return;
+    if ($('#sheet').classList.contains('open')) return;      // une feuille est ouverte
+    if (e.target.closest('.rail, input, textarea, select, .lightbox')) return;
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; suit = true;
+  }, {passive:true});
+
+  document.addEventListener('touchend', e => {
+    if (!suit) return;
+    suit = false;
+    const t = e.changedTouches && e.changedTouches[0]; if(!t) return;
+    const dx = t.clientX - x0, dy = t.clientY - y0;
+    if (Math.abs(dx) < DISTANCE || Math.abs(dx) < Math.abs(dy) * RATIO) return;
+    const L = subs(), i = L.indexOf(S.sub);
+    const j = dx < 0 ? i + 1 : i - 1;          // vers la gauche = onglet suivant
+    if (j < 0 || j >= L.length) return;
+    setSub(L[j]);
+  }, {passive:true});
+})();
 
 /* ---------- fermer une feuille en la tirant vers le bas ----------
    Le geste ne démarre que si le contenu est déjà en haut : sinon on
