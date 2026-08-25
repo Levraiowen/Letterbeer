@@ -592,3 +592,16 @@ plus que le détail.*
   exactement une note.
 - Contraste et cibles tactiles mesurés, reportés ci-dessus, non corrigés :
   ils touchent la direction artistique.
+
+**25 août 2026 — blocage et modération (v5.5, migrations 28 et 29)**
+
+- **Blocage** vérifié en conditions réelles : bloquer fait tomber les avis
+  de 8 à 6, et surtout **une requête directe à l'API renvoie 0 ligne** —
+  c'est bien la base qui refuse, pas l'écran qui masque. Le déblocage
+  restitue tout. La personne disparaît aussi des suggestions.
+- **Modération** vérifiée : un terme de la liste est refusé par la base
+  avec un message lisible, et « putain de bonne canette » passe — la
+  permissivité est réelle, pas déclarative.
+- Les idées prises à Letterboxd sont en §6 bis, classées par rapport
+  intérêt/effort. **Le top 4 de canettes favorites est le prochain
+  chantier évident** : presque gratuit, très identitaire.
