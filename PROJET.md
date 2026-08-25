@@ -341,6 +341,14 @@ Chacune a une raison. La rouvrir sans raison nouvelle fait perdre du temps.
 - **`is_admin` ne se donne que depuis le SQL Editor**, où `auth.uid()` vaut
   `NULL`. Le déclencheur `profiles_freeze` bloque toute promotion venue du
   navigateur — c'est voulu, et c'est ce qui rend la modération incassable.
+- **Le Security Advisor de Supabase signale `beer_ratings` en « Security
+  Definer View », en CRITICAL. NE PAS appliquer le correctif réflexe.**
+  Poser `security_invoker = true` ferait respecter le RLS de `logs` à la
+  vue, donc chacun n'agrégerait plus que son propre journal : la note
+  publique deviendrait la note personnelle, et les bières non notées par
+  soi-même n'afficheraient plus rien. L'agrégation à travers le RLS est le
+  but de cette vue. Le vrai problème, lui, était que la vue restait lisible
+  sans compte — refermé en migration 26.
 - **`sql/outils/verifier-migrations.sql`** dit à tout moment quelles migrations
   sont passées. Il ne modifie rien. **Le lancer avant de conclure qu'un bug est
   dans le code** : il a déjà évité une fausse piste.

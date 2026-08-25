@@ -100,6 +100,7 @@ sql/22-noms-detoures.sql       nettoie les noms importés restés sales
 sql/23-bio.sql                 bio courte sur le profil
 sql/24-populaires-semaine.sql  la semaine devient une vraie fenêtre de 7 jours
 sql/25-moderation.sql          droits de modération — lire l'entête
+sql/26-vue-notes.sql           beer_ratings fermée aux visiteurs — lire l'entête
 ```
 
 La migration `19` retire le droit de lire certaines colonnes de `profiles`

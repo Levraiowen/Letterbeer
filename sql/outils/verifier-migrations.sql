@@ -127,6 +127,10 @@ with controles as (
     exists (select 1 from pg_policies
             where schemaname='public' and policyname='b_delete'),
     'sql/25-moderation.sql'
+
+  union all select 25, 'Vue des notes fermée aux visiteurs',
+    not has_table_privilege('anon', 'beer_ratings', 'select'),
+    'sql/26-vue-notes.sql'
 )
 select ordre,
        quoi,
