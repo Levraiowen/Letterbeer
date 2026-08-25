@@ -111,6 +111,12 @@ with controles as (
     exists (select 1 from pg_proc
             where proname='handle_new_user' and prosrc like '%left(base_handle, 20)%'),
     'sql/21-pseudo-non-tronque.sql'
+
+  union all select 22, 'Bio du profil',
+    exists (select 1 from information_schema.column_privileges
+            where grantee='authenticated' and privilege_type='SELECT'
+              and table_name='profiles' and column_name='bio'),
+    'sql/23-bio.sql'
 )
 select ordre,
        quoi,

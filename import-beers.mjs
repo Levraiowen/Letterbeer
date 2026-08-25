@@ -135,15 +135,66 @@ function classer(p) {
   return null;                                   // à trancher à l'œil
 }
 
+/* ---------- nettoyage des noms ----------
+ *
+ * Ces règles vivaient dans sql/03-nettoyage-noms.sql, une migration qui n'a
+ * tourné qu'une fois. Le script d'import, lui, n'en avait aucune : chaque
+ * passage réintroduisait des noms bruts d'Open Food Facts. D'où les « 8.6 Red »
+ * suivis d'une espace, et les « Alhambra Beer   Premium Lager » retrouvés en
+ * base longtemps après. Leur place est ici, à l'entrée, pas dans un rattrapage.
+ *
+ * Un écart volontaire avec la migration 03 : elle remplaçait la brasserie par
+ * « Inconnue » quand elle valait le nom, mais faisait ce test AVANT de nettoyer
+ * le nom. « Jupiler 33cl » ne déclenchait donc rien, puis devenait « Jupiler » —
+ * d'où la quinzaine de fiches qui affichent « Jupiler · Jupiler ». On compare
+ * ici au nom brut, ce que la règle visait réellement : une brasserie qui n'est
+ * que le nom du produit recopié.
+ */
+const PACK = /\d+\s*[x×]\s*\d+([.,]\d+)?\s*(cl|ml)/i;
+
+function nettoyerNom(nom, brasserie) {
+  let n = nom;
+  n = n.replace(/\s*\d+([.,]\d+)?\s*(cl|ml)\b/gi, '');                 // « 33cl », « 25 cl »
+  n = n.replace(/\s*\d+([.,]\d+)?\s*(°|degrés?|degres?)\s*(alcool)?/gi, ''); // « 8° », « 6.5 DEGRE ALCOOL »
+  n = n.replace(/\s*\d+([.,]\d+)?\s*%\s*v(ol)?\.?\b/gi, '');           // « 8%V », « 9% vol. »
+  n = n.replace(/\s*\d+([.,]\d+)?\s*%(?!\w)/gi, '');                   // « 6,8% »
+
+  // la brasserie répétée à l'intérieur du nom
+  if (brasserie) {
+    const i = n.toLowerCase().indexOf(brasserie.toLowerCase());
+    if (i >= 0 && n.trim().toLowerCase() !== brasserie.toLowerCase())
+      n = n.slice(0, i) + n.slice(i + brasserie.length);
+  }
+
+  n = n.replace(/\s{2,}/g, ' ').trim();
+  n = n.replace(/[\s\-.,]+$/, '').trim();
+
+  // casse propre si le nom était tout en majuscules
+  if (n && n === n.toUpperCase() && /[A-ZÀ-Ý]/.test(n))
+    n = n.toLowerCase().replace(/(^|[\s'’\-])([a-zà-ÿ])/g, (_, a, b) => a + b.toUpperCase());
+
+  return n;
+}
+
 /* ---------- filtre qualité ---------- */
 function clean(p) {
-  const name  = (p.product_name || '').trim();
-  const brand = (p.brands || '').split(',')[0].trim();
+  const nomBrut = (p.product_name || '').trim();
+
+  // Un pack : le volume annoncé est celui du pack entier, pas d'une canette.
+  // La donnée est fausse en plus du nom sale, donc on écarte plutôt que de
+  // corriger à moitié.
+  if (PACK.test(nomBrut)) return null;
+
+  let brand = (p.brands || '').split(',')[0].trim();
+  if (brand && brand.toLowerCase() === nomBrut.toLowerCase()) brand = 'Inconnue';
+
+  const name  = nettoyerNom(nomBrut, brand === 'Inconnue' ? '' : brand);
   const cl    = parseCl(p.quantity);
   const abv   = p.nutriments?.alcohol_value ?? p.nutriments?.alcohol_100g ?? null;
   const img   = p.image_front_url || p.image_front_small_url || null;
 
-  if (name.length < 2 || name.length > 80) return null;
+  // 3 et non 2 : en dessous, ce qui reste après nettoyage n'est plus un nom
+  if (name.length < 3 || name.length > 80) return null;
   if (!brand) return null;
   if (!cl || cl < 10 || cl > 56) return null;    // au-delà, ce n'est plus une canette
   if (abv === null || abv < 0 || abv > 20) return null;

@@ -399,6 +399,7 @@ button.lockup:active{transform:scale(.96)}
   background:var(--surface-2);border:1px solid var(--border);color:var(--text);display:flex;align-items:center;justify-content:center}
 .phead .h{font-family:'Space Grotesk';font-size:17px;font-weight:600}
 .phead .s{font-size:12px;color:var(--dim)}
+.phead .pbio{font-size:12.5px;line-height:1.45;color:var(--dim);text-align:center;max-width:290px;margin:8px auto 0;white-space:pre-wrap;overflow-wrap:anywhere}
 .follrow{display:flex;gap:20px;margin-top:4px}
 .follrow button,.follrow div{background:none;border:0;color:var(--text);cursor:pointer;text-align:center;
   font-family:'Inter';padding:6px 10px;border-radius:10px;transition:background .2s,transform .14s}
@@ -930,7 +931,12 @@ const C = { me:null, myId:null, email:'', isAdmin:false, users:{}, beers:[], rat
 /* ============================ AUTHENTIFICATION ============================ */
 const Auth = {
   async current() {
-    const { data } = await sb.auth.getUser();
+    const { data, error } = await sb.auth.getUser();
+    /* Une panne réseau ici renvoyait null, donc l'écran de connexion : on
+       paraissait déconnecté alors que la session était intacte. On ne rend
+       null que lorsqu'il n'y a réellement pas de session ; le reste est une
+       vraie erreur, qui sera réessayée. */
+    if (error && !/session|not authenticated|missing|no user/i.test(error.message || '')) throw error;
     return data.user || null;
   },
   async sendLink(email, handle, ageOk) {
@@ -968,8 +974,9 @@ const Auth = {
    répondent que pour l'appelant.
    ⚠️ Une colonne ajoutée à ces tables doit l'être ici ET dans le grant de
       la migration 19, sinon l'app ne la verra pas. */
-const COL_PROFILS = 'id, handle, avatar_url, city, private_stats, created_at,'
-                  + ' pref_familles, pref_degre, onboarded';
+const COL_PROFILS_BASE = 'id, handle, avatar_url, city, private_stats, created_at,'
+                       + ' pref_familles, pref_degre, onboarded';
+const COL_PROFILS = COL_PROFILS_BASE + ', bio';
 const COL_AVIS    = 'id, user_id, beer_id, rating, liked, body, cheers_count, created_at';
 
 /* PostgREST plafonne silencieusement chaque réponse — mille lignes chez
@@ -979,27 +986,75 @@ const COL_AVIS    = 'id, user_id, beer_id, rating, liked, body, cheers_count, cr
 
    Chaque requête est triée sur une clé unique : sans ordre déterministe,
    la pagination peut sauter ou dupliquer des lignes entre deux pages. */
+/* Le démarrage lance une quinzaine de requêtes. Rendre hydrate() strict a
+   supprimé le « catalogue vide sans explication », mais a créé l'excès
+   inverse : UNE seule d'entre elles qui échoue, et tout l'écran bascule sur
+   « Connexion impossible » — alors qu'un rechargement suffisait à repartir.
+
+   Les causes passagères sont connues et se réparent seules : le jeton qui
+   arrive à expiration pendant que les requêtes partent en parallèle, un
+   projet Supabase qui sort de veille, un réseau mobile qui hoquette. On
+   réessaie donc, et pour un jeton périmé on rafraîchit la session plutôt
+   que d'insister bêtement.
+
+   Ce qui n'est PAS passager — un droit refusé, une colonne inconnue —
+   remonte immédiatement, sans réessai : c'est un bug, il doit se voir. */
+const PASSAGER = /failed to fetch|network|timeout|timed out|socket|502|503|504|jwt|expired|refresh token/i;
+
+async function reessayer(quoi, fn, essais = 3) {
+  for (let n = 1; ; n++) {
+    try { return await fn() }
+    catch (e) {
+      const msg = String((e && e.message) || e);
+      if (n >= essais || !PASSAGER.test(msg)) throw e;
+      if (/jwt|expired|refresh token/i.test(msg)) {
+        try { await sb.auth.refreshSession() } catch (_) {}
+      }
+      console.warn('reprise ' + n + '/' + (essais-1) + ' — ' + quoi + ' : ' + msg);
+      await new Promise(r => setTimeout(r, 300 * n));
+    }
+  }
+}
+
 const PAGE = 1000;
 async function chargerTout(quoi, construire) {
   const tout = [];
   for (let debut = 0; ; debut += PAGE) {
-    const { data, error } = await construire().range(debut, debut + PAGE - 1);
-    if (error) throw new Error(quoi + ' : ' + error.message);
-    tout.push(...(data || []));
-    if (!data || data.length < PAGE) break;
+    const page = await reessayer(quoi, async () => {
+      const { data, error } = await construire().range(debut, debut + PAGE - 1);
+      if (error) throw new Error(quoi + ' : ' + error.message);
+      return data || [];
+    });
+    tout.push(...page);
+    if (page.length < PAGE) break;
   }
   return { data: tout };
 }
 
+/* La colonne bio arrive avec la migration 23. Si elle n'est pas encore
+   passée, on recharge sans elle plutôt que de basculer sur « Connexion
+   impossible » : l'ordre entre le déploiement et les migrations ne doit
+   pas pouvoir casser l'app. La 19 impose déjà de pousser AVANT de migrer ;
+   exiger l'inverse ici aurait rendu la règle intenable. */
+async function chargerProfils() {
+  try {
+    return await chargerTout('profils', () => sb.from('profiles').select(COL_PROFILS).order('id'));
+  } catch (e) {
+    if (!/bio/i.test(String((e && e.message) || e))) throw e;
+    console.warn('colonne bio absente — migration 23 pas encore passée');
+    return chargerTout('profils', () => sb.from('profiles').select(COL_PROFILS_BASE).order('id'));
+  }
+}
+
 async function hydrate() {
-  const user = await Auth.current();
+  const user = await reessayer('session', () => Auth.current());
   if (!user) return false;
   C.myId = user.id;
   C.email = user.email || '';
 
   const [profiles, beers, ratings, reviews, replies, reactions, logs, prices, follows, watch, wish] =
     await Promise.all([
-      chargerTout('profils', () => sb.from('profiles').select(COL_PROFILS).order('id')),
+      chargerProfils(),
       chargerTout('bières',  () => sb.from('beers').select('*').order('id')),
       chargerTout('notes',   () => sb.from('beer_ratings').select('*').order('beer_id')),
       chargerTout('avis',    () => sb.from('reviews').select(COL_AVIS)
@@ -1025,7 +1080,7 @@ async function hydrate() {
   for (const p of profiles.data || []) {
     const u = {
       h: p.handle, i: initials(p.handle), c: hueOf(p.id), photo: p.avatar_url,
-      priv: p.private_stats ? 1 : 0, ville: p.city || '—',
+      priv: p.private_stats ? 1 : 0, ville: p.city || '—', bio: p.bio || '',
       foll: followingIds.includes(p.id) ? 1 : 0,
       fme:  followerIds.includes(p.id) ? 1 : 0,
       cans: 0, avg: 0, top: '—', week: 0, act: []
@@ -1045,7 +1100,7 @@ async function hydrate() {
   /* is_admin ne se lit plus dans la table : la colonne désignait le compte
      administrateur à tout le monde. La fonction, elle, ne répond que pour
      l'appelant. Elle existe depuis la migration 08. */
-  const { data: estAdmin, error: adminErr } = await sb.rpc('is_admin');
+  const { data: estAdmin, error: adminErr } = await reessayer('droits', () => sb.rpc('is_admin'));
   if (adminErr) console.warn('droits d\'administration indéterminés', adminErr.message);
   C.isAdmin = !!estAdmin;
 
@@ -1054,7 +1109,7 @@ async function hydrate() {
      le voit ». Il passe par une fonction filtrée sur l'appelant. */
   const mesBofs = {};
   {
-    const { data: bofs, error: bofsErr } = await sb.rpc('mes_bofs');
+    const { data: bofs, error: bofsErr } = await reessayer('bofs', () => sb.rpc('mes_bofs'));
     if (bofsErr) console.warn('compte des bofs indisponible', bofsErr.message);
     else for (const b of bofs || []) mesBofs[b.review_id] = b.bofs;
   }
@@ -1228,6 +1283,57 @@ const Store = {
   beer:     id => C.beers.find(b => b.id === id),
   rating:   id => C.ratings[id] || 0,
   count:    id => C.counts[id] || 0,
+
+  /* ---- classement du Top ----
+     La moyenne brute ne suffisait pas. Deux défauts, pas un :
+
+     · une canette notée 5 par UNE personne passait devant une notée 4,8
+       par douze — la moyenne ignore la confiance qu'on peut lui accorder ;
+     · les égalités à 5,0 étaient légion, puisque beaucoup de fiches n'ont
+       qu'une seule note.
+
+     On applique donc une moyenne bayésienne, le procédé d'IMDb : tant qu'une
+     canette a peu de notes, sa moyenne est tirée vers la moyenne générale du
+     catalogue, et elle ne s'en détache qu'à mesure que les notes s'accumulent.
+     Le seuil est volontairement bas — on est entre amis, pas sur un site à
+     des milliers de votes.
+
+     S'ajoute un bonus d'engagement : la part de coups de cœur et le nombre
+     d'avis écrits. Prendre le temps d'écrire sur une canette, ou lui coller
+     un cœur, en dit plus que de lui poser une note en passant. Le bonus est
+     plafonné à environ un quart de point : il départage des canettes proches,
+     il ne peut pas hisser une 3,5 au-dessus d'une 4,5. */
+  SEUIL_CONFIANCE: 3,
+  topAnnee(n) {
+    const notees = Store.beers().filter(b => Store.count(b.id) > 0);
+    if (!notees.length) return [];
+    const moyGenerale = notees.reduce((s, b) => s + Store.rating(b.id), 0) / notees.length;
+
+    // un seul passage sur les avis, au lieu d'un filtre par canette
+    const parBiere = {};
+    for (const r of C.reviews) {
+      const e = parBiere[r.b] || (parBiere[r.b] = { avis: 0, coeurs: 0 });
+      e.avis++; if (r.liked) e.coeurs++;
+    }
+
+    const score = b => {
+      const R = Store.rating(b.id), v = Store.count(b.id);
+      const m = Store.SEUIL_CONFIANCE;
+      const bayes = (v * R + m * moyGenerale) / (v + m);
+      const e = parBiere[b.id] || { avis: 0, coeurs: 0 };
+      return bayes
+           + 0.15 * (e.avis ? e.coeurs / e.avis : 0)
+           + 0.10 * Math.log10(1 + e.avis);
+    };
+
+    return notees
+      .map(b => ({ b, s: score(b) }))
+      // à score égal, la canette la plus notée passe devant : c'est la
+      // mieux établie, pas juste la mieux placée
+      .sort((x, y) => y.s - x.s || Store.count(y.b.id) - Store.count(x.b.id))
+      .slice(0, n || 5)
+      .map(x => x.b);
+  },
   /* Les filtres se cumulent, sauf à l'intérieur d'un même groupe : deux
      tranches de degré ne peuvent pas être vraies en même temps, et les
      proposer ensemble ne renverrait jamais rien. Les styles, eux, se
@@ -1341,7 +1447,17 @@ const Store = {
   recents:    () => [...C.reviews].sort((a,b) => new Date(b.at||0) - new Date(a.at||0)),
   byBeer:  id => C.reviews.filter(r => r.b === id),
   byUser:  k  => C.reviews.filter(r => r.u === k),
-  friendReviews() { const f = Store.following(); return C.reviews.filter(r => f.includes(r.u)); },
+  /* Chez les copains, on lit par ordre de publication, le plus récent en
+     tête. Le classement « chaud » de l'onglet Avis répond à une autre
+     question — « qu'est-ce qui intéresse le groupe » — et n'a rien à faire
+     ici : sur une poignée de personnes qu'on suit, ce qu'on veut savoir,
+     c'est ce qu'elles ont écrit depuis la dernière fois. Trier par
+     popularité ferait remonter le même avis pendant des jours. */
+  friendReviews() {
+    const f = Store.following();
+    return C.reviews.filter(r => f.includes(r.u))
+                    .sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0));
+  },
   review:  id => C.reviews.find(r => r.id === id),
 
   async cheer(id) { return react(id, 'cheer'); },
@@ -1502,10 +1618,12 @@ const Store = {
     const patch = {};
     if (p.h != null)     patch.handle = p.h.trim().toLowerCase();
     if (p.ville != null) patch.city   = p.ville.trim() || null;
+    if (p.bio   != null) patch.bio    = p.bio.trim().slice(0, MAX_BIO) || null;
     const { error } = await sb.from('profiles').update(patch).eq('id', C.myId);
     if (error) throw error;
     if (patch.handle) { C.me.h = patch.handle; C.me.i = initials(patch.handle) }
     if ('city' in patch) C.me.ville = patch.city || '—';
+    if ('bio'  in patch) C.me.bio   = patch.bio || '';
   },
 
   /* ---- liste d'envies ---- */
@@ -1866,7 +1984,7 @@ function vHome(){
     const V=Store.beers();
     const pop=[...V].sort((a,b)=>Store.count(b.id)-Store.count(a.id)).slice(0,6);
     const nv=V.filter(b=>b.new);
-    const top=[...V].sort((a,b)=>Store.rating(b.id)-Store.rating(a.id)).slice(0,5);
+    const top=Store.topAnnee(5);
     const pourToi = Store.pourToi(6);
     return (pourToi.length
       ? '<div class="sec"><h2>Pour toi</h2><span class="eyebrow">selon tes goûts</span></div>'
@@ -1881,7 +1999,8 @@ function vHome(){
         +'<span class="vign">'+can(b,0,1)+'</span>'
         +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(b.br)+' · '+esc(b.st)+'</span></span>'
         +'<span style="text-align:right">'+stars(Store.rating(b.id))
-        +'<br><span style="font-size:10.5px;color:var(--dimmer)">'+Store.rating(b.id).toFixed(1)+'</span></span></button>').join('');
+        +'<br><span style="font-size:10.5px;color:var(--dimmer)">'+fmtDec(Store.rating(b.id))
+        +' <span style="opacity:.7">· '+Store.count(b.id)+' note'+(Store.count(b.id)>1?'s':'')+'</span></span></span></button>').join('');
   }
   if(S.sub==='avis'){
     const chauds = S.avisTri !== 'recents';
@@ -1972,6 +2091,7 @@ async function doPass(id){ const r = await act(()=>Store.pass(id)); if(!r)return
    Remplace le prompt() du navigateur, qui affichait le nom de domaine
    dans une boîte grise sans rapport avec le reste de l'app. */
 const MAX_REPONSE = 500;   // la base refuse au-delà
+const MAX_BIO     = 250;   // idem — voir sql/23-bio.sql pour le pourquoi de 250
 let REP = { rev:null, txt:'', retour:null };
 
 function doReply(id){
@@ -2192,6 +2312,7 @@ function vUser(){
   return '<div class="phead">'
     +'<div class="pic" style="cursor:default;'+pst+'">'+(ph?'':esc(u.i))+'</div>'
     +'<span class="h">'+esc(u.h)+'</span><span class="s">'+esc(u.ville)+'</span>'
+    +(u.bio?'<span class="pbio">'+esc(u.bio)+'</span>':'')
     +'<button class="follow lg'+(u.foll?' on':'')+'" onclick="follow(\''+esc(k)+'\')">'
       +(u.foll?'Abonné':'S\'abonner')+'</button></div>'
    +(u.priv
@@ -2226,6 +2347,7 @@ function vMe(){
     +'<button class="pic" style="'+pst+'" onclick="pickPhoto()">'+(mph?'':esc(me.i))
       +'<span class="badge">'+I.cam+'</span></button>'
     +'<span class="h">'+esc(me.h)+'</span><span class="s">'+s.n+' canettes · '+s.brews+' brasseries · '+esc(me.ville)+'</span>'
+    +(me.bio?'<span class="pbio">'+esc(me.bio)+'</span>':'')
     +'<div class="follrow">'
       +'<button onclick="openFoll(\'ers\')"><b>'+Store.followers().length+'</b><span>abonnés</span></button>'
       +'<button onclick="openFoll(\'ing\')"><b>'+Store.following().length+'</b><span>abonnements</span></button>'
@@ -2340,10 +2462,10 @@ function vAccount(){
 }
 
 /* ---------- infos perso ---------- */
-let PF={h:'',ville:''};
+let PF={h:'',ville:'',bio:''};
 function openProfileEdit(){
   const me=Store.me();
-  PF={h:me.h,ville:me.ville==='—'?'':me.ville};
+  PF={h:me.h,ville:me.ville==='—'?'':me.ville,bio:me.bio||''};
   const sh=$('#sheet'); sh.classList.add('open');
   sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
    +'<div class="sheet-bar"><b>Infos perso</b><button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
@@ -2354,6 +2476,10 @@ function openProfileEdit(){
    +'<div class="field" style="margin-top:16px"><label>Ville <span style="color:var(--dimmer)">— facultative</span></label>'
      +'<input class="f" id="pf-v" maxlength="60" value="'+esc(PF.ville)+'" oninput="PF.ville=this.value"></div>'
    +'<div class="hint">Elle apparaît sur ton profil. Laisse vide si tu préfères.</div>'
+   +'<div class="field" style="margin-top:16px"><label>Bio <span style="color:var(--dimmer)">— facultative</span></label>'
+     +'<textarea id="pf-b" rows="3" maxlength="'+MAX_BIO+'" placeholder="Ce que tu bois, ce que tu cherches…"'
+     +' oninput="PF.bio=this.value;majCompteurBio()">'+esc(PF.bio)+'</textarea></div>'
+   +'<div class="hint"><span id="pf-bc">'+PF.bio.length+'</span> / '+MAX_BIO+' signes. Visible par tout le monde, comme ton pseudo.</div>'
    +'<div class="ab-card" style="margin-top:22px"><div class="ab-k">Adresse e-mail</div>'
      +'<div class="ab-v">'+esc(C.email||'—')+'</div>'
      +'<div class="ab-p dim" style="margin-top:6px">Elle sert uniquement à te connecter et n\'est jamais montrée '
@@ -2365,10 +2491,15 @@ function openProfileEdit(){
    +'<button class="cta" onclick="saveProfileEdit()">Enregistrer</button>'
    +'</div></div>';
 }
+function majCompteurBio(){
+  const c = document.getElementById('pf-bc');
+  if (c) c.textContent = (PF.bio || '').length;
+}
 async function saveProfileEdit(){
   const h=(PF.h||'').trim().toLowerCase().replace(/\s+/g,'_');
-  if(!/^[a-z0-9_.]{3,20}$/.test(h)) return toast('Pseudo : 3 à 20 caractères, sans espace ni accent');
-  const r = await act(()=>Store.saveProfile({h, ville:PF.ville}),
+  if(!/^[a-z0-9_.]{3,20}$/.test(h)) return toast('Pseudo : 3 à 20 signes, sans accent — lettres, chiffres, point ou _');
+  if((PF.bio||'').trim().length > MAX_BIO) return toast('Bio : ' + MAX_BIO + ' signes maximum');
+  const r = await act(()=>Store.saveProfile({h, ville:PF.ville, bio:PF.bio}),
                       'Ce pseudo est peut-être déjà pris');
   if(r===null) return;
   closeSheet(); toast('Profil mis à jour'); render();
@@ -2908,7 +3039,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v3.9';
+const APP_VERSION = 'v4.0';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
@@ -3394,7 +3525,8 @@ function render(anim){
 /* Écran de repli quand la base ne répond pas. Sur l'offre gratuite, un
    projet sans requête pendant sept jours se met en pause : c'est un cas
    attendu, pas une hypothèse. Mieux vaut l'expliquer qu'une page noire. */
-function drawError(){
+function drawError(cause){
+  const horsLigne = !navigator.onLine;
   document.querySelector('#tabs').style.display='none';
   document.querySelector('#bottombar').style.display='none';
   document.querySelector('#topbar').innerHTML =
@@ -3402,9 +3534,14 @@ function drawError(){
   document.querySelector('#view').innerHTML =
     '<div class="login-mark">'+logoMark(58)+'</div>'
    +'<div class="empty" style="padding:16px 30px 6px">'
-     +'<b style="color:var(--text);display:block;margin-bottom:8px">Connexion impossible</b>'
-     +'La base n\'a pas répondu. Vérifie ta connexion et réessaie ; '
-     +'si ça persiste, préviens-moi, le projet s\'est peut-être mis en veille.</div>'
+     +'<b style="color:var(--text);display:block;margin-bottom:8px">'
+       +(horsLigne ? 'Tu es hors ligne' : 'Connexion impossible')+'</b>'
+     +(horsLigne
+        ? 'Ton téléphone n\'a pas de réseau. L\'app se rouvrira toute seule dès qu\'il revient.'
+        : 'La base n\'a pas répondu, même après plusieurs tentatives. Réessaie ; '
+          +'si ça persiste, préviens-moi, le projet s\'est peut-être mis en veille.')+'</div>'
+   // la cause exacte, en petit : sans elle, impossible de savoir ce qui a lâché
+   +(cause ? '<div class="hint" style="padding:0 30px;opacity:.55">'+esc(cause)+'</div>' : '')
    +'<button class="cta" onclick="location.reload()">Réessayer</button>';
   requestAnimationFrame(ajusterChrome);
 }
@@ -3499,7 +3636,7 @@ majReseau();
     if (!C.onboarded) setTimeout(ouvrirOnboarding, 400);
   } catch (e) {
     console.error(e);
-    drawError();
+    drawError((e && e.message) || String(e));
   }
 })();
 </script>

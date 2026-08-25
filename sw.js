@@ -12,7 +12,7 @@
  *   API/auth   → réseau uniquement, jamais de données périmées ni de jeton en cache
  */
 
-const VERSION = 'lb-v3.9.0';
+const VERSION = 'lb-v4.0.0';
 const COQUE   = VERSION + '-coque';
 const PHOTOS  = VERSION + '-photos';
 

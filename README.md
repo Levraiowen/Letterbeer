@@ -89,6 +89,7 @@ sql/19-colonnes-privees.sql    colonnes retirées à la lecture — lire l'entê
 sql/20-correctifs-audit.sql    correctifs d'audit — lire le contrôle préalable
 sql/21-pseudo-non-tronque.sql  pseudo gardé jusqu'à 20 signes
 sql/22-noms-detoures.sql       nettoie les noms importés restés sales
+sql/23-bio.sql                 bio courte sur le profil
 ```
 
 La migration `19` retire le droit de lire certaines colonnes de `profiles`
