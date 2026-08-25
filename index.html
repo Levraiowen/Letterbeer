@@ -738,10 +738,17 @@ textarea:focus,input.f:focus,select.f:focus{border-color:var(--accent);box-shado
 
    L'extension est volontairement VERTICALE seulement : élargir des commandes
    posées côte à côte, comme les onglets ou la barre du bas, leur ferait se
-   voler des clics au bord. */
-.tab,.nav,.icon-btn,.seeall,.chip,.follow,.titlemark{position:relative}
+   voler des clics au bord.
+
+   Les petits avatars (.av, 28 px) sont laissés tels quels, et c'est délibéré :
+   le critère WCAG 2.2 de niveau AA demande 24×24 px — le 44 est la
+   recommandation d'Apple, soit le niveau AAA. Ils sont donc conformes, et ils
+   bénéficient en plus de l'exception prévue quand une commande équivalente
+   existe à côté : chaque avatar est collé au pseudo, qui porte la même action.
+   Les étirer chevaucherait les cartes voisines dans les fils denses. */
+.tab,.nav,.icon-btn,.seeall,.chip,.follow,.titlemark,.ghost{position:relative}
 .tab::after,.nav::after,.icon-btn::after,.seeall::after,
-.chip::after,.follow::after,.titlemark::after{
+.chip::after,.follow::after,.titlemark::after,.ghost::after{
   content:'';position:absolute;left:0;right:0;top:50%;
   height:100%;min-height:44px;transform:translateY(-50%)}
 .jrow{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--border)}
@@ -3397,7 +3404,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v4.5';
+const APP_VERSION = 'v4.6';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
