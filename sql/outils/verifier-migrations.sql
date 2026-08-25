@@ -66,6 +66,46 @@ with controles as (
   union all select 12, 'Tu es administrateur',
     exists (select 1 from profiles where is_admin),
     'sql/14-correctif-admin.sql'
+
+  union all select 13, 'Goûts et premier lancement',
+    exists (select 1 from information_schema.columns
+            where table_schema='public' and table_name='profiles' and column_name='onboarded'),
+    'sql/15-preferences.sql'
+
+  union all select 14, 'Effacer sa propre réponse',
+    exists (select 1 from pg_policies
+            where schemaname='public' and tablename='replies' and policyname='y_delete'),
+    'sql/16-reponses.sql'
+
+  union all select 15, 'Stockage : dossier par personne',
+    exists (select 1 from storage.buckets
+            where id='avatars' and file_size_limit is not null),
+    'sql/17-durcissement-stockage.sql'
+
+  -- C'est ce contrôle-là qui manquait : sans lui, rien ne disait que la
+  -- migration 18 n'était passée qu'à moitié.
+  union all select 16, 'Relevés de prix figés',
+    exists (select 1 from pg_trigger where tgname='prices_figer'),
+    'sql/18-durcissement-ecritures.sql'
+
+  union all select 17, 'Colonnes privées (bofs, is_admin, age_ok)',
+    exists (select 1 from pg_proc where proname='mes_bofs'),
+    'sql/19-colonnes-privees.sql'
+
+  union all select 18, 'Compteurs d''avis figés',
+    exists (select 1 from pg_trigger where tgname='reviews_figer'),
+    'sql/20-correctifs-audit.sql'
+
+  union all select 19, 'expire_prices refermée',
+    not has_function_privilege('anon', 'expire_prices()', 'execute'),
+    'sql/20-correctifs-audit.sql'
+
+  union all select 20, 'Stockage non énumérable sans compte',
+    not exists (select 1 from pg_policies
+                where schemaname='storage' and tablename='objects'
+                  and policyname in ('read_avatars','read_beers')
+                  and roles::text like '%public%'),
+    'sql/20-correctifs-audit.sql'
 )
 select ordre,
        quoi,
