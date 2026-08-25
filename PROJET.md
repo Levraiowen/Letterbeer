@@ -15,7 +15,7 @@
 > Les sections sont **pondérées** : `🔴 structurant`, `🟠 important`,
 > `🟡 secondaire`. La pondération dit où porter l'attention quand le temps manque.
 >
-> Dernière mise à jour : 25 août 2026 · app en `v5.3` · 27 migrations · non ouvert aux testeurs.
+> Dernière mise à jour : 25 août 2026 · app en `v5.5` · 29 migrations · non ouvert aux testeurs.
 
 ---
 
