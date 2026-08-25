@@ -890,14 +890,37 @@ const TRIS = {
   'nom':        'Ordre alphabétique'
 };
 
-/* Familles de goûts du premier lancement, traduites en styles réels du
-   catalogue. Regrouper évite de faire choisir entre dix-huit styles à
-   quelqu'un qui ouvre l'app pour la première fois. */
-const FAMILLES = {
-  blondes: ['Blonde','Pils','Blanche','Sans alcool'],
-  ipa:     ['IPA','NEIPA','Session IPA','Sour','Gose'],
-  brunes:  ['Brune','Stout','Porter','Imperial Stout','Ambrée','Double','Triple'],
-  tout:    []   // aucun filtre de style
+/* Familles de goûts du premier lancement. Regrouper évite de faire choisir
+   entre dix-huit styles à quelqu'un qui ouvre l'app pour la première fois.
+
+     blondes — Blonde, Pils, Lager, Blanche, Radler, sans alcool
+     ipa     — IPA, NEIPA, Session IPA, Pale Ale, Sour, Gose
+     brunes  — Brune, Stout, Porter, Ambrée, Double, Triple, Bock
+
+   La version précédente comparait le style à une liste de noms, à
+   l'identique. Ça marchait — aucun style déclaré du catalogue n'y
+   échappait — mais ça laissait de côté les fiches sans style du tout.
+
+   Open Food Facts ne renseigne le style que sur 58 % des fiches : 133 des
+   318 canettes n'en ont aucun, et restaient donc invisibles du tri par
+   famille du premier lancement. Quand le style manque, on interroge le nom,
+   où « IPA », « Triple » ou « Blanche » figurent souvent.
+
+   Mesuré sur le catalogue réel : 15 fiches de plus trouvent une famille.
+   C'est peu, et c'est normal — le reste s'appelle « Jupiler », « Skoll » ou
+   « Cerveza », qu'aucune règle ne peut classer honnêtement. La déduction
+   comble ce qu'elle peut sans jamais inventer : pas de correspondance,
+   pas de famille. Elle ne touche pas à beers.style, qui reste la donnée
+   d'Open Food Facts et non une supposition de notre part. */
+const MOTIFS_FAMILLE = {
+  ipa:     /\bn?e?ipa\b|\bpale\s*ale\b|\bsour\b|\bgose\b|acidul/i,
+  brunes:  /\bbrune?\b|\bstout\b|\bporter\b|\bambr[ée]e?\b|\btriple\b|\bdouble\b|\bbrown\b|\bdark\b|\bbock\b|\bnoire?\b/i,
+  blondes: /\bblonde?\b|\bblanche\b|\bpils(e?n(er)?)?\b|\blager\b|\bwit\b|\bweiss\b|\bhell(es)?\b|\bradler\b|sans\s*alcool|\b0[.,]0\b/i
+};
+// l'ordre compte : « Session IPA » doit tomber dans ipa, pas dans blondes
+const classerTexte = t => {
+  for (const f of ['ipa','brunes','blondes']) if (MOTIFS_FAMILLE[f].test(t || '')) return f;
+  return null;
 };
 
 /* cache local */
@@ -1450,16 +1473,20 @@ const Store = {
     if (error) throw error;
     C.me.familles = familles || ''; C.me.degre = degre || ''; C.onboarded = true;
   },
+  /* Famille de goût d'une canette : le style s'il est renseigné, le nom
+     sinon. Jamais une invention — sans correspondance, on renvoie null et
+     la canette sort simplement du tri par famille. */
+  familleDe: b => classerTexte(b.st) || classerTexte(b.n),
+
   pourToi(n) {
     const fams = (C.me.familles || '').split(',').filter(Boolean);
     const deg  = C.me.degre || '';
     if (!fams.length && !deg) return [];
-    const styles = new Set();
-    fams.forEach(f => (FAMILLES[f] || []).forEach(s => styles.add(s)));
+    const cherchees = new Set(fams.filter(f => f !== 'tout'));
     const bues = Store.drunkBeerIds();
     return Store.beers()
       .filter(b => !bues.includes(b.id))
-      .filter(b => !styles.size || styles.has(b.st))
+      .filter(b => !cherchees.size || cherchees.has(Store.familleDe(b)))
       .filter(b => {
         if (!deg || deg === 'tout') return true;
         if (deg === 'leger') return b.abv > 0 && b.abv < 5.5;
@@ -2881,7 +2908,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v3.8';
+const APP_VERSION = 'v3.9';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
