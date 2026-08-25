@@ -926,7 +926,7 @@ const classerTexte = t => {
 };
 
 /* cache local */
-const C = { me:null, myId:null, email:'', isAdmin:false, users:{}, beers:[], ratings:{}, counts:{},
+const C = { me:null, myId:null, email:'', isAdmin:false, users:{}, beers:[], ratings:{}, counts:{}, weekCounts:{},
             reviews:[], logs:[], follows:[], watch:[], wish:[], arts:[] };
 
 /* ============================ AUTHENTIFICATION ============================ */
@@ -1153,7 +1153,12 @@ async function hydrate() {
     }))
   }));
 
-  for (const r of ratings.data||[]) { C.ratings[r.beer_id] = +r.avg_rating; C.counts[r.beer_id] = +r.rating_count; }
+  for (const r of ratings.data||[]) {
+    C.ratings[r.beer_id] = +r.avg_rating;
+    C.counts[r.beer_id]  = +r.rating_count;
+    // absente tant que la migration 24 n'est pas passée : la section se masque
+    C.weekCounts[r.beer_id] = +r.week_count || 0;
+  }
 
   /* --- avis --- */
   C.reviews = (reviews.data||[]).map(r => ({
@@ -1286,6 +1291,10 @@ const Store = {
   beer:     id => C.beers.find(b => b.id === id),
   rating:   id => C.ratings[id] || 0,
   count:    id => C.counts[id] || 0,
+  /* Notes des sept derniers jours. « Populaires cette semaine » triait sur
+     le total depuis toujours : une canette notée vingt fois il y a six mois
+     y restait indéfiniment, et le classement ne bougeait jamais. */
+  weekCount: id => C.weekCounts[id] || 0,
 
   /* ---- classement du Top ----
      La moyenne brute ne suffisait pas. Deux défauts, pas un :
@@ -1474,8 +1483,9 @@ const Store = {
     Store.review(id).rep.push({ id:data.id, u:'me', t, at:data.created_at });
   },
   async deleteReply(revId, repId) {
-    const { error } = await sb.from('replies').delete().eq('id', repId);
+    const { data, error } = await sb.from('replies').delete().eq('id', repId).select('id');
     if (error) throw error;
+    if (!data || !data.length) throw new Error('Suppression refusée par la base');
     const r = Store.review(revId);
     if (r) r.rep = r.rep.filter(x => x.id !== repId);
   },
@@ -1501,8 +1511,13 @@ const Store = {
      pourtant bien plus visibles.
      Les réponses reçues partent avec, par cascade en base. */
   async deleteReview(id) {
-    const { error } = await sb.from('reviews').delete().eq('id', id).eq('user_id', C.myId);
+    /* Pas de filtre sur user_id : c'est le RLS qui tranche — r_delete pour
+       son propre avis, r_delete_admin pour la modération. Un refus se
+       traduit par zéro ligne supprimée et non par une erreur, d'où le
+       contrôle explicite : sans lui, l'écran annoncerait un succès. */
+    const { data, error } = await sb.from('reviews').delete().eq('id', id).select('id');
     if (error) throw error;
+    if (!data || !data.length) throw new Error('Suppression refusée par la base');
     C.reviews = C.reviews.filter(r => r.id !== id);
   },
 
@@ -1669,6 +1684,65 @@ const Store = {
     if (error) throw error;
     const b = Store.beer(id);
     if (b) b.ok = ok ? 1 : 0;
+  },
+
+  /* Les signalements. Cacher l'écran ne protège rien : c'est la règle
+     rp_read qui décide, et elle ne rend que les siens à qui n'est pas
+     administrateur. Un curieux qui forcerait l'affichage verrait donc
+     ses propres signalements, et rien d'autre. */
+  async signalements(ouverts) {
+    const { data, error } = await sb.from('reports').select('*')
+      .eq('resolved', !ouverts)
+      .order('created_at', { ascending:false }).limit(200);
+    if (error) throw error;
+    return data || [];
+  },
+  async resoudreSignalement(id, resolu) {
+    const { error } = await sb.from('reports').update({ resolved: !!resolu }).eq('id', id);
+    if (error) throw error;
+  },
+
+  /* Corriger une fiche à la main. b_moderate exige is_admin() côté base :
+     l'écran n'est qu'un confort, le refus vient de PostgreSQL. */
+  async modifierBiere(id, p) {
+    const patch = {
+      name: p.n.trim(), brewery: p.br.trim(), style: p.st.trim() || 'Non précisé',
+      abv: p.abv === '' ? null : +p.abv,
+      volume_cl: +p.cl || 33,
+      country: p.pays.trim() || null,
+      description: p.d.trim() || null,
+      status: p.statut
+    };
+    const { data, error } = await sb.from('beers').update(patch).eq('id', id).select('id');
+    if (error) throw error;
+    if (!data || !data.length) throw new Error('Modification refusée par la base');
+    const b = Store.beer(id);
+    if (b) {
+      b.n = patch.name; b.br = patch.brewery; b.st = patch.style;
+      b.abv = +patch.abv || 0; b.cl = patch.volume_cl;
+      b.pays = patch.country || '—'; b.d = patch.description || '';
+      b.ok = patch.status === 'approved' ? 1 : 0;
+    }
+  },
+
+  /* Supprimer une fiche. La règle b_delete refuse dès qu'une entrée de
+     journal ou un avis existe : on ne fait pas disparaître les notes de
+     quelqu'un sans le prévenir. Pour ces fiches-là, il reste le rejet, qui
+     les retire de la circulation sans rien effacer. Le refus arrive sous
+     forme de zéro ligne supprimée, pas d'erreur — d'où le contrôle. */
+  async supprimerBiere(id) {
+    const { data, error } = await sb.from('beers').delete().eq('id', id).select('id');
+    if (error) throw error;
+    if (!data || !data.length)
+      throw new Error('Refusé : cette fiche a déjà des notes ou des avis. Rejette-la plutôt.');
+    C.beers = C.beers.filter(b => b.id !== id);
+  },
+
+  async supprimerPrix(id) {
+    const { data, error } = await sb.from('prices').delete().eq('id', id).select('id');
+    if (error) throw error;
+    if (!data || !data.length) throw new Error('Suppression refusée par la base');
+    C.beers.forEach(b => { b.pr = b.pr.filter(p => p._id !== id) });
   },
 
   /* ---- RGPD : portabilité et effacement ---- */
@@ -2000,7 +2074,10 @@ function openUser(k){
 function vHome(){
   if(S.sub==='bieres'){
     const V=Store.beers();
-    const pop=[...V].sort((a,b)=>Store.count(b.id)-Store.count(a.id)).slice(0,6);
+    const pop=V.filter(b=>Store.weekCount(b.id)>0)
+                .sort((a,b)=>Store.weekCount(b.id)-Store.weekCount(a.id)
+                          || Store.count(b.id)-Store.count(a.id))
+                .slice(0,6);
     const nv=V.filter(b=>b.new);
     const top=Store.topAnnee(5);
     const pourToi = Store.pourToi(6);
@@ -2008,8 +2085,13 @@ function vHome(){
       ? '<div class="sec"><h2>Pour toi</h2><span class="eyebrow">selon tes goûts</span></div>'
         +'<div class="grid">'+pourToi.map(b=>cell(b)).join('')+'</div>'
       : '')
-      +'<div class="sec"><h2>Populaires cette semaine</h2></div>'
-      +'<div class="grid">'+pop.map(b=>cell(b)).join('')+'</div>'
+      // semaine calme, ou migration 24 pas encore passée : on masque plutôt
+      // que d'afficher sous un titre qui mentirait
+      +(pop.length
+        ? '<div class="sec"><h2>Populaires cette semaine</h2>'
+          +'<span class="eyebrow">7 derniers jours</span></div>'
+          +'<div class="grid">'+pop.map(b=>cell(b)).join('')+'</div>'
+        : '')
       +'<div class="sec"><h2>Nouvelles canettes</h2><span class="eyebrow">août 2026</span></div>'
       +'<div class="rail">'+nv.map(b=>cell(b)).join('')+'</div>'
       +'<div class="sec"><h2>Top de l\'année</h2></div>'
@@ -2469,7 +2551,8 @@ function vAccount(){
   if(Store.isAdmin()) {
     const i = rows.findIndex(r => r[0] === 'Mes propositions de bières');
     rows.splice(i < 0 ? rows.length : i + 1, 0,
-      ['Fiches à valider','Propositions en attente de modération','openModeration()']);
+      ['Fiches à valider','Propositions en attente de modération','openModeration()'],
+      ['Signalements','Avis, fiches et prix signalés par les autres','openSignalements()']);
   }
   const mph=safeUrl(me.photo);
   const pst=mph?'background-image:url('+mph+')':'';
@@ -2956,6 +3039,187 @@ function openArticle(url){
    fiches. La première version l'omettait, ce qui rendait l'écran
    inutilisable. Elle est désormais grande et cliquable. */
 let MODTAB = 'pending';
+/* ---------- signalements (administrateurs) ----------
+   L'onglet n'apparaît que pour un administrateur, mais ce n'est qu'un
+   confort d'affichage : tout ce qui suit est refusé par la base à qui n'en
+   est pas un. Voir l'entête de sql/25-moderation.sql. */
+let SIGTAB = 'ouverts';
+
+/* Ce qu'un signalement vise, et ce qu'on peut en faire. La cible a pu
+   disparaître entre-temps — quelqu'un a supprimé son avis, une fiche a été
+   purgée : on le dit plutôt que d'afficher une ligne vide. */
+function cibleSignalement(r){
+  if (r.target_type === 'beer') {
+    const b = Store.beer(r.target_id);
+    return b ? { quoi:'Fiche', titre:b.n, detail:b.br, ouvrir:'openBeer', vivant:true }
+             : { quoi:'Fiche', titre:'Fiche supprimée', detail:'', vivant:false };
+  }
+  if (r.target_type === 'review') {
+    const a = Store.review(r.target_id);
+    if (!a) return { quoi:'Avis', titre:'Avis déjà retiré', detail:'', vivant:false };
+    const u = Store.user(a.u) || Store.me();
+    return { quoi:'Avis', titre:(u?u.h:'?'), detail:a.t.slice(0,120), ouvrir:'openBeer', cle:a.b, vivant:true };
+  }
+  if (r.target_type === 'profile') {
+    const u = Store.user(r.target_id);
+    return u ? { quoi:'Profil', titre:u.h, detail:u.bio||'', ouvrir:'openUser', vivant:true }
+             : { quoi:'Profil', titre:'Compte supprimé', detail:'', vivant:false };
+  }
+  const b = C.beers.find(x => x.pr.some(p => p._id === r.target_id));
+  const p = b && b.pr.find(x => x._id === r.target_id);
+  return p ? { quoi:'Prix', titre:fmtEuro(p.p)+' — '+p.s, detail:b.n, vivant:true }
+           : { quoi:'Prix', titre:'Relevé disparu', detail:'', vivant:false };
+}
+
+async function openSignalements(onglet){
+  SIGTAB = onglet || 'ouverts';
+  const sh=$('#sheet'); sh.classList.add('open');
+  sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
+   +'<div class="sheet-bar"><b>Signalements</b><button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
+   +'<div style="border-bottom:1px solid var(--border);padding-top:12px"><div class="tabwrap">'
+     +'<button class="tab'+(SIGTAB==='ouverts'?' on':'')+'" onclick="openSignalements(\'ouverts\')">À traiter</button>'
+     +'<button class="tab'+(SIGTAB==='classes'?' on':'')+'" onclick="openSignalements(\'classes\')">Classés</button>'
+   +'</div></div>'
+   +'<div class="sheet-body"><div class="empty">Chargement…</div></div></div>';
+  let list;
+  try { list = await Store.signalements(SIGTAB==='ouverts'); }
+  catch(e){ console.error(e); closeSheet(); toast('Signalements indisponibles'); return }
+  drawSignalements(list);
+}
+
+function drawSignalements(list){
+  SIGS = list;                       // source de vérité pour sigParId()
+  const corps = document.querySelector('#sheet .sheet-body');
+  if (!corps) return;
+  const ouverts = SIGTAB === 'ouverts';
+  corps.innerHTML =
+    '<div class="note">'+I.info+'<span>'
+     +(ouverts ? 'Classer un signalement ne retire rien : c\'est un geste à part, pour que le ménage reste délibéré.'
+               : 'Signalements déjà traités. Tu peux les rouvrir.')
+     +'</span></div>'
+   +(list.length
+     ? list.map(r=>{
+        const c = cibleSignalement(r);
+        const u = Store.user(r.reporter_id);
+        const jours = Math.floor((Date.now()-new Date(r.created_at))/864e5);
+        return '<div class="modcard" style="display:block" id="sig-'+esc(r.id)+'">'
+         +'<div class="modinfo" style="padding:2px 0 8px">'
+           +'<span class="eyebrow">'+esc(c.quoi)+' · signalé par '+esc(u?u.h:'compte supprimé')
+             +' · il y a '+jours+' j</span>'
+           +'<b style="display:block;margin-top:4px">'+esc(c.titre)+'</b>'
+           +(c.detail?'<span style="display:block;color:var(--dim);font-size:11.5px;margin-top:2px">'
+                       +esc(c.detail)+'</span>':'')
+           +(r.reason?'<div class="ab-p dim" style="margin-top:7px">Motif : '+esc(r.reason)+'</div>':'')
+         +'</div>'
+         +'<div class="modacts">'
+           +(c.vivant && c.ouvrir
+              ? '<button class="modbtn" onclick="voirCible(\''+esc(r.id)+'\')">Voir</button>' : '')
+           +(c.vivant
+              ? '<button class="modbtn no" onclick="supprimerCible(\''+esc(r.id)+'\')">Supprimer</button>' : '')
+           +'<button class="modbtn yes" onclick="classerSignalement(\''+esc(r.id)+'\','+(ouverts?'1':'0')+')">'
+             +(ouverts?'Classer':'Rouvrir')+'</button>'
+         +'</div></div>'}).join('')
+     : '<div class="empty">'+(ouverts?'Aucun signalement en attente. Tout est calme.':'Rien de classé pour l\'instant.')+'</div>');
+}
+
+/* On relit le signalement dans la liste affichée plutôt que de transporter
+   la cible dans l'attribut onclick — règle 2 en tête de fichier. */
+let SIGS = [];
+function sigParId(id){ return SIGS.find(x => x.id === id) }
+
+async function voirCible(id){
+  const r = sigParId(id); if(!r) return;
+  const c = cibleSignalement(r);
+  closeSheet();
+  if (c.ouvrir === 'openBeer') openBeer(c.cle || r.target_id);
+  else if (c.ouvrir === 'openUser') openUser(r.target_id);
+}
+
+async function supprimerCible(id){
+  const r = sigParId(id); if(!r) return;
+  const c = cibleSignalement(r);
+  if(!confirm('Supprimer définitivement : ' + c.quoi.toLowerCase() + ' « ' + c.titre + ' » ?\n\n'
+    + (r.target_type==='beer'
+        ? 'Refusé par la base si quelqu\'un l\'a déjà notée ou commentée — rejette-la alors depuis « Fiches ».'
+        : 'Cette suppression est définitive.'))) return;
+  const action = r.target_type==='beer'   ? () => Store.supprimerBiere(r.target_id)
+               : r.target_type==='review' ? () => Store.deleteReview(r.target_id)
+               : r.target_type==='price'  ? () => Store.supprimerPrix(r.target_id)
+               : null;
+  if(!action) return toast('Un profil se traite à la main, pas depuis cet écran');
+  const ok = await act(action, 'Suppression refusée');
+  if(ok===null) return;
+  await act(()=>Store.resoudreSignalement(r.id, true));
+  toast('Supprimé, et signalement classé');
+  render(); openSignalements(SIGTAB);
+}
+
+async function classerSignalement(id, resolu){
+  const ok = await act(()=>Store.resoudreSignalement(id, !!resolu), 'Impossible de classer');
+  if(ok===null) return;
+  toast(resolu ? 'Signalement classé' : 'Signalement rouvert');
+  openSignalements(SIGTAB);
+}
+
+/* ---------- édition d'une fiche à la main ---------- */
+let EDB = null;
+function openEditBeer(id){
+  const b = Store.beer(id);
+  if(!b) return toast('Fiche introuvable');
+  EDB = { id, n:b.n, br:b.br, st:b.st==='Non précisé'?'':b.st, abv:b.abv||'',
+          cl:b.cl, pays:b.pays==='—'?'':b.pays, d:b.d, statut:b.ok?'approved':'pending' };
+  drawEditBeer();
+}
+
+/* Redessiner sans repartir de la fiche en base : changer le statut ne doit
+   pas effacer ce qui vient d'être tapé dans les autres champs. */
+function drawEditBeer(){
+  if(!EDB) return;
+  const sh=$('#sheet'); sh.classList.add('open');
+  const champ = (cle, libelle, attrs) =>
+    '<div class="field" style="margin-top:14px"><label>'+libelle+'</label>'
+    +'<input class="f" '+(attrs||'')+' value="'+esc(EDB[cle])+'" oninput="EDB.'+cle+'=this.value"></div>';
+  sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
+   +'<div class="sheet-bar"><b>Modifier la fiche</b><button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
+   +'<div class="sheet-body">'
+   +champ('n','Nom','maxlength="80"')
+   +champ('br','Brasserie','maxlength="80"')
+   +champ('st','Style','maxlength="40" placeholder="IPA, Blonde, Stout…"')
+   +'<div class="two" style="margin-top:14px">'
+     +'<div><label style="font-size:11px;color:var(--dim)">Degré</label>'
+       +'<input class="f" inputmode="decimal" value="'+esc(EDB.abv)+'" oninput="EDB.abv=this.value"></div>'
+     +'<div><label style="font-size:11px;color:var(--dim)">Volume (cl)</label>'
+       +'<input class="f" inputmode="numeric" value="'+esc(EDB.cl)+'" oninput="EDB.cl=this.value"></div>'
+   +'</div>'
+   +champ('pays','Pays','maxlength="40"')
+   +'<div class="field" style="margin-top:14px"><label>Description</label>'
+     +'<textarea rows="3" maxlength="600" oninput="EDB.d=this.value">'+esc(EDB.d)+'</textarea></div>'
+   +'<div class="field" style="margin-top:14px"><label>Statut</label>'
+     +'<div class="tabwrap" style="margin-top:6px">'
+       +['pending','approved','rejected'].map(v =>
+          '<button class="tab'+(EDB.statut===v?' on':'')+'" onclick="EDB.statut=\''+v+'\';drawEditBeer()">'
+          +({pending:'En attente',approved:'Publiée',rejected:'Retirée'})[v]+'</button>').join('')
+     +'</div></div>'
+   +'<div class="hint" style="margin-top:10px">« Retirée » sort la fiche de la circulation sans effacer '
+     +'les notes ni les avis qui s\'y rattachent.</div>'
+   +'<button class="cta" style="margin-top:18px" onclick="saveEditBeer()">Enregistrer</button>'
+   +'</div></div>';
+}
+
+async function saveEditBeer(){
+  if(!EDB) return;
+  if(!EDB.n.trim() || EDB.n.trim().length < 2) return toast('Le nom ne peut pas être vide');
+  if(!EDB.br.trim()) return toast('La brasserie ne peut pas être vide');
+  const abv = EDB.abv === '' ? null : parseFloat(String(EDB.abv).replace(',','.'));
+  if(abv !== null && (isNaN(abv) || abv < 0 || abv > 20)) return toast('Degré : entre 0 et 20');
+  const cl = parseInt(EDB.cl, 10);
+  if(isNaN(cl) || cl < 10 || cl > 200) return toast('Volume : entre 10 et 200 cl');
+  const ok = await act(()=>Store.modifierBiere(EDB.id, {...EDB, abv: abv===null?'':abv, cl}),
+                       'Modification refusée — es-tu bien administrateur ?');
+  if(ok===null) return;
+  closeSheet(); toast('Fiche mise à jour'); render();
+}
+
 async function openModeration(tab){
   MODTAB = tab || 'pending';
   const sh=$('#sheet'); sh.classList.add('open');
@@ -2991,6 +3255,7 @@ function drawModeration(list){
         +'<div class="modinfo"><b>'+esc(b.name)+'</b>'
           +'<span>'+esc(b.brewery)+' · '+(b.abv||'?')+'° · '+(b.volume_cl||'?')+' cl</span></div>'
         +'<div class="modacts">'
+          +'<button class="modbtn" onclick="openEditBeer(\''+esc(b.id)+'\')">Éditer</button>'
           +'<button class="modbtn no" onclick="doModerate(\''+esc(b.id)+'\',0)">Bouteille</button>'
           +'<button class="modbtn yes" onclick="doModerate(\''+esc(b.id)+'\',1)">Canette</button>'
         +'</div></div>'}).join('')+'</div>'
@@ -3091,7 +3356,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v4.1';
+const APP_VERSION = 'v4.2';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */

@@ -90,6 +90,8 @@ sql/20-correctifs-audit.sql    correctifs d'audit — lire le contrôle préalab
 sql/21-pseudo-non-tronque.sql  pseudo gardé jusqu'à 20 signes
 sql/22-noms-detoures.sql       nettoie les noms importés restés sales
 sql/23-bio.sql                 bio courte sur le profil
+sql/24-populaires-semaine.sql  la semaine devient une vraie fenêtre de 7 jours
+sql/25-moderation.sql          droits de modération — lire l'entête
 ```
 
 La migration `19` retire le droit de lire certaines colonnes de `profiles`

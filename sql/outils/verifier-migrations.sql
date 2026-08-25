@@ -117,6 +117,16 @@ with controles as (
             where grantee='authenticated' and privilege_type='SELECT'
               and table_name='profiles' and column_name='bio'),
     'sql/23-bio.sql'
+
+  union all select 23, 'Populaires sur 7 jours',
+    exists (select 1 from information_schema.columns
+            where table_name='beer_ratings' and column_name='week_count'),
+    'sql/24-populaires-semaine.sql'
+
+  union all select 24, 'Droits de modération',
+    exists (select 1 from pg_policies
+            where schemaname='public' and policyname='b_delete'),
+    'sql/25-moderation.sql'
 )
 select ordre,
        quoi,
