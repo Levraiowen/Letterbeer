@@ -8,6 +8,11 @@ consommation, compare avec tes potes.
 Projet personnel, testé en petit comité. Les données peuvent être
 réinitialisées sans préavis.
 
+> **Pour reprendre le projet** — état réel, arbitrages déjà tranchés, problèmes
+> à traiter, pièges de déploiement et modèle économique : **[PROJET.md](PROJET.md)**.
+> Ce README-ci explique comment installer et modifier ; PROJET.md explique
+> pourquoi les choses sont ainsi. Il est tenu à jour au fil des sessions.
+
 ---
 
 ## Ce que ça fait
@@ -45,6 +50,9 @@ l'écran.
 ### Les fichiers
 
 ```
+PROJET.md                   état du projet, décisions, problèmes — à lire en premier
+MIGRATION.md                passage en application native, dette technique
+
 index.html                  toute l'application — style, structure, logique
 sw.js                       cache hors ligne de la coque et des photos
 manifest.webmanifest        installation sur l'écran d'accueil
