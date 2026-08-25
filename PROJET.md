@@ -15,7 +15,7 @@
 > Les sections sont **pondérées** : `🔴 structurant`, `🟠 important`,
 > `🟡 secondaire`. La pondération dit où porter l'attention quand le temps manque.
 >
-> Dernière mise à jour : 25 août 2026 · app en `v5.1` · 26 migrations.
+> Dernière mise à jour : 25 août 2026 · app en `v5.2` · 26 migrations.
 
 ---
 
@@ -327,6 +327,10 @@ Chacune a une raison. La rouvrir sans raison nouvelle fait perdre du temps.
   vit dans une feuille. La pagination ne démarre qu'à `max+3` : en dessous,
   le bouton coûterait un geste pour économiser deux lignes. **Une nouvelle
   liste doit l'utiliser**, pas réinventer un drapeau.
+  **Sauf l'onglet Avis** : cet écran EST le feed, il n'y a rien en dessous à
+  atteindre, et borner l'unique contenu d'un écran reviendrait à mettre un
+  bouton devant sa raison d'être. Le jour où le volume rendra le rendu lourd,
+  la réponse sera un chargement progressif au défilement, pas un « voir plus ».
 - **« À découvrir » suit le réseau, pas le hasard** : ceux qui te suivent
   sans réciprocité d'abord, puis les amis d'amis par nombre de liens
   communs, puis les comptes récemment actifs. Chaque ligne affiche sa

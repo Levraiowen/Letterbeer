@@ -2241,7 +2241,12 @@ function vHome(){
       +'<button class="seeall" onclick="S.avisTri=\''+(chauds?'recents':'chauds')+'\';render()">'
       +(chauds?'Voir les plus récents':'Voir les plus commentés')+'</button></div>'
       +(L.length
-        ? bornee('avis-'+S.avisTri, L, revHTML, 8)
+        // Pas de limite ici, contrairement aux autres listes : cet onglet EST
+        // le feed, il n'y a rien en dessous à atteindre. Borner le seul contenu
+        // d'un écran, c'est mettre un bouton devant sa raison d'être.
+        // Le jour où le nombre d'avis rendra le rendu lourd, la réponse sera
+        // un chargement progressif au défilement, pas un « voir plus ».
+        ? L.map(revHTML).join('')
         : '<div class="empty">Personne n\'a encore écrit d\'avis.<br><br>'
           +'Ouvre une bière et donne le tien : c\'est ce qui fait vivre cet onglet.</div>');
   }
@@ -3544,7 +3549,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v5.1';
+const APP_VERSION = 'v5.2';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
