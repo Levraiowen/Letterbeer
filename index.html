@@ -189,7 +189,14 @@ button.lockup:active{transform:scale(.96)}
 .add:hover{transform:scale(1.08) rotate(90deg);box-shadow:0 0 32px var(--glow)}
 .add:active{transform:scale(.9)}
 
-.sec{padding:20px 20px 4px;display:flex;align-items:baseline;justify-content:space-between}
+/* Le vide au-dessus d'un titre valait 26 px, celui en dessous 14 : un rapport
+   de 1,86, trop faible pour que le titre appartienne visiblement au bloc qui
+   suit. Il flottait entre les deux, et les sections ne se détachaient pas.
+   On passe à 36 / 12, soit un rapport de 3 — le titre se rattache alors
+   clairement à son contenu, et l'air apparaît ENTRE les sections. */
+.sec{padding:30px 20px 2px;display:flex;align-items:baseline;justify-content:space-between}
+/* en tête d'écran, sous les onglets, ce serait du vide perdu */
+.sec:first-child{padding-top:18px}
 .sec h2{font-family:'Space Grotesk';font-size:15px;font-weight:600;letter-spacing:.2px}
 .eyebrow{font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--dimmer);font-weight:500}
 /* minmax(0,1fr) et non 1fr : sinon une piste refuse de descendre sous la
@@ -1536,6 +1543,13 @@ const Store = {
      ici : sur une poignée de personnes qu'on suit, ce qu'on veut savoir,
      c'est ce qu'elles ont écrit depuis la dernière fois. Trier par
      popularité ferait remonter le même avis pendant des jours. */
+  /* Date du dernier avis écrit par quelqu'un. Sert à remonter les comptes
+     vivants sans jamais classer les gens par ce qu'ils ont bu. */
+  derniereActivite(k) {
+    let t = 0;
+    for (const r of C.reviews) if (r.u === k) { const d = new Date(r.at||0).getTime(); if (d > t) t = d }
+    return t;
+  },
   friendReviews() {
     const f = Store.following();
     return C.reviews.filter(r => f.includes(r.u))
@@ -1986,7 +2000,7 @@ async function doAuth(){
 /* =========================================================
    ÉTAT + VUES
    ========================================================= */
-const S={tab:'home',sub:'bieres',q:'',filts:[],tri:'note-desc',avisTri:'chauds',dir:1,user:null,back:'home'};
+const S={tab:'home',sub:'bieres',q:'',filts:[],tri:'note-desc',avisTri:'chauds',dir:1,user:null,back:'home',tousCopains:false};
 /* L'onglet Journal ne s'affiche que s'il y a des articles publiés. Un
    onglet vide coûte plus cher qu'un onglet en moins, et celui-ci
    s'allumera tout seul le jour où l'agrégateur publiera. */
@@ -2469,12 +2483,35 @@ function vFriends(){
      +'<span class="vign">'+can(b,0,1)+'</span>'
      +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(Store.user(a.u).h)+' · '+esc(a.d)+'</span></span>'
      +stars(a.r)+'</div>'}).join('')
-   +'<div class="sec" style="padding-top:26px"><h2>Leur semaine</h2><span class="eyebrow">7 jours</span></div>'
-   +foll.map(k=>{const u=Store.user(k);
-     return '<div class="row">'+av(k)+'<span class="t"><b>'+esc(u.h)+'</b><span>'
-       +(u.priv?'stats privées':u.week+' canette'+(u.week>1?'s':'')+' cette semaine')+'</span></span>'
-       +(u.priv?'<span style="color:var(--dimmer)">'+I.lock+'</span>':'')+'</div>'}).join('')
-   +'<div class="note">'+I.info+'<span>Pas de classement ici : voir la semaine des autres sert à se situer, pas à gagner.</span></div>'
+   /* La liste grandissait sans fin avec le nombre d'abonnements. On en montre
+      dix, puis on déplie.
+
+      L'ordre est celui de la DERNIÈRE ACTIVITÉ, pas du nombre de canettes :
+      trier par quantité ferait de cet écran un podium de consommation, ce que
+      la note juste en dessous refuse explicitement — et ce serait le contraire
+      de ce que l'app défend partout ailleurs. Remonter les comptes vivants
+      règle le problème de longueur sans créer de classement. */
+   +(()=>{
+      const ordonnes = [...foll].sort((a,b) =>
+        Store.derniereActivite(b) - Store.derniereActivite(a)
+        || (Store.user(a)?.h||'').localeCompare(Store.user(b)?.h||'', 'fr'));
+      const tous = S.tousCopains || ordonnes.length <= 12;
+      const montres = tous ? ordonnes : ordonnes.slice(0, 10);
+      const restants = ordonnes.length - montres.length;
+      return '<div class="sec" style="padding-top:34px"><h2>Leur semaine</h2>'
+        +'<span class="eyebrow">'+(tous?'7 jours':'les plus récents')+'</span></div>'
+        +montres.map(k=>{const u=Store.user(k);
+          return '<div class="row">'+av(k)+'<span class="t"><b>'+esc(u.h)+'</b><span>'
+            +(u.priv?'stats privées':u.week+' canette'+(u.week>1?'s':'')+' cette semaine')+'</span></span>'
+            +(u.priv?'<span style="color:var(--dimmer)">'+I.lock+'</span>':'')+'</div>'}).join('')
+        +(restants>0
+          ? '<button class="ghost" style="margin-top:12px" onclick="S.tousCopains=true;render()">'
+            +'Voir les '+restants+' autre'+(restants>1?'s':'')+'</button>'
+          : (S.tousCopains && ordonnes.length > 12
+             ? '<button class="ghost" style="margin-top:12px" onclick="S.tousCopains=false;render()">Réduire la liste</button>'
+             : ''));
+    })()
+   +'<div class="note">'+I.info+'<span>Pas de classement ici : la liste suit les derniers avis écrits, pas le nombre de canettes. Voir la semaine des autres sert à se situer, pas à gagner.</span></div>'
    +'<div class="sec" style="padding-top:26px"><h2>À découvrir</h2></div>'
    +Store.suggestions().map(userRow).join('')
    +'<button class="ghost invite" onclick="inviterUnAmi()">'+I.invite
@@ -3450,7 +3487,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v4.8';
+const APP_VERSION = 'v4.9';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
