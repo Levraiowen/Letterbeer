@@ -15,7 +15,7 @@
 > Les sections sont **pondérées** : `🔴 structurant`, `🟠 important`,
 > `🟡 secondaire`. La pondération dit où porter l'attention quand le temps manque.
 >
-> Dernière mise à jour : 25 août 2026 · app en `v5.3` · 26 migrations.
+> Dernière mise à jour : 25 août 2026 · app en `v5.3` · 26 migrations · non ouvert aux testeurs.
 
 ---
 
@@ -388,6 +388,53 @@ Chacune a une raison. La rouvrir sans raison nouvelle fait perdre du temps.
 - **`sql/outils/verifier-migrations.sql`** dit à tout moment quelles migrations
   sont passées. Il ne modifie rien. **Le lancer avant de conclure qu'un bug est
   dans le code** : il a déjà évité une fausse piste.
+
+---
+
+## 7 bis. 🔴 À vérifier AVANT d'ouvrir aux testeurs
+
+Rien de ce qui suit n'a jamais été exercé. Ce sont les chemins par lesquels
+un testeur ENTRE dans l'app : s'ils cassent, il n'y a pas de contournement.
+
+**1. Le plafond d'e-mails — le piège de la journée d'onboarding.**
+L'offre gratuite de Supabase envoie **2 e-mails d'authentification par
+heure**, toutes catégories confondues : confirmations d'inscription,
+réinitialisations de mot de passe, liens magiques. Douze personnes qui
+s'inscrivent le même soir, et dix restent dehors. Deux issues :
+- couper « Confirm email » dans Auth → l'inscription passe sans e-mail
+  (mais la réinitialisation de mot de passe, elle, en aura toujours besoin) ;
+- brancher un SMTP externe — Resend, Brevo, offres gratuites — ce qui monte
+  la limite à 30 inscriptions par heure. **C'est la bonne réponse**, et elle
+  reste à coût nul.
+
+**2. L'inscription de bout en bout.** Jamais testée : créer un compte n'est
+pas une chose qu'un agent fait. Or les migrations 20 ET 21 ont toutes deux
+réécrit `handle_new_user`. Si le déclencheur casse, **personne n'entre**.
+À essayer : un pseudo accentué (« José »), un de 20 signes, un déjà pris.
+
+**3. Le lien d'invitation.** La capture du `?inv=` est vérifiée ; la
+création de l'abonnement après une vraie inscription ne l'est pas. C'est
+pourtant le chemin exact par lequel les douze arrivent.
+
+**4. La réinitialisation du mot de passe.** Jamais parcourue en entier.
+Des testeurs oublieront leur mot de passe — c'est certain, pas probable.
+
+**5. L'écran de modération.** Livré sans avoir jamais été ouvert : le
+compte de test n'est pas administrateur. Signalements, édition de fiche,
+suppression — tout est à voir au moins une fois avant d'en avoir besoin.
+
+**6. L'envoi d'une photo de profil.** `setPhoto()` et `shrink()` n'ont
+jamais tourné. Le nettoyage des anciennes photos non plus.
+
+**7. La suppression de compte.** Destructive, jamais essayée. À faire sur
+un compte jetable, pas sur le tien.
+
+**8. Safari et iPhone.** Tout a été testé sur Chromium uniquement.
+
+*Vérifié le 25 août 2026, en revanche : les avatars s'affichent toujours
+après la migration 20 — la route publique du stockage répond « Object not
+found » sur un fichier absent, donc elle n'est pas filtrée par le RLS — et
+l'énumération anonyme du bucket est bien fermée.*
 
 ---
 
