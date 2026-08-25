@@ -2185,6 +2185,13 @@ function racineOnglet(t){
   if (t === 'home')   { S.sub = 'bieres'; S.avisTri = 'chauds' }
   if (t === 'search') { S.q = ''; S.filts = []; S.tri = 'note-desc' }
 }
+/* Le classement complet, c'est la recherche triée par note. go('search')
+   remet les tris à zéro en arrivant : on pose donc le tri après. */
+function ouvrirClassement(){
+  go('search');
+  S.tri = 'note-desc'; S.q = ''; S.filts = [];
+  render();
+}
 function go(t){
   const memeOnglet = S.tab === t || (t === 'me' && S.tab === 'account');
   if (memeOnglet || t === 'home') racineOnglet(t);
@@ -2206,7 +2213,7 @@ function vHome(){
                           || Store.count(b.id)-Store.count(a.id))
                 .slice(0,6);
     const nv=V.filter(b=>b.new);
-    const top=Store.topAnnee(5);
+    const top=Store.topAnnee(10);
     const pourToi = Store.pourToi(6);
     return (pourToi.length
       ? '<div class="sec"><h2>Pour toi</h2><span class="eyebrow">selon tes goûts</span></div>'
@@ -2226,7 +2233,12 @@ function vHome(){
           +'<span class="eyebrow">30 derniers jours</span></div>'
           +'<div class="rail">'+nv.map(b=>cell(b)).join('')+'</div>'
         : '')
-      +'<div class="sec"><h2>Top de l\'année</h2></div>'
+      /* Dix et non cinq, mais pas de « voir plus » : un Top qui se déplie à
+         trois cents n'est plus un classement, c'est le catalogue trié par
+         note — ce que l'onglet Recherche fait déjà. On y renvoie plutôt que
+         de le refaire ici. */
+      +'<div class="sec"><h2>Top de l\'année</h2>'
+        +'<button class="seeall" onclick="ouvrirClassement()">Tout le classement</button></div>'
       +top.map((b,i)=>'<button class="row tap" onclick="openBeer(\''+esc(b.id)+'\')"><span class="n">'+(i+1)+'</span>'
         +'<span class="vign">'+can(b,0,1)+'</span>'
         +'<span class="t"><b>'+esc(b.n)+'</b><span>'+esc(sousTitre(brasserieUtile(b), b.st))+'</span></span>'
@@ -3549,7 +3561,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v5.2';
+const APP_VERSION = 'v5.3';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
