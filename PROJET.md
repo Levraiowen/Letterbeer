@@ -15,7 +15,7 @@
 > Les sections sont **pondérées** : `🔴 structurant`, `🟠 important`,
 > `🟡 secondaire`. La pondération dit où porter l'attention quand le temps manque.
 >
-> Dernière mise à jour : 25 août 2026 · app en `v4.6` · 25 migrations, toutes passées.
+> Dernière mise à jour : 25 août 2026 · app en `v4.8` · 26 migrations.
 
 ---
 
@@ -153,9 +153,6 @@ signalements, édition et suppression de fiches — réservé aux administrateur
 - **Le catalogue contient des intrus** : `GT-Mobility - Tankstelle, KFZ-Service`
   (une station-service allemande), `BTE 50CL DESPERADOS` (« BTE » = bouteille).
   À traiter depuis l'écran de modération.
-- **15 fiches affichent « Jupiler · Jupiler »** — la brasserie répète le nom.
-  Corrigé à l'import pour l'avenir ; l'existant reste. Correction propre :
-  masquer la brasserie quand elle répète le nom (touche 8 points d'affichage).
 - **Descriptions toutes identiques**, générées à l'import. Trois phrases sur les
   cinquante fiches les plus consultées valent mieux que cinq cents fiches
   jumelles.
@@ -317,6 +314,15 @@ Chacune a une raison. La rouvrir sans raison nouvelle fait perdre du temps.
   WCAG 2.2 AA demande 24×24 px ; le 44 est la recommandation d'Apple, donc
   du AAA. Ils bénéficient en plus de l'exception « commande équivalente à
   côté » : le pseudo adjacent porte la même action.
+- **La brasserie ne s'affiche que si elle informe.** Elle répète le nom sur
+  28 % du catalogue (« Jupiler · JUPILER »), et vaut littéralement
+  « Inconnue » sur onze fiches. `brasserieUtile()` compare des **mots
+  entiers**, jamais une sous-chaîne : avec une sous-chaîne, « La Chouffe »
+  masquait « Achouffe », qui est une vraie brasserie. Toute retouche de cette
+  règle doit repasser les douze témoins documentés dans le commentaire.
+- **Retaper l'onglet actif ramène à sa racine**, et l'accueil s'y remet aussi
+  quand on y revient d'ailleurs : son icône est une canette, elle ouvre le
+  catalogue, pas la revue de presse.
 - **La déduction de famille ne touche pas `beers.style`.** Le style reste la
   donnée d'Open Food Facts, jamais une supposition de notre part.
 
