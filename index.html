@@ -92,7 +92,13 @@
 :root{
   --bg:#0A0A0C; --surface:#141417; --surface-2:#1C1C20; --accent:#FF5A1F;
   --accent-soft:rgba(255,90,31,.14); --glow:rgba(255,90,31,.45);
-  --text:#F4EFE8; --dim:#8D8D93; --dimmer:#5C5C63; --border:#232327;
+  /* Échelle de gris ré-espacée pour l'accessibilité. --dimmer était à
+     2,98:1 sur le fond, sous le seuil AA de 4,5:1 — et il sert aux libellés
+     de section à 11 px ET à la barre de navigation inactive. Remonter la
+     seule valeur fautive l'aurait collée à --dim et aurait écrasé la
+     hiérarchie : on écarte donc les deux, pour garder 10 L* entre elles.
+     --dim 6,9:1 · --dimmer 4,9:1 · --text 17,3:1 */
+  --text:#F4EFE8; --dim:#98989E; --dimmer:#7E7E84; --border:#232327;
   --ok:#3FD98B; --warn:#E8B04B; --bad:#FF4D4D;
   --e:cubic-bezier(.22,.8,.28,1);
 }
@@ -152,7 +158,7 @@ button.lockup:active{transform:scale(.96)}
 #tabs{flex:0 0 auto;padding-top:6px}
 .tabwrap{position:relative;display:flex;justify-content:center;gap:30px}
 .tab{background:none;border:0;font-family:'Inter';font-size:14px;font-weight:500;color:var(--dim);
-  padding:0 4px 12px;cursor:pointer;transition:color .22s,transform .14s}
+  padding:10px 4px 12px;cursor:pointer;transition:color .22s,transform .14s}
 .tab:hover{color:var(--text)}
 .tab:active{transform:scale(.94)}
 .tab.on{color:var(--accent);font-weight:600}
@@ -723,6 +729,21 @@ textarea:focus,input.f:focus,select.f:focus{border-color:var(--accent);box-shado
 .seeall{background:none;border:0;cursor:pointer;font-family:inherit;font-size:11px;
   letter-spacing:.06em;text-transform:uppercase;color:var(--accent);padding:2px 0}
 .seeall:hover{text-decoration:underline;text-underline-offset:3px}
+
+/* ---- zone tactile ----
+   Plusieurs commandes mesuraient moins de 44 px de haut, la cible
+   recommandée : les onglets à 29, la barre de navigation à 37, les boutons
+   d'icône à 33, le lien de tri à 18. On étend la zone sensible SANS toucher
+   au dessin — un pseudo-élément centré porte la cible à 44 px.
+
+   L'extension est volontairement VERTICALE seulement : élargir des commandes
+   posées côte à côte, comme les onglets ou la barre du bas, leur ferait se
+   voler des clics au bord. */
+.tab,.nav,.icon-btn,.seeall,.chip,.follow,.titlemark{position:relative}
+.tab::after,.nav::after,.icon-btn::after,.seeall::after,
+.chip::after,.follow::after,.titlemark::after{
+  content:'';position:absolute;left:0;right:0;top:50%;
+  height:100%;min-height:44px;transform:translateY(-50%)}
 .jrow{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--border)}
 .jrow .t{flex:1;min-width:0}
 .jrow .t b{display:block;font-size:13px;font-weight:600;color:var(--text);
@@ -3376,7 +3397,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v4.4';
+const APP_VERSION = 'v4.5';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
