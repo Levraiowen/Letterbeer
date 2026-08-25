@@ -404,8 +404,14 @@ Le plafond reste à connaître : l'offre gratuite de Supabase envoie **2
 e-mails d'authentification par heure**, réinitialisations de mot de passe
 comprises. Confirmation coupée, l'inscription n'en consomme plus — mais si
 trois testeurs oublient leur mot de passe le même soir, le troisième
-attendra. La sortie, le jour du lancement, est un SMTP externe (Resend,
-Brevo, offres gratuites) qui monte à 30 par heure et reste à coût nul.
+attendra une heure. C'est tenable entre amis, pas au-delà.
+
+**Le sujet est explicitement reporté au moment de fabriquer l'app**, avec un
+critère posé par Owen : simple, efficace, gratuit ou très peu coûteux. Ne pas
+le rouvrir avant, et ne pas partir sur une solution lourde — un SMTP externe
+sur offre gratuite (Resend, Brevo) monte à 30 inscriptions par heure, se
+branche en quelques minutes dans les réglages Auth, et ne coûte rien à cette
+échelle. C'est la réponse attendue le jour venu ; le reste est du superflu.
 
 **2. L'inscription de bout en bout.** Jamais testée : créer un compte n'est
 pas une chose qu'un agent fait. Or les migrations 20, 21 ET 27 ont toutes
