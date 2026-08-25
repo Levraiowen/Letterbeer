@@ -391,6 +391,54 @@ Chacune a une raison. La rouvrir sans raison nouvelle fait perdre du temps.
 
 ---
 
+## 6 bis. 🟠 Ce qu'on peut prendre à Letterboxd
+
+Letterbeer doit son nom à Letterboxd — autant regarder ce qu'ils font bien.
+Analysé le 25 août 2026, par ordre de rapport intérêt/effort.
+
+**1. Les favoris sur le profil (leur « top 4 »).** Quatre films épinglés en
+haut du profil : c'est leur trait d'identité le plus fort, et c'est presque
+gratuit à implémenter — un tableau de quatre identifiants sur `profiles`.
+Quatre canettes épinglées en disent plus long que n'importe quelle bio.
+**Le meilleur rapport de la liste.**
+
+**2. Les listes.** « Les brunes que je conseille », « Le top des IPA de
+l'été ». C'est leur objet social le plus distinctif après les critiques :
+ça transforme un carnet personnel en quelque chose qui se partage et se
+parcourt. Chantier réel — table, écrans, partage — mais c'est LA
+fonctionnalité qui ferait passer Letterbeer de journal à communauté.
+
+**3. Le bilan annuel.** Letterbeer a le récap de semaine ; Letterboxd en
+fait un bilan d'année, et le réserve à ses abonnés payants — signe que
+c'est valorisé. Le moteur existe déjà, il n'y a qu'à changer la fenêtre.
+
+**4. Les étiquettes libres sur les entrées de journal.** « en terrasse »,
+« avec Paul », « à refaire ». Organisation sans structure imposée, très peu
+coûteux.
+
+**Ce qui ne transfère PAS :** leur affichage des plateformes de streaming —
+le relevé de prix communautaire est déjà l'équivalent, et il est meilleur
+puisqu'il vient du réel ; la fiche technique casting/réalisation, qui n'a
+pas d'équivalent en profondeur pour une canette ; le « revisionnage »,
+qu'on couvre déjà avec le « +1 ».
+
+**⚠️ La limite à ne jamais franchir.** Letterboxd peut gamifier librement :
+voir beaucoup de films est sans conséquence. Letterbeer, non. Donc oui au
+bilan annuel et aux listes, **mais jamais de classement du plus gros
+buveur, de série de jours consécutifs, ni de badge à la quantité**. C'est
+la ligne que le projet tient déjà partout ailleurs — voir le récap de
+semaine, qui compte les jours SANS.
+
+**Leur modèle économique répond directement au problème Évin** (§6). Ils ne
+vendent pas d'espace publicitaire aux studios : ils vendent à l'utilisateur
+un meilleur outil — statistiques détaillées, retrait des publicités tierces,
+filtres avancés. Transposé : on ne vend jamais d'exposition à une brasserie,
+on vend des statistiques et du confort à celui qui tient le carnet. C'est
+compatible avec la loi, et c'est éprouvé à grande échelle sur un projet parti
+d'une passion.
+
+---
+
 ## 7 bis. 🔴 À vérifier AVANT d'ouvrir aux testeurs
 
 Rien de ce qui suit n'a jamais été exercé. Ce sont les chemins par lesquels
