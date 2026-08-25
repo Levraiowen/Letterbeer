@@ -15,7 +15,7 @@
 > Les sections sont **pondérées** : `🔴 structurant`, `🟠 important`,
 > `🟡 secondaire`. La pondération dit où porter l'attention quand le temps manque.
 >
-> Dernière mise à jour : 25 août 2026 · app en `v4.9` · 26 migrations.
+> Dernière mise à jour : 25 août 2026 · app en `v5.0` · 26 migrations.
 
 ---
 
@@ -320,6 +320,17 @@ Chacune a une raison. La rouvrir sans raison nouvelle fait perdre du temps.
   entiers**, jamais une sous-chaîne : avec une sous-chaîne, « La Chouffe »
   masquait « Achouffe », qui est une vraie brasserie. Toute retouche de cette
   règle doit repasser les douze témoins documentés dans le commentaire.
+- **Toute liste passe par `bornee()`.** Huit se déroulaient sans fin et
+  rendaient le bas de page inatteignable. Le mécanisme est unique : clé,
+  éléments, fonction de rendu, maximum, et le nom de la fonction qui
+  redessine — `render` par défaut, `drawJournal` ou `drawSheet` pour ce qui
+  vit dans une feuille. La pagination ne démarre qu'à `max+3` : en dessous,
+  le bouton coûterait un geste pour économiser deux lignes. **Une nouvelle
+  liste doit l'utiliser**, pas réinventer un drapeau.
+- **« À découvrir » suit le réseau, pas le hasard** : ceux qui te suivent
+  sans réciprocité d'abord, puis les amis d'amis par nombre de liens
+  communs, puis les comptes récemment actifs. Chaque ligne affiche sa
+  raison — c'est ce qui rend la suggestion lisible plutôt que magique.
 - **L'écran des copains ne classe jamais par quantité bue.** La liste
   « Leur semaine » est bornée à dix et ordonnée par **dernière activité**,
   pas par nombre de canettes — trier par quantité en ferait un podium de
