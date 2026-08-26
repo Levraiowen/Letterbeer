@@ -414,6 +414,13 @@ Chacune a une raison. La rouvrir sans raison nouvelle fait perdre du temps.
   restauration du focus et du curseur dans `live()` — mais c'est un
   contournement, pas le bon patron. Toute nouvelle recherche suit celui de
   la tournée.
+- **Une limite atteinte propose, elle ne refuse pas.** « Ta tournée est
+  complète : retires-en une d'abord » demandait un geste impossible depuis
+  l'écran où l'on se trouvait — cinq étapes pour une intention simple.
+  Toucher une quatrième canette ouvre le choix du remplacement, qui garde
+  la **place** de la sortante : l'ordre de la tournée est un choix, pas un
+  hasard d'insertion. Le refus reste dans le Store en filet, pour les
+  appels directs.
 - **Retirer se mérite, ajouter non.** Les croix de suppression de la tournée
   n'apparaissent que derrière un bouton « Modifier », alors qu'un
   emplacement libre reste cliquable en permanence. Une section qu'on
