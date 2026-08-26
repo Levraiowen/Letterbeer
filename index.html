@@ -2824,8 +2824,14 @@ function blocTournee(k, sien){
      une section « Sa tournée » suivie de rien ne dit rien à personne. */
   if (!l.length && !sien) return '';
 
+  /* Le bouton de modification ne s'affiche que si l'on a quelque chose à
+     retirer. Ajouter reste toujours possible d'un emplacement libre : c'est
+     retirer qui mérite un geste délibéré, pas ajouter. */
   const titre = '<div class="sec" style="padding-top:26px"><h2>'+(sien?'Ta tournée':'Sa tournée')+'</h2>'
-    +'<span class="eyebrow">ce qu\''+(sien?'on':'il')+' ferait goûter</span></div>';
+    +(sien && l.length
+       ? '<button class="seeall" onclick="MODIF_TOURNEE=!MODIF_TOURNEE;render()">'
+         +(MODIF_TOURNEE?'Terminé':'Modifier')+'</button>'
+       : '<span class="eyebrow">ce qu\''+(sien?'on':'il')+' ferait goûter</span>')+'</div>';
 
   /* SUR SON PROPRE PROFIL — toujours trois emplacements, les libres en
      pointillés. Une seule canette dans une grille de trois colonnes se
@@ -2838,9 +2844,11 @@ function blocTournee(k, sien){
       +(l.length ? '' : '<div class="empty" style="padding:0 30px 4px;font-size:12px">'
          +'Trois canettes au plus, celles que tu ferais goûter.</div>')
       +'<div class="grid">'
-        +l.map(b=>'<div class="tcell">'+cell(b)
-                  +'<button class="tdel" onclick="doRetirerTournee(\''+esc(b.id)+'\')" '
-                  +'aria-label="Retirer de ta tournée">'+I.x+'</button></div>').join('')
+        +l.map(b=> MODIF_TOURNEE
+            ? '<div class="tcell">'+cell(b)
+              +'<button class="tdel" onclick="doRetirerTournee(\''+esc(b.id)+'\')" '
+              +'aria-label="Retirer '+esc(b.n)+' de ta tournée">'+I.x+'</button></div>'
+            : cell(b)).join('')
         +Array.from({length: libres}, () =>
            '<button class="cell libre" onclick="allerChoisirTournee()" '
            +'aria-label="Ajouter une canette à ta tournée">'
@@ -2868,30 +2876,42 @@ function allerChoisirTournee(){
   drawChoixTournee();
   setTimeout(()=>{ const c=document.getElementById('ch-q'); if(c) c.focus() }, 120);
 }
+/* La coque ne se dessine QU'UNE FOIS. Réécrire tout l'innerHTML à chaque
+   lettre détruisait le champ et le recréait : le focus partait, et sur
+   téléphone le clavier se refermait à chaque frappe. Seuls les résultats
+   sont rafraîchis. */
 function drawChoixTournee(){
   const sh=$('#sheet');
-  const l = Store.search(CHOIX, [], 'note-desc')
-              .filter(b => !Store.dansTournee(b.id))
-              .slice(0, 30);
-  const restant = 3 - ((C.me.tournee||[]).length);
   sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
    +'<div class="sheet-bar"><b>Ta tournée</b><button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
    +'<div class="sheet-body">'
-   +'<div class="hint" style="margin-bottom:12px">'
-     +(restant>0 ? 'Il te reste '+restant+' place'+(restant>1?'s':'')+'.'
-                 : 'Ta tournée est complète — retires-en une pour changer.')+'</div>'
+   +'<div class="hint" id="ch-reste" style="margin-bottom:12px"></div>'
    +'<div class="searchbar">'+I.search
      +'<input id="ch-q" placeholder="Chercher une canette…" value="'+esc(CHOIX)+'" '
-     +'oninput="CHOIX=this.value;drawChoixTournee()"></div>'
-   +(restant>0
-     ? (l.length
-        ? '<div class="grid" style="margin-top:12px">'
-          +l.map(b=>'<button class="cell" onclick="doTournee(\''+esc(b.id)+'\',1)">'
-                    +can(b,1)+'<span class="meta">'+stars(Store.rating(b.id),'dim')+'</span></button>').join('')
-          +'</div>'
-        : '<div class="empty">Rien ne correspond.</div>')
-     : '')
+     +'oninput="CHOIX=this.value;majChoixTournee()"></div>'
+   +'<div id="ch-res"></div>'
    +'</div></div>';
+  majChoixTournee();
+}
+
+function majChoixTournee(){
+  const reste = document.getElementById('ch-reste');
+  const res   = document.getElementById('ch-res');
+  if (!res) return;
+  const restant = 3 - ((C.me.tournee||[]).length);
+  if (reste) reste.textContent = restant>0
+    ? 'Il te reste ' + restant + ' place' + (restant>1?'s':'') + '.'
+    : 'Ta tournée est complète — retires-en une pour changer.';
+  if (restant <= 0) { res.innerHTML=''; return }
+  const l = Store.search(CHOIX, [], 'note-desc')
+              .filter(b => !Store.dansTournee(b.id))
+              .slice(0, 30);
+  res.innerHTML = l.length
+    ? '<div class="grid" style="margin-top:12px">'
+      +l.map(b=>'<button class="cell" onclick="doTournee(\''+esc(b.id)+'\',1)">'
+                +can(b,1)+'<span class="meta">'+stars(Store.rating(b.id),'dim')+'</span></button>').join('')
+      +'</div>'
+    : '<div class="empty">Rien ne correspond.</div>';
 }
 
 /* ---------- mon profil ---------- */
@@ -3361,13 +3381,16 @@ async function doTournee(id, depuisChoix){
   if(r===null) return;
   toast(r ? 'Ajoutée à ta tournée' : 'Retirée de ta tournée');
   render();
-  if (depuisChoix) { if ((C.me.tournee||[]).length >= 3) closeSheet(); else drawChoixTournee() }
+  if (depuisChoix) { if ((C.me.tournee||[]).length >= 3) closeSheet(); else majChoixTournee() }
   else drawSheet();
 }
 /* Retirer depuis son propre profil, sans passer par la fiche. */
 async function doRetirerTournee(id){
   const r = await act(()=>Store.basculerTournee(id));
   if(r===null) return;
+  // plus rien à retirer : le bouton « Terminé » disparaîtrait en laissant
+  // le mode actif, donc invisible et impossible à quitter
+  if (!(C.me.tournee||[]).length) MODIF_TOURNEE = false;
   toast('Retirée de ta tournée'); render();
 }
 
@@ -3697,6 +3720,7 @@ async function classerSignalement(id, resolu){
 
 /* ---------- édition d'une fiche à la main ---------- */
 let EDB = null;
+let MODIF_TOURNEE = false;   // les croix de retrait ne s'affichent qu'ici
 function openEditBeer(id){
   const b = Store.beer(id);
   if(!b) return toast('Fiche introuvable');
@@ -3890,7 +3914,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v5.9';
+const APP_VERSION = 'v6.0';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
