@@ -157,6 +157,31 @@ signalements, édition et suppression de fiches — réservé aux administrateur
   cinquante fiches les plus consultées valent mieux que cinq cents fiches
   jumelles.
 
+### Ajouter une canette à la main
+
+**La photo doit venir d'Open Food Facts.** La CSP n'autorise `img-src` que
+depuis Supabase et `*.openfoodfacts.org` / `.net` : une image prise ailleurs
+est refusée par le navigateur, et la fiche s'affiche muette. C'est aussi ce
+qui règle la licence, les photos d'OFF étant en CC-BY-SA.
+
+Chercher via `https://world.openfoodfacts.org/cgi/search.pl?search_terms=…&json=1`
+— **l'API v2 ignore `search_terms`** et renvoie tout le catalogue, piège
+vérifié. L'historique limite le débit : espacer de huit secondes et réessayer
+sur réponse HTML.
+
+Deux corrections systématiques sur les fiches OFF : le nom est souvent un
+libellé de rayon (« Cherry » seul), et la quantité celle du **pack**
+(« 6x33cl ») là où il faut le volume d'une canette.
+
+**Ne jamais inventer un degré.** Il alimente le calcul des unités d'alcool,
+donc les repères de santé. Absent d'OFF, le laisser `null` — la fiche
+affiche « ?° » — et le compléter la canette en main.
+
+**La 8.6 Black reste à ajouter** : absente d'Open Food Facts sous toute
+écriture. Deux sorties — créer la fiche sur OFF, qui est un wiki public, puis
+l'importer ; ou l'insérer sans photo, l'app affichant alors la coque de
+canette avec son nom.
+
 ### Dette technique assumée
 
 - **Fichiers orphelins dans le stockage** après suppression de compte —

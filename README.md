@@ -105,6 +105,7 @@ sql/27-invitation-serveur.sql  l'invitation ne dépend plus du navigateur
 sql/28-blocage.sql             bloquer quelqu'un — filtrage par la base
 sql/29-moderation-auto.sql     modération automatique, volontairement faible
 sql/30-tournee.sql             trois canettes épinglées au profil
+sql/31-canettes-ajoutees.sql   cinq canettes ajoutées à la main
 ```
 
 La migration `19` retire le droit de lire certaines colonnes de `profiles`
