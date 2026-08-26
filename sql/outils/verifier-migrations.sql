@@ -143,6 +143,12 @@ with controles as (
   union all select 28, 'Modération automatique',
     exists (select 1 from pg_trigger where tgname='reviews_moderation'),
     'sql/29-moderation-auto.sql'
+
+  union all select 29, 'Ma tournée',
+    exists (select 1 from information_schema.column_privileges
+            where grantee='authenticated' and privilege_type='SELECT'
+              and table_name='profiles' and column_name='tournee'),
+    'sql/30-tournee.sql'
 )
 select ordre,
        quoi,

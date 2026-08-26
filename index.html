@@ -1017,7 +1017,7 @@ const Auth = {
       la migration 19, sinon l'app ne la verra pas. */
 const COL_PROFILS_BASE = 'id, handle, avatar_url, city, private_stats, created_at,'
                        + ' pref_familles, pref_degre, onboarded';
-const COL_PROFILS = COL_PROFILS_BASE + ', bio';
+const COL_PROFILS = COL_PROFILS_BASE + ', bio, tournee';
 const COL_AVIS    = 'id, user_id, beer_id, rating, liked, body, cheers_count, created_at';
 
 /* PostgREST plafonne silencieusement chaque réponse — mille lignes chez
@@ -1081,8 +1081,8 @@ async function chargerProfils() {
   try {
     return await chargerTout('profils', () => sb.from('profiles').select(COL_PROFILS).order('id'));
   } catch (e) {
-    if (!/bio/i.test(String((e && e.message) || e))) throw e;
-    console.warn('colonne bio absente — migration 23 pas encore passée');
+    if (!/bio|tournee/i.test(String((e && e.message) || e))) throw e;
+    console.warn('colonne bio ou tournee absente — migration 23 ou 30 pas encore passée');
     return chargerTout('profils', () => sb.from('profiles').select(COL_PROFILS_BASE).order('id'));
   }
 }
@@ -1126,6 +1126,7 @@ async function hydrate() {
     const u = {
       h: p.handle, i: initials(p.handle), c: hueOf(p.id), photo: p.avatar_url,
       priv: p.private_stats ? 1 : 0, ville: p.city || '—', bio: p.bio || '',
+      tournee: Array.isArray(p.tournee) ? p.tournee : [],
       foll: followingIds.includes(p.id) ? 1 : 0,
       fme:  followerIds.includes(p.id) ? 1 : 0,
       cans: 0, avg: 0, top: '—', week: 0, act: []
@@ -1781,6 +1782,26 @@ const Store = {
     if (patch.handle) { C.me.h = patch.handle; C.me.i = initials(patch.handle) }
     if ('city' in patch) C.me.ville = patch.city || '—';
     if ('bio'  in patch) C.me.bio   = patch.bio || '';
+  },
+
+  /* ---- la tournée ----
+     Trois canettes épinglées au profil : ce qu'on ferait goûter, pas un
+     palmarès. Les identifiants caducs — fiche supprimée depuis — sont
+     ignorés à la lecture plutôt que nettoyés en base : un tableau ne porte
+     pas de clé étrangère, et personne n'a envie qu'une purge de catalogue
+     réécrive les profils. */
+  tournee: k => ((Store.user(k) || {}).tournee || []).map(Store.beer).filter(Boolean),
+  dansTournee: id => ((C.me && C.me.tournee) || []).includes(id),
+  async basculerTournee(id) {
+    const actuelle = (C.me.tournee || []).slice();
+    const dedans = actuelle.includes(id);
+    if (!dedans && actuelle.length >= 3)
+      throw new Error('Ta tournée est complète : retires-en une d\'abord.');
+    const suivante = dedans ? actuelle.filter(x => x !== id) : [...actuelle, id];
+    const { error } = await sb.from('profiles').update({ tournee: suivante }).eq('id', C.myId);
+    if (error) throw error;
+    C.me.tournee = suivante;
+    return !dedans;
   },
 
   /* ---- liste d'envies ---- */
@@ -2727,6 +2748,7 @@ function vUser(){
         +'<div class="stat"><div class="k">Cette semaine</div><div class="v">'+u.week+' <small>canettes</small></div></div>'
         +'<div class="stat"><div class="k">Style dominant</div><div class="v" style="font-size:16px">'+esc(u.top)+'</div></div>'
        +'</div>')
+   +(Store.estBloque(k) ? '' : blocTournee(k, false))
    +(Store.estBloque(k)
      ? '<div class="empty" style="padding:30px 34px">Ses avis et ses réponses sont masqués, '
        +'et les tiens le sont pour lui.</div>'
@@ -2742,6 +2764,23 @@ function vUser(){
      +stars(a.r)+'</button>'}).join('')
    +'<button class="reportlink" onclick="openReport(\'profile\',\''+esc(k)+'\')">'+I.flag+' Signaler ce compte</button>'
    +'<button class="reportlink" onclick="doBloquer(\''+esc(k)+'\')">'+I.lock+' Bloquer '+esc(u.h)+'</button>');
+}
+
+/* La tournée, sous l'en-tête d'un profil. Trois canettes au plus, dans la
+   largeur exacte de la grille du catalogue — d'où le choix de trois. */
+function blocTournee(k, sien){
+  const l = Store.tournee(k);
+  if (!l.length) {
+    return sien
+      ? '<div class="sec" style="padding-top:26px"><h2>Ta tournée</h2></div>'
+        +'<div class="empty" style="padding:4px 30px 0;font-size:12px">'
+        +'Trois canettes au plus, celles que tu ferais goûter. '
+        +'Ça se choisit depuis la fiche d\'une bière.</div>'
+      : '';
+  }
+  return '<div class="sec" style="padding-top:26px"><h2>'+(sien?'Ta tournée':'Sa tournée')+'</h2>'
+    +'<span class="eyebrow">ce qu\''+(sien?'on':'il')+' ferait goûter</span></div>'
+    +'<div class="grid">'+l.map(b=>cell(b)).join('')+'</div>';
 }
 
 /* ---------- mon profil ---------- */
@@ -2771,6 +2810,7 @@ function vMe(){
      +'<span>'+fmtDec(wu)+' unités d\'alcool · ta moyenne : '+fmtDec(s.wkAvg)+' canettes/semaine</span></span>'
      +'<button class="cbtn" onclick="openLog()" aria-label="Ajouter une canette">+</button></div>'
    +(above?'<div class="note warn">'+I.info+'<span>Semaine au-dessus de ta moyenne habituelle. Rien d\'alarmant en soi, c\'est juste bon à savoir.</span></div>':'')
+   +blocTournee('me', true)
    +'<div class="sec" style="padding-top:22px"><h2>Tes repères</h2><span class="eyebrow">suivi perso</span></div>'
    +'<div class="repere">'
      +'<div class="rp-row"><span class="k">Volume total</span><span class="v">'+fmtDec(s.cl/100)+' <small>L</small></span></div>'
@@ -3201,6 +3241,16 @@ function drawWishlist(){
     : '<div class="empty">Rien pour l\'instant.<br><br>Sur une fiche bière, « + À goûter » '
       +'ajoute la canette ici. Pratique pour ne pas oublier une envie devant le rayon.</div>';
 }
+/* Ajouter ou retirer une canette de sa tournée. Le refus « tournée pleine »
+   remonte du Store : mieux vaut un message clair qu'un troisième
+   emplacement qui écraserait silencieusement le premier. */
+async function doTournee(id){
+  const r = await act(()=>Store.basculerTournee(id));
+  if(r===null) return;
+  toast(r ? 'Ajoutée à ta tournée' : 'Retirée de ta tournée');
+  drawSheet(); render();
+}
+
 async function toggleWish(){
   const on = await act(()=>Store.toggleWish(SH.beer), 'Impossible pour le moment — réessaie');
   if(on===null) return;
@@ -3720,7 +3770,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v5.5';
+const APP_VERSION = 'v5.6';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
@@ -3892,6 +3942,9 @@ function drawSheet(){
        +'<button class="chip'+(Store.wished(b.id)?' on':'')+'" style="flex:1;text-align:center" onclick="toggleWish()">'
          +(Store.wished(b.id)?'✓ Sur ta liste':'+ À goûter')+'</button>'
      +'</div>'
+     +'<button class="chip'+(Store.dansTournee(b.id)?' on':'')+'" style="width:100%;text-align:center;margin-top:9px" '
+       +'onclick="doTournee(\''+esc(b.id)+'\')">'
+       +(Store.dansTournee(b.id)?'✓ Dans ta tournée':'+ Mettre dans ma tournée')+'</button>'
      // noter n'est pas toujours boire : on laisse le choix, coché par défaut
      +(SH.already?'':'<div class="lockrow" style="margin-top:13px"><span class="t">'
        +'<b style="font-size:13.5px;font-weight:500;display:block">J\'en ai bu une</b>'
