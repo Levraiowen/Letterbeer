@@ -7,9 +7,16 @@
   "scripts": {
     "import": "node import-beers.mjs",
     "enrich": "node enrich-beers.mjs",
-    "icons": "python make-icons.py"
+    "icons": "python make-icons.py",
+    "test": "node --test test-catalogue.mjs",
+    "styles": "node enrich-styles.mjs"
   },
-  "keywords": ["bière", "canette", "supabase", "pwa"],
+  "keywords": [
+    "bière",
+    "canette",
+    "supabase",
+    "pwa"
+  ],
   "author": "Levraiowen",
   "license": "UNLICENSED",
   "dependencies": {

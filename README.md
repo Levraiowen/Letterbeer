@@ -60,7 +60,13 @@ logo.svg, icon-*.png        la marque ; make-icons.py régénère les PNG
 
 import-beers.mjs            importe les canettes depuis Open Food Facts
 enrich-beers.mjs            complète calories et allergènes
+enrich-styles.mjs           comble les styles manquants (simulation par défaut)
+styles.mjs                  le vocabulaire des styles, partagé par les deux
+test-catalogue.mjs          les contrats du catalogue — npm test
 make-icons.py               redessine les icônes d'application
+
+CLAUDE.md                   consignes pour un agent ; pointe sur PROJET.md
+.mcp.json                   serveur MCP Supabase, en LECTURE SEULE
 
 sql/                        migrations, à passer dans l'ordre des numéros
 sql/outils/                 requêtes de contrôle, ne modifient rien
@@ -140,6 +146,14 @@ export SUPABASE_SERVICE_KEY="cle-service-role"
 
 node import-beers.mjs     # importe les canettes
 node enrich-beers.mjs     # complète calories et allergènes
+node enrich-styles.mjs    # SIMULATION : montre les styles trouvés, n'écrit rien
+node enrich-styles.mjs --ecrire   # les écrit pour de bon
+```
+
+Les contrats du catalogue se vérifient sans aucune clé :
+
+```bash
+npm test
 ```
 
 L'import classe les produits en trois catégories. Les canettes **certaines**

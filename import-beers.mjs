@@ -31,17 +31,29 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { COULEURS, guessStyle } from './styles.mjs';
+import { pathToFileURL } from 'node:url';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_KEY;
 const UA = 'Letterbeer/0.2 (contact: ton.email@exemple.fr)';
 
-if (!SUPABASE_URL || !SERVICE_KEY) {
+/* On ne lance l'import QUE si ce fichier est appelé directement. Sans ce
+   garde, `import { classer }` depuis test-catalogue.mjs déclencherait un
+   import complet contre la vraie base — et le contrat que PROJET.md dit
+   « vérifié par test unitaire » resterait invérifiable, ce qu'il était
+   jusqu'au 26 août 2026 : aucun fichier de test n'existait.
+
+   Même raison pour le contrôle d'environnement et le client, désormais
+   paresseux : au chargement, ils faisaient sortir le processus de test. */
+const appelDirect = process.argv[1]
+  && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (appelDirect && (!SUPABASE_URL || !SERVICE_KEY)) {
   console.error("Il manque SUPABASE_URL ou SUPABASE_SERVICE_KEY dans l'environnement.");
   process.exit(1);
 }
 
-const sb = createClient(SUPABASE_URL, SERVICE_KEY);
 const PAUSE = 1500;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -65,43 +77,51 @@ const RECHERCHES = [
   { nom:'emballage canette',  q:'packaging_tags=en:can',                  pages:8,  sur:true  },
   { nom:'matériau aluminium', q:'packaging_materials_tags=en:aluminium',  pages:8,  sur:true  },
   { nom:'forme canette',      q:'packaging_shapes_tags=en:can',           pages:6,  sur:true  },
+
+  /* ---- les familles qui manquent, ajoutées le 26 août 2026 ----
+   *
+   * Mesuré en base ce jour-là : le catalogue compte 124 blondes, 57 IPA et
+   * **14 brunes** sur 313 fiches publiées. Trois combinaisons du premier
+   * lancement sur neuf ne peuvent donc pas remplir l'écran de six
+   * suggestions — brunes+légères (4), brunes+costaudes (3), IPA+costaudes (3).
+   *
+   * Ce n'est PAS un problème de style manquant : il n'y a pas de brunes
+   * cachées faute d'étiquette, il n'y a pas de brunes. Les facettes
+   * d'emballage ci-dessus ratissent tout le catalogue sans distinction de
+   * couleur, et le fonds mondial est majoritairement blond — d'où le
+   * déséquilibre, qui ne se corrigera pas en important davantage « large ».
+   *
+   * Rendement mesuré sur la première page de chaque facette, canettes
+   * utilisables après les filtres qualité :
+   *
+   *   dark-ales     245 produits · 16 %   ← la meilleure
+   *   stouts        226 produits · 15 %
+   *   abbey-ales    252 produits ·  9 %
+   *   amber-beers   340 produits ·  4 %
+   *
+   * Écartées faute d'exister dans OFF, vérifié : `dark-beers`, `bocks`,
+   * `abbey-beers`, `dubbels`, `red-ales` renvoient zéro produit. `porters`
+   * (14) et `brown-ales` (5) sont trop maigres pour valoir un appel.
+   * `ales` (2 102) est trop large : c'est le balayage qu'on fait déjà.
+   *
+   * À noter : `stouts` et `fr:bieres-brunes` renvoient le même compte —
+   * OFF les traite comme un seul tag. Inutile d'ajouter le tag français.
+   */
+  { nom:'brunes (dark ales)', cat:'dark-ales',   pages:3, sur:false },
+  { nom:'stouts',             cat:'stouts',      pages:3, sur:false },
+  { nom:'bières d\'abbaye',   cat:'abbey-ales',  pages:3, sur:false },
+  { nom:'ambrées',            cat:'amber-beers', pages:4, sur:false },
   { nom:'France, large',      q:'countries_tags_en=france',               pages:25, sur:false },
   { nom:'Belgique, large',    q:'countries_tags_en=belgium',              pages:8,  sur:false },
   { nom:'Monde, large',       q:'',                                       pages:25, sur:false }
 ];
 
-/* ---------- style ---------- */
-const STYLES = [
-  [/neipa|hazy|new.?england/i,          'NEIPA'],
-  [/session.?ipa/i,                      'Session IPA'],
-  [/\bipa\b|india.?pale/i,               'IPA'],
-  [/imperial.?stout|russian.?imperial/i, 'Imperial Stout'],
-  [/\bstout\b/i,                         'Stout'],
-  [/\bporter\b/i,                        'Porter'],
-  [/gose/i,                              'Gose'],
-  [/sour|berliner|lambic|gueuze|kriek/i, 'Sour'],
-  [/saison|farmhouse/i,                  'Saison'],
-  [/pils|pilsner|pilsener/i,             'Pils'],
-  [/blanche|witbier|weizen|weisse|wheat/i,'Blanche'],
-  [/triple|tripel/i,                     'Triple'],
-  [/double|dubbel/i,                     'Double'],
-  [/ambree|amber|rousse/i,               'Ambrée'],
-  [/brune|brown|dunkel/i,                'Brune'],
-  [/blonde|helles|lager|biere.?blonde/i, 'Blonde'],
-  [/sans.?alcool|alcohol.?free|0[.,]0/i, 'Sans alcool']
-];
-const guessStyle = (name, cats) => {
-  const hay = `${name} ${cats.join(' ')}`;
-  for (const [re, label] of STYLES) if (re.test(hay)) return label;
-  return 'Non précisé';
-};
-
-const COLORS = {
-  'NEIPA':'#FF7A2F','IPA':'#FFB020','Session IPA':'#5FC9E8','Imperial Stout':'#8A6244',
-  'Stout':'#9B8B7A','Porter':'#A08670','Gose':'#7FD1D9','Sour':'#FF5D8F','Saison':'#C9E265',
-  'Pils':'#E8DFA0','Blanche':'#EFE3C8','Triple':'#F0C97A','Double':'#D89A5A','Ambrée':'#E0603A',
-  'Brune':'#8C6A4F','Blonde':'#F2D06B','Sans alcool':'#9FD8C0','Non précisé':'#B0B0B8'
-};
+/* ---------- style ----------
+   STYLES, COULEURS et guessStyle() vivaient ici. Ils sont partis dans
+   styles.mjs le 26 août 2026, parce que enrich-styles.mjs en a besoin aussi
+   et qu'une couleur qui diverge entre deux scripts donne deux teintes pour
+   le même style. Comportement inchangé : c'est un déménagement, pas une
+   correction. */
 
 /* ---------- volume ---------- */
 const parseCl = q => {
@@ -126,7 +146,7 @@ const SIGNAL_CANETTE   = /\bcanette\b|\bcannette\b|\bcan\b|boite-boisson|\balumi
    passait en publication directe — constaté sur les plus scannées. */
 const SIGNAL_BOUTEILLE = /bouteille|bottle|\bverre\b|\bglass\b|\bbottiglia\b|\bbte\b|\bbtl\b/i;
 
-function classer(p) {
+export function classer(p) {
   const cl = parseCl(p.quantity);
 
   // aucune canette n'existe au-delà de 56 cl : le volume tranche seul
@@ -221,7 +241,10 @@ function clean(p) {
   if (verdict === 'bouteille') return null;      // écartée, sans discussion
 
   const cats    = p.categories_tags || [];
-  const style   = guessStyle(name, cats);
+  // abv passé au style : une fiche à 5,5° ne peut pas ressortir « Sans
+  // alcool », même si OFF la range en en:non-alcoholic-beers — c'est arrivé
+  // sur Grimbergen Pale Ale, mesuré le 26 août 2026
+  const style   = guessStyle(name, cats, abv);
   const country = (p.countries_tags || []).some(t => /france/.test(t)) ? 'France' : 'Autre';
   const sure    = verdict === 'canette';
 
@@ -235,7 +258,7 @@ function clean(p) {
     container: sure ? 'canette' : null,
     country,
     image_url: img,
-    color: COLORS[style] || '#B0B0B8',
+    color: COULEURS[style] || '#B0B0B8',
     description: `${style} de ${brand}, ${abv}°, canette ${cl} cl. `
       + (sure ? "Fiche importée d'Open Food Facts — complète-la si tu en sais plus."
               : "Contenant non confirmé par Open Food Facts : à vérifier sur la photo."),
@@ -265,13 +288,17 @@ async function pagePopulaire(q, n) {
       await sleep(4000 * essai);
     }
   }
-  return [];
+  return null;               // même convention que page() : null = on renonce
 }
 
 /* ---------- API, avec reprise sur 503 ---------- */
-async function page(q, n) {
+/* `cat` vaut 'beers' par défaut — le comportement d'origine. Les recherches
+   par famille (dark-ales, stouts, abbey-ales, amber-beers) la remplacent :
+   ces tags sont DÉJÀ des sous-catégories de bières dans OFF, donc cumuler
+   les deux ne filtrerait rien de plus et risquerait un ET mal interprété. */
+async function page(q, n, cat = 'beers') {
   const url = 'https://world.openfoodfacts.org/api/v2/search'
-            + '?categories_tags_en=beers' + (q ? '&' + q : '')
+            + '?categories_tags_en=' + encodeURIComponent(cat) + (q ? '&' + q : '')
             + '&fields=' + FIELDS + '&page_size=100&page=' + n;
   for (let essai = 1; essai <= 4; essai++) {
     try {
@@ -283,23 +310,37 @@ async function page(q, n) {
         continue;
       }
       console.warn(`  ! HTTP ${res.status}`);
-      return [];
+      return null;                       // erreur franche : on n'a pas su
     } catch (e) {
       await sleep(3000 * essai);
     }
   }
-  return [];
+  return null;                           // quatre essais, toujours rien
 }
 
 /* ---------- boucle ---------- */
 async function run() {
+  const sb = createClient(SUPABASE_URL, SERVICE_KEY);
   const vus = new Set();     // codes-barres déjà traités
   const gardees = new Map(); // barcode -> fiche
 
   for (const r of RECHERCHES) {
     console.log(`\n▸ ${r.nom}`);
     for (let n = 1; n <= r.pages; n++) {
-      const produits = r.pop ? await pagePopulaire(r.q, n) : await page(r.q, n);
+      const produits = r.pop ? await pagePopulaire(r.q, n) : await page(r.q, n, r.cat);
+
+      /* `null` et `[]` ne veulent PAS dire la même chose, et les confondre
+         coûtait cher : jusqu'au 26 août 2026, page() rendait `[]` après
+         quatre 503, la boucle lisait « plus rien » et sautait la facette
+         ENTIÈRE sans le dire. Vu en vrai ce jour-là — Open Food Facts
+         renvoie des 503 en rafale dès qu'on le sollicite un peu. Sur une
+         facette de 3 pages, perdre la page 1 c'est tout perdre, en silence.
+         Maintenant ça se voit. */
+      if (produits === null) {
+        console.warn(`  page ${n} : ABANDONNÉE — débit limité par Open Food Facts.`);
+        console.warn(`             La facette « ${r.nom} » est incomplète. Relance plus tard.`);
+        break;
+      }
       if (!produits.length) { console.log(`  page ${n} : plus rien`); break; }
 
       let neufs = 0;
@@ -337,4 +378,4 @@ async function run() {
   console.log(`Puis lance enrich-beers.mjs pour les calories et les allergènes.`);
 }
 
-run().catch(console.error);
+if (appelDirect) run().catch(console.error);
