@@ -1835,9 +1835,23 @@ const Store = {
     return C._idxTournee[id] || 0;
   },
   dansTournee: id => ((C.me && C.me.tournee) || []).includes(id),
+  /* Échanger une canette contre une autre, à la place de la sortante.
+     L'ordre de la tournée est un choix : remplacer ne doit pas renvoyer la
+     nouvelle venue à la fin. */
+  async remplacerTournee(sortante, entrante) {
+    const suivante = (C.me.tournee || []).map(x => x === sortante ? entrante : x);
+    const { error } = await sb.from('profiles').update({ tournee: suivante }).eq('id', C.myId);
+    if (error) throw error;
+    C.me.tournee = suivante;
+    C._idxTournee = null;
+  },
+
   async basculerTournee(id) {
     const actuelle = (C.me.tournee || []).slice();
     const dedans = actuelle.includes(id);
+    // Filet, pas parcours : doTournee() intercepte le cas plein en amont et
+    // propose un remplacement. Ce refus ne se voit donc plus à l'écran, mais
+    // il protège tout appel direct au Store.
     if (!dedans && actuelle.length >= 3)
       throw new Error('Ta tournée est complète : retires-en une d\'abord.');
     const suivante = dedans ? actuelle.filter(x => x !== id) : [...actuelle, id];
@@ -2928,8 +2942,7 @@ function majChoixTournee(){
   const restant = 3 - ((C.me.tournee||[]).length);
   if (reste) reste.textContent = restant>0
     ? 'Il te reste ' + restant + ' place' + (restant>1?'s':'') + '.'
-    : 'Ta tournée est complète — retires-en une pour changer.';
-  if (restant <= 0) { res.innerHTML=''; return }
+    : 'Ta tournée est complète — choisis-en une, elle en remplacera une autre.';
   const l = Store.search(CHOIX, [], 'note-desc')
               .filter(b => !Store.dansTournee(b.id))
               .slice(0, 30);
@@ -3404,6 +3417,13 @@ function drawWishlist(){
    emplacement qui écraserait silencieusement le premier. */
 /* depuisChoix : on vient du sélecteur, il faut le redessiner et non la fiche */
 async function doTournee(id, depuisChoix){
+  /* Tournée pleine : on ouvre le choix du remplacement plutôt que de
+     renvoyer « retires-en une d'abord », qui était une impasse — le message
+     demandait un geste impossible depuis l'écran où on se trouvait. */
+  if (!Store.dansTournee(id) && (C.me.tournee || []).length >= 3) {
+    ouvrirRemplacement(id, depuisChoix);
+    return;
+  }
   const r = await act(()=>Store.basculerTournee(id));
   if(r===null) return;
   toast(r ? 'Ajoutée à ta tournée' : 'Retirée de ta tournée');
@@ -3411,6 +3431,46 @@ async function doTournee(id, depuisChoix){
   if (depuisChoix) { if ((C.me.tournee||[]).length >= 3) closeSheet(); else majChoixTournee() }
   else drawSheet();
 }
+/* Laquelle des trois céder sa place ? On montre l'entrante en haut, puis
+   les trois en place : toucher l'une d'elles échange, sans étape de plus. */
+let ENTRANTE = null;
+function ouvrirRemplacement(id, depuisChoix){
+  const b = Store.beer(id);
+  if (!b) return;
+  ENTRANTE = { id, depuisChoix: !!depuisChoix };
+  const sh=$('#sheet'); sh.classList.add('open');
+  sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
+   +'<div class="sheet-bar"><b>Ta tournée est complète</b>'
+     +'<button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
+   +'<div class="sheet-body">'
+   +'<div class="note">'+I.info+'<span>Trois places, pas une de plus. '
+     +'Touche celle que <b>'+esc(b.n)+'</b> doit remplacer.</span></div>'
+   +'<div class="sec" style="padding-top:20px"><h2>Elle entre</h2></div>'
+   +'<div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr))">'
+     +'<button class="cell" onclick="openBeer(\''+esc(id)+'\')">'+can(b,1)
+     +'<span class="meta">'+stars(Store.rating(id),'dim')+'</span></button>'
+   +'</div>'
+   +'<div class="sec" style="padding-top:22px"><h2>À la place de</h2></div>'
+   +'<div class="grid">'
+     +Store.tournee('me').map(x=>'<button class="cell" onclick="doRemplacer(\''+esc(x.id)+'\')">'
+        +can(x,1)+'<span class="meta">'+stars(Store.rating(x.id),'dim')+'</span></button>').join('')
+   +'</div>'
+   +'</div></div>';
+}
+
+async function doRemplacer(sortante){
+  if (!ENTRANTE) return;
+  const dehors = Store.beer(sortante), dedans = Store.beer(ENTRANTE.id);
+  const r = await act(()=>Store.remplacerTournee(sortante, ENTRANTE.id), 'Remplacement impossible');
+  if(r===null) return;
+  toast((dedans?dedans.n:'Elle')+' remplace '+(dehors?dehors.n:'l\'autre'));
+  const revenirAuChoix = ENTRANTE.depuisChoix;
+  ENTRANTE = null;
+  render();
+  // on revient d'où l'on venait : le sélecteur, ou rien
+  if (revenirAuChoix) drawChoixTournee(); else closeSheet();
+}
+
 /* Retirer depuis son propre profil, sans passer par la fiche. */
 async function doRetirerTournee(id){
   const r = await act(()=>Store.basculerTournee(id));
@@ -3940,7 +4000,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v6.1';
+const APP_VERSION = 'v6.2';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
