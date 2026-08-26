@@ -15,7 +15,7 @@
 > Les sections sont **pondérées** : `🔴 structurant`, `🟠 important`,
 > `🟡 secondaire`. La pondération dit où porter l'attention quand le temps manque.
 >
-> Dernière mise à jour : 25 août 2026 · app en `v5.9` · 30 migrations · non ouvert aux testeurs.
+> Dernière mise à jour : 25 août 2026 · app en `v6.0` · 30 migrations · non ouvert aux testeurs.
 
 ---
 
@@ -359,6 +359,20 @@ Chacune a une raison. La rouvrir sans raison nouvelle fait perdre du temps.
   le titre appartienne visiblement au bloc qui suit. À 1,86 — l'ancien
   réglage — il flottait entre les deux et les sections ne se détachaient
   pas. Ajouter du vide partout n'aurait rien réglé.
+- **Un champ de saisie ne se redessine JAMAIS pendant qu'on y tape.**
+  Réécrire l'`innerHTML` du conteneur détruit l'élément et le recrée : le
+  focus part, et sur téléphone **le clavier se referme à chaque lettre**.
+  On dessine la coque une fois, et on ne rafraîchit que le conteneur de
+  résultats (voir `drawChoixTournee` / `majChoixTournee`). La recherche
+  principale s'en sort autrement — temporisation de 160 ms puis
+  restauration du focus et du curseur dans `live()` — mais c'est un
+  contournement, pas le bon patron. Toute nouvelle recherche suit celui de
+  la tournée.
+- **Retirer se mérite, ajouter non.** Les croix de suppression de la tournée
+  n'apparaissent que derrière un bouton « Modifier », alors qu'un
+  emplacement libre reste cliquable en permanence. Une section qu'on
+  regarde plus souvent qu'on ne la modifie ne doit pas porter ses commandes
+  d'édition en permanence.
 - **Une grille incomplète se traite, elle ne se laisse pas.** La tournée en
   donne le patron : sur son propre profil, les emplacements vides sont
   montrés en pointillés — une canette sur trois se lit alors comme un choix
