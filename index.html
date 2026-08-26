@@ -238,6 +238,15 @@ button.lockup:active{transform:scale(.96)}
 .can .pend{position:absolute;top:19%;left:5px;font-size:7.5px;font-weight:600;letter-spacing:.4px;
   color:#1a0800;background:var(--warn);padding:1px 5px;border-radius:7px;z-index:2}
 .cell .meta{display:flex;align-items:center;justify-content:center;gap:5px}
+/* Une ou deux canettes chez quelqu'un d'autre : centrées, à la largeur
+   qu'elles auraient dans la grille à trois colonnes. */
+.tournee-serree{display:flex;gap:13px;padding:10px 20px 6px;justify-content:center}
+.tournee-serree .cell{flex:0 0 calc((100% - 26px) / 3)}
+/* Emplacement libre, sur son propre profil seulement. */
+.cell.libre{opacity:.4;transition:opacity .2s}
+.cell.libre:hover,.cell.libre:active{opacity:.75}
+.cell.libre .can{border-style:dashed;background:none;align-items:center;justify-content:center}
+.cell.libre .plus{font-size:26px;font-weight:300;color:var(--dim);line-height:1}
 .stars{font-size:10.5px;letter-spacing:.5px;color:var(--accent);white-space:nowrap;transition:color .25s}
 .stars.dim{color:var(--dimmer)}
 
@@ -2770,17 +2779,49 @@ function vUser(){
    largeur exacte de la grille du catalogue — d'où le choix de trois. */
 function blocTournee(k, sien){
   const l = Store.tournee(k);
-  if (!l.length) {
-    return sien
-      ? '<div class="sec" style="padding-top:26px"><h2>Ta tournée</h2></div>'
-        +'<div class="empty" style="padding:4px 30px 0;font-size:12px">'
-        +'Trois canettes au plus, celles que tu ferais goûter. '
-        +'Ça se choisit depuis la fiche d\'une bière.</div>'
-      : '';
+
+  /* Chez quelqu'un d'autre, une tournée vide ne s'affiche pas du tout :
+     une section « Sa tournée » suivie de rien ne dit rien à personne. */
+  if (!l.length && !sien) return '';
+
+  const titre = '<div class="sec" style="padding-top:26px"><h2>'+(sien?'Ta tournée':'Sa tournée')+'</h2>'
+    +'<span class="eyebrow">ce qu\''+(sien?'on':'il')+' ferait goûter</span></div>';
+
+  /* SUR SON PROPRE PROFIL — toujours trois emplacements, les libres en
+     pointillés. Une seule canette dans une grille de trois colonnes se
+     retrouverait seule à gauche avec deux tiers de vide : ça ressemble à un
+     bug plutôt qu'à un choix. Les emplacements libres montrent qu'il reste
+     de la place, et apprennent la fonctionnalité sans un mot d'explication. */
+  if (sien) {
+    const libres = 3 - l.length;
+    return titre
+      +(l.length ? '' : '<div class="empty" style="padding:0 30px 4px;font-size:12px">'
+         +'Trois canettes au plus, celles que tu ferais goûter.</div>')
+      +'<div class="grid">'
+        +l.map(b=>cell(b)).join('')
+        +Array.from({length: libres}, () =>
+           '<button class="cell libre" onclick="allerChoisirTournee()" '
+           +'aria-label="Ajouter une canette à ta tournée">'
+           +'<span class="can"><span class="plus">+</span></span>'
+           +'<span class="meta"></span></button>').join('')
+      +'</div>';
   }
-  return '<div class="sec" style="padding-top:26px"><h2>'+(sien?'Ta tournée':'Sa tournée')+'</h2>'
-    +'<span class="eyebrow">ce qu\''+(sien?'on':'il')+' ferait goûter</span></div>'
-    +'<div class="grid">'+l.map(b=>cell(b)).join('')+'</div>';
+
+  /* CHEZ QUELQU'UN D'AUTRE — pas d'emplacements libres, on ne peut pas les
+     remplir : ce serait du bruit. Une ou deux canettes se centrent, à la
+     largeur exacte qu'elles auraient dans la grille, pour rester composées
+     au lieu de paraître tronquées. */
+  return titre
+    +'<div class="'+(l.length === 3 ? 'grid' : 'tournee-serree')+'">'
+      +l.map(b=>cell(b)).join('')
+    +'</div>';
+}
+
+/* Le raccourci depuis un emplacement libre. La tournée se choisit depuis la
+   fiche d'une bière — autant y emmener, et le dire. */
+function allerChoisirTournee(){
+  go('search');
+  toast('Ouvre une canette, puis « Mettre dans ma tournée »');
 }
 
 /* ---------- mon profil ---------- */
@@ -3770,7 +3811,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v5.6';
+const APP_VERSION = 'v5.7';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
