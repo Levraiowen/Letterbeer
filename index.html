@@ -2299,6 +2299,31 @@ function setSub(k){if(k===S.sub)return;
    revient depuis un autre onglet : son icône est une canette, elle doit
    ouvrir le catalogue et non la revue de presse qu'on lisait tout à l'heure.
    goHome(), branché sur le logo, faisait déjà exactement ça. */
+/* Déclaré ICI et non près de l'écran de la tournée : l'écouteur
+   visibilitychange juste en dessous le lit, et une mise en arrière-plan
+   pendant le chargement de la page lèverait une ReferenceError si la
+   déclaration arrivait plus loin dans le fichier. */
+let MODIF_TOURNEE = false;   // les croix de retrait ne s'affichent qu'ici
+
+/* Le mode modification de la tournée ne survit pas à un départ. L'oublier
+   actif, c'est retrouver plus tard des croix de suppression sans savoir
+   pourquoi elles sont là — et risquer d'en toucher une par mégarde.
+   Trois sorties : changement d'onglet, ouverture d'un autre profil, et mise
+   en arrière-plan de l'app. Un rechargement, lui, remet l'état à zéro tout
+   seul, le drapeau vivant en mémoire. */
+function quitterModifTournee(){
+  if (!MODIF_TOURNEE) return false;
+  MODIF_TOURNEE = false;
+  return true;
+}
+let _modifCoupee = false;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { _modifCoupee = quitterModifTournee() }
+  // au retour, on redessine SEULEMENT si on avait effectivement coupé :
+  // sans ce garde-fou, chaque retour dans l'app relancerait un rendu
+  else if (_modifCoupee) { _modifCoupee = false; render() }
+});
+
 function racineOnglet(t){
   if (t === 'home')   { S.sub = 'bieres'; S.avisTri = 'chauds' }
   if (t === 'search') { S.q = ''; S.filts = []; S.tri = 'note-desc' }
@@ -2311,11 +2336,13 @@ function ouvrirClassement(){
   render();
 }
 function go(t){
+  quitterModifTournee();
   const memeOnglet = S.tab === t || (t === 'me' && S.tab === 'account');
   if (memeOnglet || t === 'home') racineOnglet(t);
   S.dir = 1; S.tab = t; $('#view').scrollTop = 0; render(1);
 }
 function openUser(k){
+  quitterModifTournee();
   closeSheet();
   if(k==='me'){go('me');return}
   if(S.tab!=='user')S.back=S.tab;
@@ -3720,7 +3747,6 @@ async function classerSignalement(id, resolu){
 
 /* ---------- édition d'une fiche à la main ---------- */
 let EDB = null;
-let MODIF_TOURNEE = false;   // les croix de retrait ne s'affichent qu'ici
 function openEditBeer(id){
   const b = Store.beer(id);
   if(!b) return toast('Fiche introuvable');
@@ -3914,7 +3940,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v6.0';
+const APP_VERSION = 'v6.1';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
