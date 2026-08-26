@@ -242,11 +242,15 @@ button.lockup:active{transform:scale(.96)}
    qu'elles auraient dans la grille à trois colonnes. */
 .tournee-serree{display:flex;gap:13px;padding:10px 20px 6px;justify-content:center}
 .tournee-serree .cell{flex:0 0 calc((100% - 26px) / 3)}
-/* Emplacement libre, sur son propre profil seulement. */
-.cell.libre{opacity:.4;transition:opacity .2s}
-.cell.libre:hover,.cell.libre:active{opacity:.75}
-.cell.libre .can{border-style:dashed;background:none;align-items:center;justify-content:center}
-.cell.libre .plus{font-size:26px;font-weight:300;color:var(--dim);line-height:1}
+/* Emplacement libre, sur son propre profil seulement.
+   Pas d'opacité globale : elle atténuait la bordure autant que le « + », et
+   la bordure par défaut (#232327) devenait invisible sur le fond — le signe
+   flottait sans cadre. On colore donc les deux directement. */
+.cell.libre .can{border-style:dashed;border-color:var(--dimmer);background:none;
+  align-items:center;justify-content:center;transition:border-color .2s}
+.cell.libre .plus{font-size:28px;font-weight:300;color:var(--dimmer);line-height:1;transition:color .2s}
+.cell.libre:hover .can,.cell.libre:active .can{border-color:var(--accent)}
+.cell.libre:hover .plus,.cell.libre:active .plus{color:var(--accent)}
 .stars{font-size:10.5px;letter-spacing:.5px;color:var(--accent);white-space:nowrap;transition:color .25s}
 .stars.dim{color:var(--dimmer)}
 
@@ -3811,7 +3815,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v5.7';
+const APP_VERSION = 'v5.8';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
