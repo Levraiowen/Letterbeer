@@ -15,7 +15,7 @@
 > Les sections sont **pondérées** : `🔴 structurant`, `🟠 important`,
 > `🟡 secondaire`. La pondération dit où porter l'attention quand le temps manque.
 >
-> Dernière mise à jour : 25 août 2026 · app en `v5.6` · 30 migrations · non ouvert aux testeurs.
+> Dernière mise à jour : 25 août 2026 · app en `v5.8` · 30 migrations · non ouvert aux testeurs.
 
 ---
 
@@ -350,6 +350,14 @@ Chacune a une raison. La rouvrir sans raison nouvelle fait perdre du temps.
   le titre appartienne visiblement au bloc qui suit. À 1,86 — l'ancien
   réglage — il flottait entre les deux et les sections ne se détachaient
   pas. Ajouter du vide partout n'aurait rien réglé.
+- **Une grille incomplète se traite, elle ne se laisse pas.** La tournée en
+  donne le patron : sur son propre profil, les emplacements vides sont
+  montrés en pointillés — une canette sur trois se lit alors comme un choix
+  en cours, pas comme un affichage cassé, et le cadre apprend la
+  fonctionnalité sans un mot. Chez quelqu'un d'autre, pas d'emplacements
+  vides (on ne peut pas les remplir) : une ou deux canettes se **centrent**,
+  à la largeur exacte qu'elles auraient dans la grille. Et une section vide
+  chez autrui disparaît entièrement.
 - **Retaper l'onglet actif ramène à sa racine**, et l'accueil s'y remet aussi
   quand on y revient d'ailleurs : son icône est une canette, elle ouvre le
   catalogue, pas la revue de presse.
