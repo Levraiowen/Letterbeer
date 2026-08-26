@@ -120,7 +120,11 @@ const parseCl = q => {
  * 75 cl et 150 cl arrivés dans une base censée n'avoir que des canettes.
  */
 const SIGNAL_CANETTE   = /\bcanette\b|\bcannette\b|\bcan\b|boite-boisson|\baluminium\b|\balu\b/i;
-const SIGNAL_BOUTEILLE = /bouteille|bottle|\bverre\b|\bglass\b|\bbottiglia\b/i;
+/* « bte » est l'abréviation de bouteille dans les libellés de grande
+   distribution : « BTE 50CL BIERE 5% HEINEKEN ». Sans elle, une fiche dont
+   les tags d'emballage disent canette mais dont le NOM crie bouteille
+   passait en publication directe — constaté sur les plus scannées. */
+const SIGNAL_BOUTEILLE = /bouteille|bottle|\bverre\b|\bglass\b|\bbottiglia\b|\bbte\b|\bbtl\b/i;
 
 function classer(p) {
   const cl = parseCl(p.quantity);
@@ -135,8 +139,12 @@ function classer(p) {
   ].join(' ');
   const quantite = (p.quantity || '');
 
+  // le NOM compte aussi : « BTE 50CL … » dit bouteille même quand les tags
+  // d'emballage disent le contraire, et c'est le nom qui a raison
+  const nom = (p.product_name || '');
   const canette   = SIGNAL_CANETTE.test(tags)   || SIGNAL_CANETTE.test(quantite);
-  const bouteille = SIGNAL_BOUTEILLE.test(tags) || SIGNAL_BOUTEILLE.test(quantite);
+  const bouteille = SIGNAL_BOUTEILLE.test(tags) || SIGNAL_BOUTEILLE.test(quantite)
+                 || SIGNAL_BOUTEILLE.test(nom);
 
   if (bouteille && !canette) return 'bouteille';
   if (canette && !bouteille) return 'canette';

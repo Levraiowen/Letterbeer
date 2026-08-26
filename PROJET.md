@@ -157,6 +157,38 @@ signalements, édition et suppression de fiches — réservé aux administrateur
   cinquante fiches les plus consultées valent mieux que cinq cents fiches
   jumelles.
 
+### 🔴 CANETTES SEULEMENT — l'erreur à ne pas refaire
+
+**Le 25 août 2026, cinq fiches ont été insérées à la main (migration 31) en
+« canette » sans aucune preuve.** Le contenant avait été déduit du volume.
+Vérification faite après coup sur les données d'emballage d'Open Food Facts :
+une seule était une canette, une était formellement une bouteille
+(`en:glass en:bottle`), trois n'avaient aucune donnée. La migration 32
+répare — bouteille rejetée, indéterminées renvoyées à la validation.
+
+C'est **exactement** le raccourci qui avait rempli la base de 75 cl et
+motivé les migrations 12 et 13. Il a été refait sous une autre forme, en
+contournant l'outil qui l'empêchait.
+
+**La règle : ne jamais écrire `container = 'canette'` ni `status =
+'approved'` à la main.** Passer par `import-beers.mjs`, dont le contrat est
+vérifié par test unitaire :
+
+- `en:drink-can`, `en:can`, `aluminium` sans contre-indice → **canette**,
+  publiée ;
+- `bouteille`, `bottle`, `verre`, `glass`, **`bte`**, **`btl`** dans les tags,
+  la quantité **ou le nom** → **bouteille**, jamais insérée ;
+- plus de 56 cl → bouteille, le volume tranche seul ;
+- **tout le reste → `pending`**, avec sa photo, dans « Fiches à valider ».
+
+Le nom est contrôlé depuis le 25 août : « BTE 50CL BIERE 5% HEINEKEN »
+portait le tag `en:drink-can` et passait en publication directe. « BTE » est
+l'abréviation de bouteille en grande distribution.
+
+**Rendement mesuré** sur les 100 bières les plus scannées en France : 17
+canettes publiées, **68 bouteilles écartées d'office**, 15 à trancher à
+l'œil. Le doute ne publie jamais.
+
 ### Ajouter des canettes EN NOMBRE
 
 **Ne pas passer par « Proposer une bière » dans l'app.** `submitBeer()`

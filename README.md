@@ -106,6 +106,7 @@ sql/28-blocage.sql             bloquer quelqu'un — filtrage par la base
 sql/29-moderation-auto.sql     modération automatique, volontairement faible
 sql/30-tournee.sql             trois canettes épinglées au profil
 sql/31-canettes-ajoutees.sql   cinq canettes ajoutées à la main
+sql/32-correctif-canettes.sql  répare la 31 — lire l'entête
 ```
 
 La migration `19` retire le droit de lire certaines colonnes de `profiles`
