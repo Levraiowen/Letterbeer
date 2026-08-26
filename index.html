@@ -246,6 +246,14 @@ button.lockup:active{transform:scale(.96)}
    Pas d'opacité globale : elle atténuait la bordure autant que le « + », et
    la bordure par défaut (#232327) devenait invisible sur le fond — le signe
    flottait sans cadre. On colore donc les deux directement. */
+/* la canette de sa propre tournée, avec sa croix de retrait */
+.tcell{position:relative;display:flex}
+.tcell .cell{flex:1;min-width:0}
+.tdel{position:absolute;top:-6px;right:-6px;z-index:2;width:24px;height:24px;border-radius:50%;
+  border:1px solid var(--border);background:var(--surface-2);color:var(--dim);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
+.tdel svg{width:13px;height:13px}
+.tdel:hover{color:var(--warn);border-color:var(--warn)}
 .cell.libre .can{border-style:dashed;border-color:var(--dimmer);background:none;
   align-items:center;justify-content:center;transition:border-color .2s}
 .cell.libre .plus{font-size:28px;font-weight:300;color:var(--dimmer);line-height:1;transition:color .2s}
@@ -1129,6 +1137,7 @@ async function hydrate() {
     ]);
   C.wish = (wish.data||[]).map(w => w.beer_id);
   C.blocks = (blocks.data||[]).map(b => b.blocked_id);
+  C._idxTournee = null;        // recalculé à la première demande
 
   /* --- profils --- */
   const followingIds = (follows.data||[]).filter(f => f.follower_id === C.myId).map(f => f.followee_id);
@@ -1475,9 +1484,13 @@ const Store = {
       const m = Store.SEUIL_CONFIANCE;
       const bayes = (v * R + m * moyGenerale) / (v + m);
       const e = parBiere[b.id] || { avis: 0, coeurs: 0 };
+      // La tournée pèse un peu plus qu'un avis, à nombre égal : trois places
+      // seulement, donc y mettre une canette écarte les deux autres.
+      const t = Store.compteTournee(b.id);
       return bayes
            + 0.15 * (e.avis ? e.coeurs / e.avis : 0)
-           + 0.10 * Math.log10(1 + e.avis);
+           + 0.10 * Math.log10(1 + e.avis)
+           + 0.12 * Math.log10(1 + t);
     };
 
     return notees
@@ -1804,6 +1817,23 @@ const Store = {
      pas de clé étrangère, et personne n'a envie qu'une purge de catalogue
      réécrive les profils. */
   tournee: k => ((Store.user(k) || {}).tournee || []).map(Store.beer).filter(Boolean),
+
+  /* Combien de personnes ont épinglé cette canette. Une tournée ne compte
+     que trois places : y figurer est un signal rare et délibéré, bien plus
+     fort qu'une note posée en passant.
+     L'index saute la clé « me », qui pointe sur le MÊME objet que mon
+     identifiant — sans ça je me compterais deux fois. */
+  compteTournee(id) {
+    if (!C._idxTournee) {
+      const m = {};
+      for (const k of Object.keys(C.users)) {
+        if (k === 'me') continue;
+        for (const x of (C.users[k].tournee || [])) m[x] = (m[x] || 0) + 1;
+      }
+      C._idxTournee = m;
+    }
+    return C._idxTournee[id] || 0;
+  },
   dansTournee: id => ((C.me && C.me.tournee) || []).includes(id),
   async basculerTournee(id) {
     const actuelle = (C.me.tournee || []).slice();
@@ -1814,6 +1844,7 @@ const Store = {
     const { error } = await sb.from('profiles').update({ tournee: suivante }).eq('id', C.myId);
     if (error) throw error;
     C.me.tournee = suivante;
+    C._idxTournee = null;      // l'index est périmé
     return !dedans;
   },
 
@@ -2295,8 +2326,13 @@ function openUser(k){
 function vHome(){
   if(S.sub==='bieres'){
     const V=Store.beers();
+    /* La tournée départage, elle ne classe pas : cette section mesure ce
+       qu'on a bu DANS LA SEMAINE. Une tournée n'a pas de date — la faire
+       peser directement rendrait une canette « populaire cette semaine »
+       indéfiniment, soit exactement le défaut corrigé en migration 24. */
     const pop=V.filter(b=>Store.weekCount(b.id)>0)
                 .sort((a,b)=>Store.weekCount(b.id)-Store.weekCount(a.id)
+                          || Store.compteTournee(b.id)-Store.compteTournee(a.id)
                           || Store.count(b.id)-Store.count(a.id))
                 .slice(0,6);
     const nv=V.filter(b=>b.new);
@@ -2802,7 +2838,9 @@ function blocTournee(k, sien){
       +(l.length ? '' : '<div class="empty" style="padding:0 30px 4px;font-size:12px">'
          +'Trois canettes au plus, celles que tu ferais goûter.</div>')
       +'<div class="grid">'
-        +l.map(b=>cell(b)).join('')
+        +l.map(b=>'<div class="tcell">'+cell(b)
+                  +'<button class="tdel" onclick="doRetirerTournee(\''+esc(b.id)+'\')" '
+                  +'aria-label="Retirer de ta tournée">'+I.x+'</button></div>').join('')
         +Array.from({length: libres}, () =>
            '<button class="cell libre" onclick="allerChoisirTournee()" '
            +'aria-label="Ajouter une canette à ta tournée">'
@@ -2821,11 +2859,39 @@ function blocTournee(k, sien){
     +'</div>';
 }
 
-/* Le raccourci depuis un emplacement libre. La tournée se choisit depuis la
-   fiche d'une bière — autant y emmener, et le dire. */
+/* Choisir une canette sans quitter son profil. Renvoyer vers le catalogue
+   était un détour : on veut composer sa tournée là où on la regarde. */
+let CHOIX = '';
 function allerChoisirTournee(){
-  go('search');
-  toast('Ouvre une canette, puis « Mettre dans ma tournée »');
+  CHOIX = '';
+  const sh=$('#sheet'); sh.classList.add('open');
+  drawChoixTournee();
+  setTimeout(()=>{ const c=document.getElementById('ch-q'); if(c) c.focus() }, 120);
+}
+function drawChoixTournee(){
+  const sh=$('#sheet');
+  const l = Store.search(CHOIX, [], 'note-desc')
+              .filter(b => !Store.dansTournee(b.id))
+              .slice(0, 30);
+  const restant = 3 - ((C.me.tournee||[]).length);
+  sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
+   +'<div class="sheet-bar"><b>Ta tournée</b><button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
+   +'<div class="sheet-body">'
+   +'<div class="hint" style="margin-bottom:12px">'
+     +(restant>0 ? 'Il te reste '+restant+' place'+(restant>1?'s':'')+'.'
+                 : 'Ta tournée est complète — retires-en une pour changer.')+'</div>'
+   +'<div class="searchbar">'+I.search
+     +'<input id="ch-q" placeholder="Chercher une canette…" value="'+esc(CHOIX)+'" '
+     +'oninput="CHOIX=this.value;drawChoixTournee()"></div>'
+   +(restant>0
+     ? (l.length
+        ? '<div class="grid" style="margin-top:12px">'
+          +l.map(b=>'<button class="cell" onclick="doTournee(\''+esc(b.id)+'\',1)">'
+                    +can(b,1)+'<span class="meta">'+stars(Store.rating(b.id),'dim')+'</span></button>').join('')
+          +'</div>'
+        : '<div class="empty">Rien ne correspond.</div>')
+     : '')
+   +'</div></div>';
 }
 
 /* ---------- mon profil ---------- */
@@ -3289,11 +3355,20 @@ function drawWishlist(){
 /* Ajouter ou retirer une canette de sa tournée. Le refus « tournée pleine »
    remonte du Store : mieux vaut un message clair qu'un troisième
    emplacement qui écraserait silencieusement le premier. */
-async function doTournee(id){
+/* depuisChoix : on vient du sélecteur, il faut le redessiner et non la fiche */
+async function doTournee(id, depuisChoix){
   const r = await act(()=>Store.basculerTournee(id));
   if(r===null) return;
   toast(r ? 'Ajoutée à ta tournée' : 'Retirée de ta tournée');
-  drawSheet(); render();
+  render();
+  if (depuisChoix) { if ((C.me.tournee||[]).length >= 3) closeSheet(); else drawChoixTournee() }
+  else drawSheet();
+}
+/* Retirer depuis son propre profil, sans passer par la fiche. */
+async function doRetirerTournee(id){
+  const r = await act(()=>Store.basculerTournee(id));
+  if(r===null) return;
+  toast('Retirée de ta tournée'); render();
 }
 
 async function toggleWish(){
@@ -3815,7 +3890,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v5.8';
+const APP_VERSION = 'v5.9';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
@@ -3963,7 +4038,10 @@ function drawSheet(){
      +stars(Store.rating(b.id))+'<br><span style="font-size:11px;color:var(--dimmer)">'
      +(Store.count(b.id)
         ? Store.count(b.id).toLocaleString('fr-FR')+' note'+(Store.count(b.id)>1?'s':'')
-        : 'pas encore notée')+'</span></span></div></div></div>'
+        : 'pas encore notée')
+     +(Store.compteTournee(b.id)
+        ? '<br>dans '+Store.compteTournee(b.id)+' tournée'+(Store.compteTournee(b.id)>1?'s':'')
+        : '')+'</span></span></div></div></div>'
    +(b.ok?'':'<div class="note warn">'+I.info+'<span>Fiche proposée par un utilisateur, en attente de validation. '
      +'Tu peux déjà la noter, elle restera privée tant qu\'elle n\'est pas validée.</span></div>')
    +'<div class="desc">'+esc(b.d)+'</div>'
