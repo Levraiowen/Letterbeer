@@ -15,7 +15,7 @@
 > Les sections sont **pondérées** : `🔴 structurant`, `🟠 important`,
 > `🟡 secondaire`. La pondération dit où porter l'attention quand le temps manque.
 >
-> Dernière mise à jour : 25 août 2026 · app en `v5.5` · 29 migrations · non ouvert aux testeurs.
+> Dernière mise à jour : 25 août 2026 · app en `v5.6` · 30 migrations · non ouvert aux testeurs.
 
 ---
 
@@ -396,7 +396,9 @@ Chacune a une raison. La rouvrir sans raison nouvelle fait perdre du temps.
 Letterbeer doit son nom à Letterboxd — autant regarder ce qu'ils font bien.
 Analysé le 25 août 2026, par ordre de rapport intérêt/effort.
 
-**1. Les favoris sur le profil (leur « top 4 »).** Quatre films épinglés en
+**1. ~~Les favoris sur le profil~~ → FAIT le 25 août 2026 sous le nom « ma tournée » (migration 30).** Trois canettes et non quatre : le quatre est leur signature, trois est la largeur de la grille de l'app. Et « tournée » plutôt que « favorites », parce qu'une tournée c'est ce qu'on offre à la table — ça déplace la fonctionnalité de « mon panthéon » vers « ce que je te ferais goûter ». *Le principe à retenir pour les idées suivantes : on prend le mécanisme, jamais la forme.*
+
+**~~Les favoris (référence d'origine)~~.** Quatre films épinglés en
 haut du profil : c'est leur trait d'identité le plus fort, et c'est presque
 gratuit à implémenter — un tableau de quatre identifiants sur `profiles`.
 Quatre canettes épinglées en disent plus long que n'importe quelle bio.
