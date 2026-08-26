@@ -157,6 +157,27 @@ signalements, édition et suppression de fiches — réservé aux administrateur
   cinquante fiches les plus consultées valent mieux que cinq cents fiches
   jumelles.
 
+### Ajouter des canettes EN NOMBRE
+
+**Ne pas passer par « Proposer une bière » dans l'app.** `submitBeer()`
+n'envoie pas d'`image_url` : cinquante fiches ajoutées ainsi seraient
+cinquante canettes muettes — et l'écran de validation, qui repose sur la
+photo pour trancher canette ou bouteille, n'aurait plus rien à montrer.
+
+Utiliser `import-beers.mjs`, qui a depuis le 25 août 2026 une source **« les
+plus connues »** : les bières les plus scannées en France et en Belgique,
+triées par `sort_by=popularity_key`. Elle remonte 1664, Grimbergen,
+Desperados, Tourtel, Jupiler, Stella, Orval — là où le balayage large
+rapportait surtout des références confidentielles.
+
+Cette source passe par l'**API historique** et non par la v2 : seule la
+première accepte `sort_by`, vérifié. Elle limite plus sévèrement le débit,
+d'où une pause de quatre secondes et une reprise sur réponse HTML.
+
+Les doublons sont ignorés par code-barres (`ignoreDuplicates`), donc le
+script se relance sans risque : il n'ajoute que ce qui manque et n'écrase
+jamais une fiche corrigée à la main.
+
 ### Ajouter une canette à la main
 
 **La photo doit venir d'Open Food Facts.** La CSP n'autorise `img-src` que

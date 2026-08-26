@@ -54,6 +54,14 @@ const FIELDS = [
 /* Les trois facettes d'abord : elles rapportent des canettes sûres.
    Le balayage large ensuite, pour les candidates à trancher à la main. */
 const RECHERCHES = [
+  /* Les plus scannées d'abord. C'est la source qui rapporte les canettes que
+     tout le monde connaît — 1664, Desperados, Grimbergen, Leffe — là où le
+     balayage large remonte surtout des références confidentielles.
+     Elle passe par l'API HISTORIQUE et non par la v2 : seule la première
+     accepte sort_by=popularity_key, vérifié. */
+  { nom:'France, les plus connues',   q:'countries_tags=france',  pages:12, sur:false, pop:true },
+  { nom:'Belgique, les plus connues', q:'countries_tags=belgium', pages:5,  sur:false, pop:true },
+
   { nom:'emballage canette',  q:'packaging_tags=en:can',                  pages:8,  sur:true  },
   { nom:'matériau aluminium', q:'packaging_materials_tags=en:aluminium',  pages:8,  sur:true  },
   { nom:'forme canette',      q:'packaging_shapes_tags=en:can',           pages:6,  sur:true  },
@@ -228,6 +236,30 @@ function clean(p) {
   };
 }
 
+/* Tri par popularité : seule l'API historique le propose. Elle renvoie une
+   page HTML quand elle limite le débit, d'où le contrôle sur le premier
+   caractère — un JSON.parse direct lèverait une erreur illisible. */
+async function pagePopulaire(q, n) {
+  const url = 'https://world.openfoodfacts.org/cgi/search.pl'
+            + '?action=process&json=1&sort_by=popularity_key&page_size=100&page=' + n
+            + '&tagtype_0=categories&tag_contains_0=contains&tag_0=beers'
+            + '&' + q.replace('countries_tags=', 'tagtype_1=countries&tag_contains_1=contains&tag_1=')
+            + '&fields=' + FIELDS;
+  for (let essai = 1; essai <= 4; essai++) {
+    try {
+      const res = await fetch(url, { headers: { 'User-Agent': UA } });
+      const txt = await res.text();
+      if (txt.trim().startsWith('{')) return JSON.parse(txt).products || [];
+      process.stdout.write('(débit limité, pause) ');
+      await sleep(8000 * essai);
+    } catch (e) {
+      console.warn('  ! ' + e.message);
+      await sleep(4000 * essai);
+    }
+  }
+  return [];
+}
+
 /* ---------- API, avec reprise sur 503 ---------- */
 async function page(q, n) {
   const url = 'https://world.openfoodfacts.org/api/v2/search'
@@ -259,7 +291,7 @@ async function run() {
   for (const r of RECHERCHES) {
     console.log(`\n▸ ${r.nom}`);
     for (let n = 1; n <= r.pages; n++) {
-      const produits = await page(r.q, n);
+      const produits = r.pop ? await pagePopulaire(r.q, n) : await page(r.q, n);
       if (!produits.length) { console.log(`  page ${n} : plus rien`); break; }
 
       let neufs = 0;
@@ -271,7 +303,8 @@ async function run() {
       }
       const sures = [...gardees.values()].filter(b => b.status === 'approved').length;
       console.log(`  page ${n} : +${neufs} retenues · total ${gardees.size} (${sures} sûres)`);
-      await sleep(PAUSE);
+      // l'API historique limite plus sévèrement que la v2
+      await sleep(r.pop ? Math.max(PAUSE, 4000) : PAUSE);
     }
   }
 
