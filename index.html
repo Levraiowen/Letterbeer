@@ -1896,10 +1896,32 @@ const Store = {
     if (error) throw error;
     return data || [];
   },
+  /* Valider une fiche, c'est trancher son CONTENANT sur la photo — c'est
+     même la seule raison d'être de cet écran. Jusqu'au 26 août 2026 ce
+     verdict n'était enregistré nulle part : moderate() posait `status` et
+     laissait `container` à NULL. Mesuré en base ce jour-là : 14 fiches
+     publiées sans contenant prouvé, toutes validées à la main.
+
+     L'invariant que défendent les migrations 12, 13 et 32 — publiée donc
+     canette prouvée — devenait donc un peu plus faux à chaque modération.
+     Rien ne cassait à l'écran, et c'est bien le problème : la PREUVE
+     manquait, silencieusement.
+
+     Le rejet, lui, ne pose rien. On rejette aussi bien une bouteille qu'une
+     station-service allemande : le refus ne dit rien du contenant, et
+     écrire 'bouteille' sur un intrus serait une invention de plus.
+
+     La migration 33 pose la contrainte qui rend cet accord obligatoire côté
+     base. D'où l'ordre de déploiement habituel — pousser ce fichier D'ABORD,
+     la migration ensuite : l'inverse ferait échouer toute validation. */
   async moderate(id, ok) {
-    const { error } = await sb.from('beers')
-      .update({ status: ok ? 'approved' : 'rejected' }).eq('id', id);
+    const patch = ok ? { status: 'approved', container: 'canette' }
+                     : { status: 'rejected' };
+    // un refus RLS arrive en zéro ligne affectée, pas en erreur (règle n°3)
+    const { data, error } = await sb.from('beers')
+      .update(patch).eq('id', id).select('id');
     if (error) throw error;
+    if (!data || !data.length) throw new Error('Décision refusée par la base');
     const b = Store.beer(id);
     if (b) b.ok = ok ? 1 : 0;
   },
@@ -1931,6 +1953,12 @@ const Store = {
       description: p.d.trim() || null,
       status: p.statut
     };
+    /* Publier depuis l'écran d'édition est un verdict humain au même titre
+       que valider : la fiche et sa photo sont sous les yeux. On enregistre
+       donc le contenant ici aussi. Sans ça, la contrainte posée par la
+       migration 33 renverrait une erreur Postgres brute à l'écran dès qu'on
+       bascule une fiche en « publiée » depuis ce formulaire. */
+    if (patch.status === 'approved') patch.container = 'canette';
     const { data, error } = await sb.from('beers').update(patch).eq('id', id).select('id');
     if (error) throw error;
     if (!data || !data.length) throw new Error('Modification refusée par la base');
@@ -4000,7 +4028,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v6.2';
+const APP_VERSION = 'v6.3';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */

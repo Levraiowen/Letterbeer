@@ -15,7 +15,7 @@
 > Les sections sont **pondérées** : `🔴 structurant`, `🟠 important`,
 > `🟡 secondaire`. La pondération dit où porter l'attention quand le temps manque.
 >
-> Dernière mise à jour : 25 août 2026 · app en `v6.0` · 30 migrations · non ouvert aux testeurs.
+> Dernière mise à jour : 26 août 2026 · app en `v6.3` · 33 migrations · non ouvert aux testeurs.
 
 ---
 
@@ -150,6 +150,73 @@ signalements, édition et suppression de fiches — réservé aux administrateur
   « Skoll », « Cerveza », qu'aucune règle ne peut classer honnêtement.
   **La seule vraie solution est d'enrichir les données**, pas d'améliorer
   l'heuristique.
+
+  **Corrigé le 26 août 2026 : « enrichir les données » ne veut PAS dire
+  « relire Open Food Facts ».** `enrich-styles.mjs` a été écrit pour ça, et
+  mesuré avant d'être cru. Sur les 300 bières les plus scannées en France,
+  parmi les 91 fiches que l'import laisse sans style, les catégories d'OFF
+  n'en récupèrent que **7 — 8 %**. Sur les 133 fiches de la base, cela fait
+  une dizaine, pas cent trente.
+
+  La raison est simple et ne se corrigera pas toute seule : les fiches sans
+  style de Letterbeer sont exactement celles dont OFF ne dit que `en:beers`.
+  Le champ n'est pas mal lu, il est **vide à la source**.
+
+  Les trois leviers qui restent, par rendement réel :
+
+  1. **Importer plus.** Une fiche qui ARRIVE par `import-beers.mjs` a un
+     style dans **70 %** des cas (209 sur 300, mesuré) — bien mieux que les
+     58 % du catalogue actuel. Le fonds est mince, pas mal renseigné :
+     relancer l'import fait monter la couverture mécaniquement. **C'est le
+     meilleur rapport, et l'outil existe déjà.**
+  2. **Contribuer à Open Food Facts.** C'est un wiki : compléter la catégorie
+     d'une Jupiler la corrige pour tout le monde, et revient dans Letterbeer
+     au passage suivant. Lent, gratuit, cohérent avec l'ODbL — et c'est déjà
+     la sortie retenue pour la 8.6 Black.
+  3. **Une table de correspondance tenue à la main**, sourcée sur le site des
+     brasseries. Casse la règle « le style vient d'OFF » : à trancher avant
+     d'écrire une ligne, pas après.
+
+  `enrich-styles.mjs` reste utile — il tourne en simulation par défaut, ne
+  touche ni `status` ni `container`, et récupère surtout des sans-alcool que
+  l'import ratait. Mais il ne règle pas les 42 %, et il ne faut pas le
+  vendre comme tel.
+
+- **🔴 Le vrai frein n'est pas le style, c'est la PROFONDEUR — mesuré en base
+  le 26 août 2026.** Le catalogue publié compte 313 fiches, réparties ainsi :
+
+  | famille | canettes | part |
+  |---|---|---|
+  | blondes | 124 | 40 % |
+  | *aucune famille* | 118 | 38 % |
+  | ipa | 57 | 18 % |
+  | **brunes** | **14** | **4 %** |
+
+  Croisé avec le filtre de degré du premier lancement (`Store.suggestions`),
+  **trois combinaisons sur neuf ne peuvent pas remplir l'écran de six** :
+
+  | famille | légères | équilibrées | costaudes |
+  |---|---|---|---|
+  | blondes | 85 | 18 | 12 |
+  | ipa | 24 | 30 | **3** |
+  | brunes | **4** | 7 | **3** |
+
+  Et ce filtre exclut en plus les canettes déjà bues : pour quelqu'un
+  d'actif, c'est encore moins.
+
+  **Enrichir les styles n'y changera rien.** Il n'y a pas de brunes cachées
+  faute d'étiquette — il n'y a pas de brunes. Les facettes d'emballage de
+  l'import ratissent sans distinction de couleur, et le fonds mondial d'OFF
+  est majoritairement blond : importer davantage « large » reproduit le
+  déséquilibre au lieu de le corriger.
+
+  **Traité le 26 août** : `import-beers.mjs` a quatre recherches ciblées de
+  plus — `dark-ales` (245 produits, 16 % utilisables), `stouts` (226, 15 %),
+  `abbey-ales` (252, 9 %), `amber-beers` (340, 4 %). Rendements mesurés page
+  par page, pas estimés. Vérifié aussi : `dark-beers`, `bocks`,
+  `abbey-beers`, `dubbels` et `red-ales` **n'existent pas** dans OFF et
+  renvoient zéro ; `porters` (14) et `brown-ales` (5) sont trop maigres.
+  `stouts` et `fr:bieres-brunes` sont le même tag chez OFF.
 - **Le catalogue contient des intrus** : `GT-Mobility - Tankstelle, KFZ-Service`
   (une station-service allemande), `BTE 50CL DESPERADOS` (« BTE » = bouteille).
   À traiter depuis l'écran de modération.
@@ -184,6 +251,32 @@ vérifié par test unitaire :
 Le nom est contrôlé depuis le 25 août : « BTE 50CL BIERE 5% HEINEKEN »
 portait le tag `en:drink-can` et passait en publication directe. « BTE » est
 l'abréviation de bouteille en grande distribution.
+
+**⚠ Divergence trouvée le 26 août 2026, à trancher.** Le texte ci-dessus dit
+qu'un signal bouteille donne « bouteille, jamais insérée ». Le commentaire de
+`classer()` dit « c'est le nom qui a raison ». Le code, lui, fait
+`if (bouteille && !canette)` : quand un signal arrive de **chaque** côté —
+`en:drink-can` dans les tags ET « BTE » dans le nom — les deux s'annulent et
+la fiche part en **validation manuelle**, donc elle EST insérée.
+
+Ce n'est pas dangereux : rien n'est publié, la photo tranchera. Mais trois
+sources annonçaient trois choses, et personne ne s'en était aperçu. Le test
+`test-catalogue.mjs` l'a trouvé au premier passage.
+
+Rendre le nom réellement dominant rejetterait aussi de vraies canettes dont
+le libellé contient « glass » ou « verre » : c'est un arbitrage
+rendement/prudence, **pas une correction évidente**, donc rien n'a été
+changé. Le test asserte ce sur quoi les trois sources s'accordent — jamais
+de publication directe — et laisse la décision ouverte.
+
+**Le contrat est désormais vraiment vérifié.** `npm test` exerce
+`classer()` sur les témoins des incidents réels : les 75 cl des migrations
+12 et 13, la bouteille de la migration 31, les trois indéterminées, et les
+sept indices de bouteille sur les trois canaux. Jusqu'au 26 août, PROJET.md
+et le commit `6ad9fe0` affirmaient tous deux « vérifié par test unitaire »
+alors qu'**aucun fichier de test n'était suivi par git** — la vérification
+avait eu lieu une fois, à la main. Une garantie qui ne se rejoue pas n'en
+est pas une.
 
 **Rendement mesuré** sur les 100 bières les plus scannées en France : 17
 canettes publiées, **68 bouteilles écartées d'office**, 15 à trancher à
@@ -614,15 +707,30 @@ l'énumération anonyme du bucket est bien fermée.*
 
 ---
 
-## 8 bis. 🟠 Connecter un agent à Supabase (MCP) — envisagé, non fait
+## 8 bis. 🟠 Connecter un agent à Supabase (MCP) — POSÉ le 26 août 2026
 
 Supabase propose un serveur MCP hébergé qui laisse un agent interroger la
 base. **Décision : à faire en lecture seule uniquement.**
 
-```bash
-claude mcp add --scope project --transport http supabase   "https://mcp.supabase.com/mcp?project_ref=wleilfzebdkudkteezht&read_only=true&features=database,docs,debugging"
+La configuration vit dans **`.mcp.json`**, à la racine, en portée projet :
+
+```json
+{ "mcpServers": { "supabase": { "type": "http",
+  "url": "https://mcp.supabase.com/mcp?project_ref=wleilfzebdkudkteezht&read_only=true&features=database,docs,debugging" } } }
 ```
-puis `/mcp` dans Claude Code pour l'authentification OAuth.
+
+Équivalent à `claude mcp add --scope project --transport http supabase "…"`.
+Il reste **une** étape manuelle : `/mcp` dans Claude Code, pour
+l'authentification OAuth. Elle ne peut pas être faite par un agent, et c'est
+tant mieux — c'est le seul moment où un humain autorise l'accès.
+
+`.mcp.json` ne contient aucun secret : le `project_ref` est déjà dans
+`index.html` (la CSP et l'URL Supabase), et le dépôt est public de toute
+façon. Le jeton OAuth, lui, ne transite jamais par le dépôt.
+
+Les consignes destinées à un agent vivent dans **`CLAUDE.md`**, à la racine.
+Ce fichier ne duplique pas PROJET.md : il pointe dessus et n'ajoute que ce
+qui concerne un agent.
 
 **Ce que ça apporte ici**, concrètement : vérifier l'état réel du schéma au
 lieu de le déduire de 26 migrations, détecter une dérive entre les fichiers
@@ -635,6 +743,23 @@ travailler la qualité du catalogue sur des requêtes plutôt qu'à l'aveugle.
 - `read_only=true`. Supabase déconseille explicitement de brancher un agent
   sur une base de production, et celle-ci **est** la production : il n'y a
   qu'un projet, avec les journaux réels de vraies personnes.
+
+- **🔴 `read_only` protège l'écriture, PAS la confidentialité.** Ce point
+  manquait à cette section, et c'est le plus important. La connexion MCP
+  passe par le même canal que le SQL Editor — celui où `auth.uid()` vaut
+  `NULL`, comme le note déjà le §8. Elle **ne respecte donc pas le RLS**.
+
+  Tout le modèle de sécurité du projet repose sur le RLS : « masquer une
+  donnée à l'écran ne la protège pas, c'est la base qui doit refuser de la
+  rendre » (§2). Un agent branché en MCP est précisément l'acteur pour qui
+  la base ne refuse rien. Il peut lire `logs` — le journal, que le produit
+  promet strictement privé —, les `bofs`, les blocages, les statistiques.
+
+  D'où la règle d'usage, écrite dans `CLAUDE.md` : **interroger le
+  catalogue, pas les gens.** `beers`, `prices`, `articles`, et des agrégats
+  sur le reste. Jamais le détail ligne à ligne de `logs`, `reactions`,
+  `blocks` ni `profiles`. Et jamais une donnée personnelle recopiée dans un
+  fichier du dépôt, qui est public.
 - `project_ref` renseigné, pour qu'un agent ne voie pas d'autres projets.
 - `features` limité — surtout pas `account`.
 - **Les migrations restent manuelles.** Les fichiers numérotés et commentés
@@ -723,3 +848,91 @@ plus que le détail.*
 - Les idées prises à Letterboxd sont en §6 bis, classées par rapport
   intérêt/effort. **Le top 4 de canettes favorites est le prochain
   chantier évident** : presque gratuit, très identitaire.
+
+**26 août 2026 — agent branché sur la base, et le catalogue mesuré (v6.2)**
+
+- **MCP Supabase posé** (`.mcp.json`), lecture seule, `project_ref` épinglé,
+  sans `account`. Reste `/mcp` pour l'OAuth — la seule étape qu'un agent ne
+  peut pas faire, et c'est voulu. `CLAUDE.md` créé pour les consignes qui ne
+  concernent qu'un agent ; il pointe sur PROJET.md sans le dupliquer.
+- **Le garde-fou qui manquait au §8 bis** : `read_only` protège l'écriture,
+  pas la confidentialité. La connexion MCP ne respecte pas le RLS — elle voit
+  les journaux privés de tout le monde. D'où « interroger le catalogue, pas
+  les gens ».
+- **`enrich-styles.mjs` écrit, puis mesuré, puis revu à la baisse.** Annoncé
+  à 74 % de couverture ; le chiffre honnête est **8 %** de gain sur les fiches
+  qui manquent réellement. Les catégories d'OFF sont vides à la source pour
+  exactement les bières que Letterbeer ne sait pas classer. Le §4 dit
+  désormais quels leviers restent — importer plus arrive en tête, et l'outil
+  existe déjà.
+- **Un bug de sous-chaîne attrapé par la mesure** : `red-beer` cherché sans
+  frontière de mot matchait « flavo·red-beer·s » et rangeait toute la famille
+  Desperados en Ambrée — 13 fiches fausses sur 18 gains annoncés. C'est le
+  piège que le projet documentait déjà pour `brasserieUtile()` (« La Chouffe »
+  masquant « Achouffe »). Deux fonctions, la même erreur, à deux mois d'écart.
+  Les motifs de catégories comparent désormais des mots entiers.
+- **Garde-fou sans-alcool.** OFF range « Grimbergen Pale Ale 5.5 DEGRE
+  ALCOOL » en `en:non-alcoholic-beers` : c'est un wiki, la donnée est fausse.
+  Au-dessus de 1,2 % vol. — le seuil légal français — le style « Sans alcool »
+  est refusé plutôt qu'écrit. Une fiche qui se contredit est le début d'un
+  compteur d'unités d'alcool qui ment.
+- **`test-catalogue.mjs` : le contrat est enfin vraiment vérifié.** PROJET.md
+  et le commit `6ad9fe0` affirmaient « vérifié par test unitaire » alors
+  qu'aucun test n'était suivi par git. 16 témoins, tous tirés d'incidents
+  réels. Le premier passage a trouvé une divergence entre PROJET.md, le
+  commentaire de `classer()` et son code — consignée au §4, non tranchée.
+- **`STYLES` et `COULEURS` sortis dans `styles.mjs`**, partagés par l'import
+  et l'enrichissement : deux tables de couleurs auraient donné deux teintes
+  pour le même style.
+- **`sql/outils/qualite-catalogue.sql`** : couverture du style, couverture par
+  famille, intrus, descriptions jumelles, file de validation. Pour arrêter de
+  citer « 133 sur 318 » de mémoire.
+- L'en-tête de ce fichier disait encore « v6.0 · 30 migrations » ; c'était
+  v6.2 et 32. Corrigé.
+
+**26 août 2026 (suite) — le contenant non prouvé, et la profondeur du catalogue (v6.3, migration 33)**
+
+Première session avec le MCP branché. Tout ce qui suit est **mesuré en base**,
+pas déduit des migrations — c'est exactement ce que le §8 bis espérait.
+
+- **🔴 14 fiches étaient publiées avec `container = NULL`.** Cause :
+  `Store.moderate()` posait `status` et jamais `container`. Or valider une
+  fiche, c'est trancher son contenant sur la photo — c'est la seule raison
+  d'être de cet écran. Le geste avait lieu, le verdict n'était écrit nulle
+  part. L'invariant des migrations 12, 13 et 32 — publiée donc canette
+  prouvée — devenait donc un peu plus faux à chaque modération, sans que
+  rien ne casse à l'écran. C'est ce qui le rendait invisible.
+- **Corrigé des deux côtés**, comme le veut le §9. `moderate()` enregistre
+  `container = 'canette'` à la validation et vérifie enfin les lignes
+  affectées (règle n°3, que cette fonction était seule à ignorer).
+  `modifierBiere()` fait de même quand on publie depuis l'écran d'édition,
+  sinon la contrainte y renverrait une erreur Postgres brute.
+  Le **rejet** ne pose rien : on rejette aussi bien une bouteille qu'une
+  station-service allemande, et écrire « bouteille » sur un intrus serait
+  une invention de plus.
+- **Migration 33**, en deux blocs avec un arrêt au milieu. Les 14 repassent
+  en validation plutôt que de recevoir `container = 'canette'` d'office :
+  écrire un contenant non vérifié serait exactement l'erreur de la
+  migration 31. Coût mesuré en agrégat avant décision — une seule des 14
+  porte un avis, et `revHTML()` gère déjà la fiche absente par
+  `if(!b) return ''`.
+- **🔴 Le piège des trois valeurs, attrapé avant de poser la contrainte.**
+  La version évidente `check (status <> 'approved' or container = 'canette')`
+  **ne sert à rien** : sur une fiche publiée à `container` NULL l'expression
+  vaut NULL, et un CHECK accepte NULL — il ne refuse que FALSE. Vérifié sur
+  les données réelles : la version naïve rend « indéterminé » sur les 14 et
+  n'en refuse aucune. On aurait cru le problème réglé, ce qui est pire que
+  de le savoir ouvert. La contrainte posée passe par `coalesce`.
+- **La profondeur du catalogue** mesurée et traitée — voir le §4, tableaux à
+  l'appui. Le résumé : 14 brunes sur 313, et trois combinaisons du premier
+  lancement incapables de remplir un écran.
+- **Un échec silencieux dans l'import.** Après quatre 503, `page()` rendait
+  `[]`, que la boucle lisait « plus rien » : la facette entière était sautée
+  sans un mot. Vu en vrai — OFF renvoie des 503 en rafale dès qu'on insiste.
+  Sur les nouvelles facettes de 3 pages, perdre la page 1 c'était tout
+  perdre. `page()` et `pagePopulaire()` rendent désormais `null` quand elles
+  renoncent, et la boucle le dit.
+- Piège noté dans `CLAUDE.md` : le `<script>` de la ligne 16 d'`index.html`
+  est cité dans le commentaire d'en-tête. Une extraction par expression
+  régulière l'attrape et lève une `SyntaxError` sur du texte français —
+  prendre le plus gros bloc inline, celui de la ligne 833.
