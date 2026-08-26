@@ -15,7 +15,7 @@
 > Les sections sont **pondérées** : `🔴 structurant`, `🟠 important`,
 > `🟡 secondaire`. La pondération dit où porter l'attention quand le temps manque.
 >
-> Dernière mise à jour : 25 août 2026 · app en `v5.8` · 30 migrations · non ouvert aux testeurs.
+> Dernière mise à jour : 25 août 2026 · app en `v5.9` · 30 migrations · non ouvert aux testeurs.
 
 ---
 
@@ -339,6 +339,15 @@ Chacune a une raison. La rouvrir sans raison nouvelle fait perdre du temps.
   sans réciprocité d'abord, puis les amis d'amis par nombre de liens
   communs, puis les comptes récemment actifs. Chaque ligne affiche sa
   raison — c'est ce qui rend la suggestion lisible plutôt que magique.
+- **La tournée pèse dans le Top, mais seulement départage « Populaires
+  cette semaine ».** Cette section-là mesure ce qu'on a bu DANS la semaine ;
+  une tournée n'a pas de date, et la faire peser directement rendrait une
+  canette populaire indéfiniment — soit exactement le défaut corrigé en
+  migration 24. Si quelqu'un redemande de l'y intégrer, c'est cet argument
+  qu'il faut lui opposer.
+- **L'index des tournées saute la clé `me`**, qui pointe sur le MÊME objet
+  que son propre identifiant dans `C.users`. Sans ce saut, on se compte deux
+  fois. Le piège vaut pour tout parcours de `C.users`.
 - **L'écran des copains ne classe jamais par quantité bue.** La liste
   « Leur semaine » est bornée à dix et ordonnée par **dernière activité**,
   pas par nombre de canettes — trier par quantité en ferait un podium de
