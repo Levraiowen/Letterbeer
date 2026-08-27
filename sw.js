@@ -12,7 +12,7 @@
  *   API/auth   → réseau uniquement, jamais de données périmées ni de jeton en cache
  */
 
-const VERSION = 'lb-v6.6.0';
+const VERSION = 'lb-v6.7.0';
 const COQUE   = VERSION + '-coque';
 const PHOTOS  = VERSION + '-photos';
 
@@ -24,6 +24,10 @@ const COQUE_FICHIERS = [
   './icon-192.png',
   './icon-512.png',
   './manifest.webmanifest',
+  // Les deux pages publiques. Celle de suppression de compte surtout : quelqu'un
+  // qui veut partir doit pouvoir le faire même avec un réseau capricieux.
+  './confidentialite.html',
+  './supprimer-compte.html',
   // sans la bibliothèque Supabase, le script ne démarre pas du tout :
   // elle doit être disponible hors ligne comme le reste de la coque
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js'

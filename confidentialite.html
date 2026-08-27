@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Confidentialité — Letterbeer</title>
+<meta name="description" content="Ce que Letterbeer garde, ce qu'il ne prend pas, et comment supprimer son compte.">
+
+<!--
+  Page PUBLIQUE, lisible sans compte, et c'est tout son intérêt : l'écran
+  « À propos » de l'app dit déjà tout ceci, mais il est derrière
+  l'authentification. Google Play exige un lien de politique de
+  confidentialité accessible à qui n'a rien installé.
+
+  Elle n'exécute AUCUN JavaScript et ne charge rien d'autre que des polices :
+  une page qui explique qu'on ne piste personne ne va pas charger un script
+  tiers. La CSP ci-dessous est donc bien plus étroite que celle de l'app.
+
+  RÈGLE DE MISE À JOUR : cette page et l'écran « À propos » disent la même
+  chose. Si l'un change, l'autre change. Une politique qui contredit l'app
+  est pire que pas de politique.
+-->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'none';
+  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+  font-src https://fonts.gstatic.com;
+  img-src 'self' data:;
+  base-uri 'self';
+  form-action 'none';
+  upgrade-insecure-requests">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+
+<link rel="icon" type="image/svg+xml" href="logo.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0A0A0C; --surface:#141417; --surface-2:#1C1C20; --accent:#FF5A1F;
+  --text:#F4EFE8; --dim:#98989E; --dimmer:#7E7E84; --border:#232327;
+  --ok:#3FD98B; --bad:#FF4D4D;
+  --display:'Space Grotesk','Segoe UI',system-ui,sans-serif;
+  --body:'Inter','Segoe UI',system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--body);
+  font-size:15.5px;line-height:1.65;-webkit-font-smoothing:antialiased}
+.page{max-width:720px;margin:0 auto;padding:44px 22px 80px}
+p{margin:0 0 15px}
+a{color:var(--accent)}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
+strong{font-weight:600}
+
+.marque{font-family:var(--display);font-weight:700;font-size:20px;letter-spacing:2.2px;
+  margin:0 0 6px}
+.marque span{color:var(--accent)}
+.maj{font-size:12px;color:var(--dimmer);margin:0 0 32px}
+h1{font-family:var(--display);font-size:clamp(27px,5vw,38px);font-weight:700;
+  letter-spacing:-.022em;line-height:1.12;margin:0 0 14px;text-wrap:balance}
+.chapeau{font-size:17px;color:var(--dim);margin-bottom:34px}
+h2{font-family:var(--display);font-size:21px;font-weight:600;letter-spacing:-.015em;
+  margin:46px 0 12px;padding-top:22px;border-top:1px solid var(--border);text-wrap:balance}
+h3{font-family:var(--display);font-size:16px;font-weight:600;margin:26px 0 8px}
+
+.deux{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:20px 0}
+.col{background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:16px 18px}
+.col h4{font-family:var(--display);font-size:12px;font-weight:600;letter-spacing:1.2px;
+  text-transform:uppercase;margin:0 0 12px}
+.col.garde h4{color:var(--ok)}
+.col.pas h4{color:var(--dimmer)}
+.col ul{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:9px}
+.col li{position:relative;padding-left:24px;font-size:14px;line-height:1.5;color:var(--dim)}
+.col li::before{position:absolute;left:0;top:0;font-weight:700}
+.col.garde li::before{content:'✓';color:var(--accent)}
+.col.pas li::before{content:'✕';color:var(--dimmer)}
+
+.fait{background:var(--surface);border:1px solid var(--border);border-radius:13px;
+  padding:15px 18px;margin:12px 0}
+.fait .k{font-family:var(--display);font-size:11px;font-weight:600;letter-spacing:1.1px;
+  text-transform:uppercase;color:var(--dimmer);display:block;margin-bottom:5px}
+.fait p{margin:0;font-size:14.5px}
+.fait b{color:var(--accent);font-weight:600}
+
+.appel{background:rgba(255,90,31,.09);border:1px solid rgba(255,90,31,.3);
+  border-radius:13px;padding:18px 20px;margin:24px 0}
+.appel p:last-child{margin-bottom:0}
+
+.aide{display:block;background:var(--surface);border:1px solid var(--border);
+  border-radius:13px;padding:16px 18px;margin:20px 0;text-decoration:none;color:inherit}
+.aide:hover{border-color:var(--accent)}
+.aide .n{font-family:var(--display);font-size:24px;font-weight:700;color:var(--accent);
+  display:block;letter-spacing:.5px}
+.aide .k{font-size:13px;color:var(--dim);display:block}
+.aide .s{font-size:12px;color:var(--dimmer);display:block;margin-top:3px}
+
+.evin{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--dimmer);
+  text-align:center;line-height:1.6;margin:46px 0 0;padding-top:22px;
+  border-top:1px solid var(--border)}
+footer{margin-top:20px;font-size:12.5px;color:var(--dimmer);text-align:center;line-height:1.8}
+
+@media (max-width:560px){ .deux{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<div class="page">
+
+<p class="marque">LETTER<span>BEER</span></p>
+<p class="maj">Mise à jour le 27 août 2026</p>
+
+<h1>Ce qu'on garde, et ce qu'on ne prend pas</h1>
+<p class="chapeau">Letterbeer est un carnet de canettes. Il note ce que tu bois pour te
+rendre tes propres repères — pas pour les vendre à qui que ce soit.</p>
+
+<div class="appel">
+  <p><strong>C'est un prototype, testé en petit comité.</strong> La base peut être
+  réinitialisée sans prévenir, et tes données avec. N'y mets rien que tu ne supporterais
+  pas de perdre.</p>
+</div>
+
+<h2>Les données</h2>
+
+<div class="deux">
+  <div class="col garde">
+    <h4>Ce qu'on garde</h4>
+    <ul>
+      <li>Ton e-mail, pour te connecter</li>
+      <li>Ton pseudo, ta ville si tu veux</li>
+      <li>Ton journal, tes notes, tes prix</li>
+      <li>Ta photo de profil</li>
+    </ul>
+  </div>
+  <div class="col pas">
+    <h4>Ce qu'on ne prend pas</h4>
+    <ul>
+      <li>Nom, date de naissance, téléphone</li>
+      <li>Traceurs, cookies publicitaires, analytics</li>
+      <li>Position GPS — l'EXIF des photos est effacé avant l'envoi</li>
+    </ul>
+  </div>
+</div>
+
+<p>Il n'y a <strong>aucun outil de mesure d'audience</strong>, aucun pixel, aucune régie.
+Ce n'est pas une intention, c'est une absence : le code de l'app est
+<a href="https://github.com/Levraiowen/Letterbeer">public et vérifiable</a>.</p>
+
+<h2>Qui voit quoi</h2>
+
+<div class="fait">
+  <span class="k">Public</span>
+  <p>Ton pseudo, ta photo, ta ville, ta bio, tes goûts, tes avis et tes réponses, tes
+  relevés de prix, et les canettes de ta tournée. Écrire un avis, c'est le publier.</p>
+</div>
+
+<div class="fait">
+  <span class="k">Privé, et garanti par la base</span>
+  <p><b>Ton journal ne sort jamais de ton compte.</b> Les volumes, les unités d'alcool,
+  les calories et les dépenses non plus. Ce n'est pas masqué à l'écran : c'est la base de
+  données qui refuse de les rendre à quelqu'un d'autre. Tes « bof » sont privés aussi —
+  personne ne sait qui les a posés.</p>
+</div>
+
+<div class="fait">
+  <span class="k">Statistiques partagées</span>
+  <p>Ton nombre de canettes, ta note moyenne et ton style dominant sont visibles par les
+  autres membres, sauf si tu passes tes statistiques en privé depuis ton compte.</p>
+</div>
+
+<h2>Où, et pendant combien de temps</h2>
+
+<div class="fait">
+  <span class="k">Hébergement</span>
+  <p>Supabase, sur des serveurs situés dans l'Union européenne. <b>Rien ne sort de
+  l'UE.</b></p>
+</div>
+
+<div class="fait">
+  <span class="k">Durée</span>
+  <p>Tant que ton compte existe. Tu le supprimes, tout part.</p>
+</div>
+
+<div class="fait">
+  <span class="k">Sous-traitants</span>
+  <p>Supabase pour la base, l'authentification et les fichiers. GitHub Pages pour servir
+  la page. Un service d'envoi d'e-mails pour la connexion et la récupération de mot de
+  passe. Aucun autre.</p>
+</div>
+
+<h2>Tes droits</h2>
+
+<h3>Récupérer tes données</h3>
+<p>L'écran <strong>Compte</strong> de l'app exporte l'intégralité de ton journal en CSV,
+en un geste, sans rien demander à personne.</p>
+
+<h3>Supprimer ton compte</h3>
+<p>Depuis l'app : <strong>Compte → Supprimer mon compte</strong>. Depuis un navigateur,
+sans installer quoi que ce soit : <a href="supprimer-compte.html">page de suppression de
+compte</a>.</p>
+<p>La suppression est <strong>immédiate et définitive</strong> : profil, journal, avis,
+réponses, réactions, relevés de prix, liste d'envies, abonnements et photo de profil. Il
+n'y a pas de corbeille et rien n'est conservé « au cas où ».</p>
+
+<h3>Corriger, t'opposer, poser une question</h3>
+<p>Écris à <a href="mailto:owen.charp44@gmail.com">owen.charp44@gmail.com</a>. C'est un
+projet personnel : c'est une vraie personne qui répond, pas un service.</p>
+
+<h2>Alcool et santé</h2>
+<p>Santé publique France recommande <strong>pas plus de 10 verres par semaine</strong>,
+pas plus de 2 par jour, et des jours sans. Un verre standard vaut 1 unité d'alcool.</p>
+<p>Letterbeer compte ce que tu bois. Il ne te juge pas, et il ne remplace pas un
+professionnel de santé.</p>
+
+<a class="aide" href="tel:0980980930">
+  <span class="k">Alcool Info Service</span>
+  <span class="n">0 980 980 930</span>
+  <span class="s">Anonyme et gratuit · 8h–2h, 7j/7</span>
+</a>
+
+<h2>Sources</h2>
+<p>Les fiches et les photos des canettes viennent d'<strong>Open Food Facts</strong>,
+base collaborative sous licence ODbL ; les photos sont en CC-BY-SA. Les repères de
+consommation viennent de <strong>Santé publique France</strong>.</p>
+
+<p class="evin">L'abus d'alcool est dangereux pour la santé. À consommer avec modération.</p>
+
+<footer>
+  <a href="index.html">Retour à Letterbeer</a><br>
+  Fait entre potes, à Nantes.
+</footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Supprimer mon compte — Letterbeer</title>
+<meta name="description" content="Supprimer définitivement son compte Letterbeer, depuis un navigateur, sans installer l'application.">
+<meta name="robots" content="noindex">
+
+<!--
+  Page PUBLIQUE de suppression de compte.
+
+  POURQUOI ELLE EXISTE
+  Google Play exige depuis 2024 que la suppression d'un compte soit possible
+  depuis le web, sans installer l'application. La fonction delete_my_account()
+  existait déjà en base ; il manquait la page qui l'appelle.
+
+  CE QU'ELLE FAIT, ET RIEN D'AUTRE
+  Se connecter, exporter son journal si on le souhaite, puis appeler
+  delete_my_account(). Aucune autre fonctionnalité : c'est une porte de
+  sortie, pas une deuxième application.
+
+  Le geste de confirmation est le MÊME que dans l'app — taper SUPPRIMER —
+  et les mots de l'avertissement sont recopiés à l'identique. Deux formulations
+  différentes pour le même acte destructif donneraient l'impression que ce
+  n'est pas tout à fait le même acte.
+
+  La connexion est indispensable : la suppression passe par une fonction
+  `security definer` qui n'efface que le compte de l'APPELANT. Sans session,
+  auth.uid() vaut NULL et la fonction ne peut rien viser — c'est ce qui
+  empêche quiconque de supprimer le compte d'un autre depuis cette page.
+-->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'none';
+  script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;
+  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+  font-src https://fonts.gstatic.com;
+  img-src 'self' data:;
+  connect-src https://wleilfzebdkudkteezht.supabase.co;
+  base-uri 'self';
+  form-action 'none';
+  upgrade-insecure-requests">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+
+<link rel="icon" type="image/svg+xml" href="logo.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- Même version épinglée et même empreinte que l'app : un CDN compromis
+     aurait ici un accès complet à la session de quelqu'un qui vient de taper
+     son mot de passe. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"
+  integrity="sha384-qafw21c/iciq0VXsi9FzkfoQv5I/V0iqE4lSNcKXPnW9/UTJLnv5CcN4FHxVLnKg"
+  crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<style>
+:root{
+  --bg:#0A0A0C; --surface:#141417; --surface-2:#1C1C20; --accent:#FF5A1F;
+  --text:#F4EFE8; --dim:#98989E; --dimmer:#7E7E84; --border:#232327;
+  --warn:#E8B04B; --bad:#FF4D4D; --ok:#3FD98B;
+  --display:'Space Grotesk','Segoe UI',system-ui,sans-serif;
+  --body:'Inter','Segoe UI',system-ui,sans-serif;
+  --e:cubic-bezier(.22,.8,.28,1);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--body);
+  font-size:15.5px;line-height:1.65;-webkit-font-smoothing:antialiased}
+.page{max-width:540px;margin:0 auto;padding:44px 22px 80px}
+p{margin:0 0 14px}
+a{color:var(--accent)}
+strong{font-weight:600}
+
+.marque{font-family:var(--display);font-weight:700;font-size:20px;letter-spacing:2.2px;margin:0 0 26px}
+.marque span{color:var(--accent)}
+h1{font-family:var(--display);font-size:clamp(26px,5vw,34px);font-weight:700;
+  letter-spacing:-.022em;line-height:1.14;margin:0 0 14px;text-wrap:balance}
+.chapeau{color:var(--dim);margin-bottom:28px}
+
+.note{display:flex;gap:11px;align-items:flex-start;border-radius:13px;padding:15px 17px;
+  margin:0 0 20px;font-size:14px;line-height:1.55;background:var(--surface);
+  border:1px solid var(--border);color:var(--dim)}
+.note.warn{background:rgba(232,176,75,.08);border-color:rgba(232,176,75,.32)}
+.note.bad{background:rgba(255,77,77,.08);border-color:rgba(255,77,77,.32)}
+.note.ok{background:rgba(63,217,139,.08);border-color:rgba(63,217,139,.32)}
+.note b{color:var(--text);font-weight:600}
+.note .ic{flex:0 0 auto;font-family:var(--display);font-weight:700;font-size:13px;
+  width:19px;height:19px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;margin-top:1px}
+.note.warn .ic{background:var(--warn);color:#1a1206}
+.note.bad .ic{background:var(--bad);color:#2a0808}
+.note.ok .ic{background:var(--ok);color:#052014}
+.note:not(.warn):not(.bad):not(.ok) .ic{background:var(--surface-2);color:var(--dimmer)}
+
+.bloc{background:var(--surface);border:1px solid var(--border);border-radius:15px;
+  padding:22px;margin-bottom:16px}
+.bloc h2{font-family:var(--display);font-size:15px;font-weight:600;margin:0 0 4px;
+  letter-spacing:.2px}
+.bloc .sous{font-size:13px;color:var(--dimmer);margin:0 0 16px}
+
+label{display:block;font-size:12px;letter-spacing:.9px;text-transform:uppercase;
+  color:var(--dimmer);font-weight:500;margin-bottom:6px}
+.f{width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:11px;
+  padding:12px 14px;color:var(--text);font-family:var(--body);font-size:16px;
+  transition:border-color .18s var(--e)}
+.f:focus{outline:none;border-color:var(--accent)}
+.champ{margin-bottom:14px}
+
+button{font-family:var(--display);font-weight:600;font-size:15px;border:0;border-radius:11px;
+  padding:13px 18px;width:100%;cursor:pointer;transition:.18s var(--e)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button:disabled{opacity:.45;cursor:not-allowed}
+.cta{background:var(--accent);color:#0A0A0C}
+.cta:not(:disabled):hover{filter:brightness(1.08)}
+.danger{background:var(--bad);color:#2a0808}
+.danger:not(:disabled):hover{filter:brightness(1.08)}
+.ghost{background:transparent;color:var(--text);border:1px solid var(--border)}
+.ghost:hover{border-color:var(--accent)}
+
+ul.quoi{list-style:none;padding:0;margin:0 0 16px;display:flex;flex-direction:column;gap:8px}
+ul.quoi li{position:relative;padding-left:23px;font-size:14px;color:var(--dim)}
+ul.quoi li::before{content:'✕';position:absolute;left:0;color:var(--bad);font-weight:700}
+
+.cache{display:none}
+.pied{margin-top:34px;padding-top:20px;border-top:1px solid var(--border);
+  font-size:12.5px;color:var(--dimmer);text-align:center;line-height:1.9}
+.evin{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--dimmer);
+  text-align:center;margin-top:26px;line-height:1.6}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="page">
+
+<p class="marque">LETTER<span>BEER</span></p>
+<h1>Supprimer mon compte</h1>
+<p class="chapeau">Depuis un navigateur, sans installer l'application. C'est immédiat et
+définitif.</p>
+
+<!-- ÉTAPE 1 — connexion -->
+<section id="etape-connexion">
+  <div class="note"><span class="ic">i</span><span>Il faut te connecter d'abord.
+  C'est ce qui garantit que <b>personne ne peut supprimer le compte d'un autre</b> depuis
+  cette page.</span></div>
+
+  <div class="bloc">
+    <h2>Connexion</h2>
+    <p class="sous">Le même e-mail et le même mot de passe que dans l'app.</p>
+    <div class="champ">
+      <label for="mail">E-mail</label>
+      <input class="f" id="mail" type="email" autocomplete="email" inputmode="email"
+             autocapitalize="off" spellcheck="false">
+    </div>
+    <div class="champ">
+      <label for="mdp">Mot de passe</label>
+      <input class="f" id="mdp" type="password" autocomplete="current-password">
+    </div>
+    <button class="cta" id="btn-connexion">Se connecter</button>
+    <div id="err-connexion" class="note bad cache" style="margin:14px 0 0">
+      <span class="ic">!</span><span id="err-connexion-txt"></span></div>
+    <p class="sous" style="margin:16px 0 0">Mot de passe oublié ? Passe par
+    <a href="index.html">l'application</a> : le lien de réinitialisation s'y demande.</p>
+  </div>
+</section>
+
+<!-- ÉTAPE 2 — confirmation -->
+<section id="etape-confirmation" class="cache">
+  <div class="note ok"><span class="ic">✓</span><span>Connecté en tant que
+  <b id="qui"></b>.</span></div>
+
+  <div class="note bad"><span class="ic">!</span><span><b>C'est définitif.</b> Ton journal,
+  tes avis, tes photos et tes relevés de prix partent avec le compte. Il n'y a ni corbeille
+  ni sauvegarde à restaurer.</span></div>
+
+  <div class="bloc">
+    <h2>Ce qui sera effacé</h2>
+    <p class="sous">Sans exception et sans délai.</p>
+    <ul class="quoi">
+      <li>Ton profil, ton pseudo et ta photo</li>
+      <li>Ton journal, tes notes et tes repères de consommation</li>
+      <li>Tes avis publiés, et les réponses qu'ils ont reçues</li>
+      <li>Tes réactions, ta liste d'envies, tes prix suivis</li>
+      <li>Tes relevés de prix et tes abonnements</li>
+    </ul>
+    <p class="sous" style="margin:0">Les fiches de bières que tu as proposées restent au
+    catalogue : elles appartiennent à tout le monde, et les effacer emporterait les notes
+    des autres.</p>
+  </div>
+
+  <div class="bloc">
+    <h2>Exporter d'abord ?</h2>
+    <p class="sous">Ton journal complet, en CSV. Après la suppression, il n'y aura plus
+    rien à exporter.</p>
+    <button class="ghost" id="btn-export">Exporter mon journal</button>
+    <div id="msg-export" class="note ok cache" style="margin:14px 0 0">
+      <span class="ic">✓</span><span id="msg-export-txt"></span></div>
+  </div>
+
+  <div class="bloc">
+    <h2>Confirmer</h2>
+    <!-- Pas « en majuscules » : le contrôle fait .trim().toUpperCase(), donc
+         « supprimer » passe aussi. C'est le comportement de l'app, on le
+         garde — mais on n'annonce pas une exigence qu'on n'applique pas. -->
+    <p class="sous">Tape <strong>SUPPRIMER</strong> pour confirmer.</p>
+    <div class="champ">
+      <label for="mot">Confirmation</label>
+      <input class="f" id="mot" autocomplete="off" autocapitalize="characters"
+             spellcheck="false" placeholder="SUPPRIMER">
+    </div>
+    <button class="danger" id="btn-supprimer" disabled>Supprimer définitivement</button>
+    <div id="err-suppression" class="note bad cache" style="margin:14px 0 0">
+      <span class="ic">!</span><span id="err-suppression-txt"></span></div>
+  </div>
+
+  <button class="ghost" id="btn-annuler">Annuler et se déconnecter</button>
+</section>
+
+<!-- ÉTAPE 3 — fini -->
+<section id="etape-fini" class="cache">
+  <div class="note ok"><span class="ic">✓</span><span><b>Ton compte est supprimé.</b>
+  Il n'en reste rien.</span></div>
+  <p>Merci d'avoir essayé Letterbeer. Si tu veux revenir un jour, il faudra recréer un
+  compte — rien ne sera récupéré.</p>
+  <p><a href="index.html">Retour à l'accueil</a></p>
+</section>
+
+<p class="evin">L'abus d'alcool est dangereux pour la santé. À consommer avec modération.</p>
+<div class="pied">
+  <a href="confidentialite.html">Confidentialité</a> ·
+  <a href="index.html">Letterbeer</a><br>
+  Une question ? <a href="mailto:owen.charp44@gmail.com">owen.charp44@gmail.com</a>
+</div>
+
+</div>
+
+<script>
+/* La clé anon est publique par conception, comme dans l'app : toute la
+   sécurité tient aux règles RLS de PostgreSQL, pas au secret de cette clé. */
+const SUPABASE_URL  = 'https://wleilfzebdkudkteezht.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndsZWlsZnplYmRrdWRrdGVlemh0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0ODg4NjgsImV4cCI6MjEwMzA2NDg2OH0.unusUeG7zH_eebyi7TccxoXJ9D_Shp2if56-bARW3p4';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+const $ = id => document.getElementById(id);
+const montrer = (id, oui) => $(id).classList.toggle('cache', !oui);
+function erreur(zone, texte){
+  $(zone + '-txt').textContent = texte;
+  montrer(zone, true);
+}
+
+/* ---------- étape 1 : connexion ---------- */
+async function connexion(){
+  const b = $('btn-connexion');
+  montrer('err-connexion', false);
+  const email = $('mail').value.trim();
+  const mdp   = $('mdp').value;
+  if (!email || !mdp) return erreur('err-connexion', 'E-mail et mot de passe sont nécessaires.');
+
+  b.disabled = true; b.textContent = 'Connexion…';
+  const { data, error } = await sb.auth.signInWithPassword({ email, password: mdp });
+  b.disabled = false; b.textContent = 'Se connecter';
+
+  if (error) {
+    /* On ne recopie pas le message brut de Supabase, qui est en anglais et
+       parfois technique. On ne distingue pas non plus « e-mail inconnu » de
+       « mauvais mot de passe » : ça dirait à un curieux si une adresse a un
+       compte. */
+    return erreur('err-connexion', 'E-mail ou mot de passe incorrect.');
+  }
+  $('qui').textContent = data.user.email;
+  montrer('etape-connexion', false);
+  montrer('etape-confirmation', true);
+  $('mot').focus();
+}
+
+/* ---------- l'export, avant qu'il n'y ait plus rien à exporter ----------
+   On ne lit QUE son propre journal : la règle l_all du RLS ne rend rien
+   d'autre, même si cette page le demandait. */
+async function exporter(){
+  const b = $('btn-export');
+  montrer('msg-export', false);
+  b.disabled = true; b.textContent = 'Export en cours…';
+  try {
+    const { data: logs, error } = await sb.from('logs')
+      .select('drunk_at,rating,liked,counted,price_paid,shop,beer_id')
+      .order('drunk_at', { ascending: false });
+    if (error) throw error;
+
+    /* Les noms des bières, pour que le fichier soit lisible sans la base.
+       Une seule requête, sur les fiches concernées. */
+    const ids = [...new Set((logs || []).map(l => l.beer_id))];
+    let noms = {};
+    if (ids.length) {
+      const { data: bs } = await sb.from('beers').select('id,name,brewery,volume_cl,abv').in('id', ids);
+      for (const x of bs || []) noms[x.id] = x;
+    }
+
+    const cell = v => {
+      const s = v === null || v === undefined ? '' : String(v);
+      return /[";\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const entete = ['Date','Bière','Brasserie','Volume (cl)','Degré','Note','Coup de cœur','Comptée','Prix payé','Magasin'];
+    const lignes = (logs || []).map(l => {
+      const b = noms[l.beer_id] || {};
+      return [ (l.drunk_at || '').slice(0,10), b.name || '', b.brewery || '',
+               b.volume_cl ?? '', b.abv ?? '', l.rating ?? '',
+               l.liked ? 'oui' : '', l.counted === false ? 'non' : 'oui',
+               l.price_paid ?? '', l.shop || '' ];
+    });
+
+    /* Point-virgule et BOM : sans eux, Excel en français colle tout dans une
+       seule colonne et massacre les accents. Même choix que dans l'app. */
+    const csv = [entete, ...lignes].map(r => r.map(cell).join(';')).join('\r\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'letterbeer-journal-' + new Date().toISOString().slice(0,10) + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+
+    $('msg-export-txt').textContent = lignes.length
+      ? lignes.length + (lignes.length > 1 ? ' entrées exportées.' : ' entrée exportée.')
+      : 'Ton journal est vide : le fichier ne contient que l\'en-tête.';
+    montrer('msg-export', true);
+  } catch (e) {
+    console.error(e);
+    $('msg-export-txt').textContent = 'Export impossible. Réessaie, ou passe par l\'app.';
+    $('msg-export').className = 'note bad';
+    montrer('msg-export', true);
+  } finally {
+    b.disabled = false; b.textContent = 'Exporter mon journal';
+  }
+}
+
+/* ---------- étape 2 : la suppression ---------- */
+$('mot').addEventListener('input', function(){
+  $('btn-supprimer').disabled = this.value.trim().toUpperCase() !== 'SUPPRIMER';
+});
+
+async function supprimer(){
+  const b = $('btn-supprimer');
+  montrer('err-suppression', false);
+  b.disabled = true; b.textContent = 'Suppression en cours…';
+  try {
+    const { error } = await sb.rpc('delete_my_account');
+    if (error) throw error;
+    /* La session ne vaut plus rien une fois le compte parti, mais on la ferme
+       explicitement : laisser un jeton en mémoire d'un compte inexistant
+       ferait échouer les appels suivants de façon illisible. */
+    try { await sb.auth.signOut(); } catch (_) {}
+    montrer('etape-confirmation', false);
+    montrer('etape-fini', true);
+    window.scrollTo(0, 0);
+  } catch (e) {
+    console.error(e);
+    b.disabled = false; b.textContent = 'Supprimer définitivement';
+    erreur('err-suppression',
+      'La suppression a échoué. Rien n\'a été effacé. Réessaie, ou écris à owen.charp44@gmail.com.');
+  }
+}
+
+async function annuler(){
+  try { await sb.auth.signOut(); } catch (_) {}
+  location.reload();
+}
+
+$('btn-connexion').addEventListener('click', connexion);
+$('btn-export').addEventListener('click', exporter);
+$('btn-supprimer').addEventListener('click', supprimer);
+$('btn-annuler').addEventListener('click', annuler);
+$('mdp').addEventListener('keydown', e => { if (e.key === 'Enter') connexion(); });
+
+/* Déjà connecté dans ce navigateur ? On saute l'étape 1 — mais jamais la
+   confirmation, qui est le vrai garde-fou. */
+(async () => {
+  const { data } = await sb.auth.getSession();
+  if (data && data.session) {
+    $('qui').textContent = data.session.user.email;
+    montrer('etape-connexion', false);
+    montrer('etape-confirmation', true);
+  }
+})();
+</script>
+</body>
+</html>

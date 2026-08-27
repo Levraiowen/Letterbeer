@@ -15,7 +15,7 @@
 > Les sections sont **pondérées** : `🔴 structurant`, `🟠 important`,
 > `🟡 secondaire`. La pondération dit où porter l'attention quand le temps manque.
 >
-> Dernière mise à jour : 27 août 2026 · app en `v6.6` · 35 migrations · non ouvert aux testeurs.
+> Dernière mise à jour : 27 août 2026 · app en `v6.7` · 35 migrations · non ouvert aux testeurs.
 
 ---
 
@@ -1159,3 +1159,36 @@ rapport d'audit :
    de vrais chantiers produit, à cadrer avant d'être codés.
 6. La pagination des avis, réponses, prix et abonnements côté BASE — le fil
    est borné à l'affichage, mais les données sont toujours toutes téléchargées.
+
+**27 août 2026 (suite) — les deux pages publiques (v6.7)**
+
+- **`confidentialite.html`** et **`supprimer-compte.html`**, à la racine,
+  lisibles **sans compte**. MIGRATION.md les notait comme exigences Google
+  Play sans les avoir construites : la politique de confidentialité doit être
+  accessible à qui n'a rien installé, et la suppression de compte doit être
+  possible depuis le web (exigence depuis 2024).
+- **Elles ne répètent pas l'app, elles la recopient.** Les promesses viennent
+  mot pour mot de l'écran « À propos », et le geste de confirmation est le
+  même — taper SUPPRIMER. **Règle : si l'un change, l'autre change.** Une
+  politique qui contredit l'application est pire que pas de politique.
+- **La page de suppression exige une connexion**, et c'est le garde-fou :
+  `delete_my_account()` n'efface que le compte de l'APPELANT. Sans session,
+  `auth.uid()` vaut NULL et la fonction ne vise rien. Elle propose l'export
+  CSV avant, avec le même format que l'app (point-virgule et BOM, sinon Excel
+  français massacre tout).
+- **CSP resserrée sur chaque page** plutôt que recopiée de l'app :
+  `confidentialite.html` est en `default-src 'none'` et n'exécute aucun
+  JavaScript — une page qui explique qu'on ne piste personne ne charge pas de
+  script tiers. `supprimer-compte.html` n'ouvre que ce qu'il lui faut, avec la
+  même empreinte SRI épinglée sur la bibliothèque Supabase.
+- Message d'erreur de connexion **volontairement indistinct** (« e-mail ou mot
+  de passe incorrect ») : séparer les deux cas dirait à un curieux si une
+  adresse a un compte.
+- Les deux pages sont dans la coque du service worker : quelqu'un qui veut
+  partir doit pouvoir le faire avec un réseau capricieux.
+
+**Précision sur le cap** : l'objectif immédiat n'est PAS Google Play, c'est un
+APK installé à la main sur le téléphone d'Owen, pour tester. Pour ça, aucune
+des exigences Play ne s'applique — ni classification 18+, ni formulaire
+« sécurité des données », ni 12 testeurs pendant 14 jours. Ces pages sont donc
+en avance, pas en retard : elles servent le jour de la publication.

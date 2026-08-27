@@ -4227,7 +4227,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v6.6';
+const APP_VERSION = 'v6.7';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
@@ -4306,8 +4306,15 @@ function openAbout(tab){
       tout se fait depuis cet écran et l'écran Compte.</div>
     <button class="ghost" style="margin-top:12px" onclick="exportData()">Exporter mon journal en CSV</button>
 
+    <!-- Les deux pages publiques. Elles disent la même chose que cet écran,
+         mais elles sont lisibles SANS COMPTE — ce que Google Play exige, et
+         ce qui permet à quelqu'un de partir sans réinstaller l'app.
+         Si cet écran change, ces pages changent : une politique qui contredit
+         l'application est pire que pas de politique. -->
     <div class="ab-foot">Letterbeer ${APP_VERSION} · fait entre potes, à Nantes.<br>
-      Une question, un bug, une donnée à corriger : écris-moi.</div>
+      Une question, un bug, une donnée à corriger : écris-moi.<br>
+      <a href="confidentialite.html" target="_blank" rel="noopener">Confidentialité</a> ·
+      <a href="supprimer-compte.html" target="_blank" rel="noopener">Supprimer mon compte depuis le web</a></div>
 
     <div class="danger">
       <div class="danger-h">Supprimer mon compte</div>
