@@ -1067,3 +1067,44 @@ Découvert en essayant simplement de corriger les cinq fiches ci-dessus.
   rien effacer, et c'est aussi ce qu'on utilise pour un doublon. Il n'y a pas
   de motif « doublon » distinct, et en créer un pour un cas par an ne vaut pas
   une colonne.
+
+**27 août 2026 (suite) — audit avant le passage en app native**
+
+Premier audit fait **avec la base sous les yeux** plutôt qu'en lisant les
+migrations. Rapport complet en artefact ; l'essentiel ci-dessous, parce qu'un
+lien peut se perdre et pas ce fichier.
+
+- **🔴 L'app télécharge tout le jeu de données public à chaque ouverture.**
+  `chargerTout()` pagine douze tables jusqu'à épuisement, et le RLS ne filtre
+  presque rien : `follows`, `prices` et `profiles` sont en `using (true)`.
+  Projection à 1 000 comptes, poids par ligne mesuré sur la vraie base :
+  **~10 Mo et ~30 allers-retours par ouverture**. Le coût monte avec le nombre
+  d'INSCRITS, pas avec ce que la personne regarde — le millième inscrit
+  ralentit les 999 autres. C'est le plus gros chantier de la liste.
+- **🔴 `all_public_stats()` est appelée au démarrage** (index.html:1203). Elle
+  joint `profiles` à `logs` pour tous les comptes, **plus une sous-requête
+  corrélée par profil**. Coût en comptes × entrées de journal. Sortir cet
+  appel du démarrage est le meilleur rapport effet/effort de tout l'audit.
+- **🔴 L'onglet Avis rend tous les avis d'un coup** — choix assumé et
+  documenté, dont le commentaire nomme déjà la sortie (« chargement progressif
+  au défilement »). Ce jour est celui de l'ouverture aux testeurs.
+- **19 règles RLS réévaluent `auth.uid()` à chaque ligne.** Correction purement
+  mécanique : `(select auth.uid())`. Aucun changement de comportement.
+- **8 clés étrangères sans index**, dont `follows.followee_id` (« qui me
+  suit », suggestions). Les autres sont balayées à chaque suppression de
+  compte. `beers_search_idx` et `beers_container_idx` n'ont **jamais servi** —
+  le premier parce que la recherche est côté navigateur.
+- **7 fonctions `security definer` exécutables par `anon`** via `/rest/v1/rpc`.
+  Risque réel faible (ce sont des fonctions de déclencheur, Postgres refuse de
+  les exécuter hors déclencheur) mais c'est **la famille d'oubli d'
+  `expire_prices` en migration 20** : traitée une fois, jamais balayée.
+- **Protection contre les mots de passe fuités : désactivée.** Une case,
+  gratuite, à cocher avant le premier testeur.
+- **L'alerte `beer_ratings` en CRITICAL reviendra à chaque audit.** Faux
+  positif, réponse déjà écrite en tête de la migration 26. Ne pas y toucher.
+- **Rien à AJOUTER.** 342 canettes pour 9 notes : le produit est déjà trente-
+  huit fois plus riche que son usage. Les listes, le bilan annuel et les
+  étiquettes du §6 bis attendent. Ce qui manque, ce sont des fondations.
+- **L'ordre proposé** met les **sept chemins jamais parcourus du §7 bis en
+  premier**, avant même les bloquants d'échelle : douze testeurs qui n'arrivent
+  pas à créer un compte rendent les dix mégaoctets parfaitement théoriques.
