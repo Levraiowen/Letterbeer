@@ -15,7 +15,7 @@
 > Les sections sont **pondérées** : `🔴 structurant`, `🟠 important`,
 > `🟡 secondaire`. La pondération dit où porter l'attention quand le temps manque.
 >
-> Dernière mise à jour : 26 août 2026 · app en `v6.3` · 33 migrations · non ouvert aux testeurs.
+> Dernière mise à jour : 27 août 2026 · app en `v6.3` · 34 migrations · non ouvert aux testeurs.
 
 ---
 
@@ -217,6 +217,48 @@ signalements, édition et suppression de fiches — réservé aux administrateur
   `abbey-beers`, `dubbels` et `red-ales` **n'existent pas** dans OFF et
   renvoient zéro ; `porters` (14) et `brown-ales` (5) sont trop maigres.
   `stouts` et `fr:bieres-brunes` sont le même tag chez OFF.
+- **🔴 Un nom qui ne nomme rien — mesuré le 27 août 2026.** Sur 342 fiches
+  publiées, **19 s'appelaient « bière »** dans une langue ou une autre :
+  quatre « Cerveza » de quatre brasseries différentes, trois « Bier », trois
+  « Bière blonde ». Plus trois « IPA », qui est un style. Dans une liste, ce
+  sont des lignes indiscernables — personne ne peut choisir. Ça abîme l'app
+  bien plus que les styles manquants.
+
+  **Bouché à l'entrée**, dans `clean()`, et pas par une migration : la raison
+  est déjà écrite au-dessus de `nettoyerNom()` — une migration ne tourne
+  qu'une fois, un import revient. Le test couvre les deux sens.
+
+  Passent toujours, volontairement : **« 1664 »** (vrai nom, tout en chiffres,
+  et la bière la plus scannée de France) et les noms non latins comme
+  « 水曜日のネコ ». Ils nomment quelque chose ; on ne sait pas le lire, c'est
+  différent, et une règle qui les viserait emporterait 1664 avec eux.
+
+- **🔴 Open Food Facts ne sait PAS réparer un nom. Résultat négatif, à ne pas
+  refaire.** Trois passes de règles automatiques ont été essayées sur les 39
+  fiches fautives, chacune plus stricte que la précédente :
+
+  | règle | ce qu'elle produisait |
+  |---|---|
+  | « OFF a un nom plus long » | « 33 cl Kronenbourg », « Biere forte », « Biere 1664 » |
+  | + passage par `nettoyerNom()` | « Sterling biereboite », « Biere De Luxe Kingsbräu » |
+  | + refus des candidats commençant par « bière » | **5 propositions, toutes justes** |
+
+  Sur 39 fiches, il ne reste que **cinq corrections sûres** : Cerveza →
+  « St.Wendeler », Cerveza especial → « 5 Estrellas », 水曜日のネコ →
+  « Suiyoubi no Neko Belgian White Ale », et deux brasseries récupérées
+  (Askania → Champigneulles, Goudale Ambrée → La goudale). **Les vingt
+  autres se tranchent sur la photo, en modération, ou pas du tout.**
+
+  C'est exactement ce que le §4 disait déjà des libellés de rayon. La leçon
+  est qu'aucune heuristique ne le contourne : à chaque tour de vis, le
+  rendement tombe et le bruit reste.
+
+- **La brasserie perdue en deuxième position — corrigé.** `clean()` prenait
+  `brands.split(',')[0]`, et si elle valait le nom du produit écrivait
+  « Inconnue ». Or OFF donne souvent une LISTE : pour Askania,
+  `brands = "Askania, brasserie Champigneulles SAS"`. La vraie brasserie
+  était juste après, et on la jetait. Elle essaie maintenant les suivantes.
+
 - **Le catalogue contient des intrus** : `GT-Mobility - Tankstelle, KFZ-Service`
   (une station-service allemande), `BTE 50CL DESPERADOS` (« BTE » = bouteille).
   À traiter depuis l'écran de modération.
@@ -936,3 +978,33 @@ pas déduit des migrations — c'est exactement ce que le §8 bis espérait.
   est cité dans le commentaire d'en-tête. Une extraction par expression
   régulière l'attrape et lève une `SyntaxError` sur du texte français —
   prendre le plus gros bloc inline, celui de la ligne 833.
+
+**27 août 2026 — les noms du catalogue, et un résultat négatif qui compte**
+
+- **19 fiches publiées s'appelaient « bière »** dans une langue ou une autre,
+  3 s'appelaient « IPA ». Détail et règle en §4. Bouché à l'entrée dans
+  `clean()`, jamais par une migration de rattrapage.
+- **🔴 Open Food Facts ne sait pas réparer un nom.** Trois passes de règles
+  automatiques, chacune plus stricte, pour finir à **5 corrections sûres sur
+  39 fiches**. Les tableaux du §4 gardent ce que chaque passe produisait —
+  c'est ce qui empêchera de le refaire. Le reste se tranche sur la photo.
+- **Deux bugs dans mes propres règles**, attrapés en vérifiant plutôt qu'en
+  supposant : le code refusait les noms non latins alors que son commentaire
+  promettait l'inverse ; et `n.includes('')` étant toujours vrai, un nom qui
+  se dépouille en chaîne vide rejetait sa propre bonne proposition.
+- **La brasserie en deuxième position** n'est plus jetée : `brands` est une
+  liste chez OFF, on essaie les suivantes avant d'écrire « Inconnue ».
+- **Doublons : un seul vrai** (Gösser Natur-Radler / Natur Radler, même
+  brasserie, même 50 cl, même 2°, deux codes-barres). Les quatre autres paires
+  — Desperados, Heineken, Kronenbourg, Sour IPA — sont le même produit en deux
+  formats. Ce ne sont pas des doublons, mais **ils divisent les notes du
+  Top** : deux fiches Heineken accumulent chacune leur moyenne bayésienne.
+  Arbitrage produit non tranché.
+- **Migration 34** : la répartition des notes dans `beer_ratings`. Écrite et
+  vérifiée sur les données réelles, pas encore posée.
+- **🔴 Le catalogue est 38 fois plus gros que l'usage.** 342 canettes publiées,
+  **8 bières notées, 9 notes au total**, 11 comptes. Aucune bière n'a trois
+  notes. Conséquence directe : l'histogramme de répartition ne s'affichera pas
+  avant l'ouverture aux testeurs, et un badge « Nᵉ du Top » n'aurait aucun sens
+  — être 4ᵉ sur 8 n'est pas une distinction. À relire avant de construire quoi
+  que ce soit qui suppose du volume social.

@@ -22,7 +22,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { classer } from './import-beers.mjs';
+import { classer, nomInutilisable, nettoyerNom } from './import-beers.mjs';
 import { styleDepuisCategories, guessStyle, COULEURS } from './styles.mjs';
 
 /* ================================================================
@@ -230,4 +230,68 @@ test('tout style produit a une couleur', () => {
     assert.ok(s, `${cats} devrait donner un style`);
     assert.ok(COULEURS[s], `le style « ${s} » n'a pas de couleur`);
   }
+});
+
+/* ================================================================
+   3. nomInutilisable() — un nom doit nommer
+
+   Mesuré en base le 27 août 2026, après l'import des brunes : sur 342
+   fiches publiées, 19 s'appelaient « bière » dans une langue ou une autre.
+   Quatre « Cerveza » de quatre brasseries différentes sont quatre lignes
+   indiscernables dans une liste.
+   ================================================================ */
+
+test('« bière » dans n\'importe quelle langue n\'est pas un nom', () => {
+  for (const n of ['Bière', 'Biere', 'Bier', 'Birra', 'Cerveza', 'Cerveja', 'Beer'])
+    assert.ok(nomInutilisable(n), `« ${n} » devrait être refusé`);
+});
+
+test('un qualifiant ne sauve pas un nom générique', () => {
+  // « Bière blonde » ×3, « Cerveza especial » ×3 : le qualifiant ne
+  // distingue rien puisque toutes les fiches le portent
+  for (const n of ['Bière blonde', 'Bière Blonde', 'Cerveza especial',
+                   'Cerveza Especial', 'Biere blonde extra forte'])
+    assert.ok(nomInutilisable(n), `« ${n} » devrait être refusé`);
+});
+
+test('un STYLE seul n\'est pas un nom', () => {
+  // trois « IPA » de trois brasseries différentes ne se distinguent pas
+  // plus que trois « Cerveza »
+  for (const n of ['IPA', 'Ipa', 'Stout', 'Blonde', 'Pale Ale', 'Lager'])
+    assert.ok(nomInutilisable(n), `« ${n} » devrait être refusé`);
+});
+
+test('ce qui nomme vraiment passe', () => {
+  for (const n of ['Guinness', 'Mahou 5 Estrellas', 'Konx', '8.6 Cherry',
+                   'Suiyoubi no Neko', 'Cuvée des Trolls'])
+    assert.ok(!nomInutilisable(n), `« ${n} » devrait passer`);
+});
+
+test('« 1664 » passe, bien qu\'il soit tout en chiffres', () => {
+  // faux positif évident d'une règle « pas de lettre » : c'est un vrai nom
+  // de bière française, et la plus scannée du pays
+  assert.ok(!nomInutilisable('1664'));
+});
+
+test('une écriture non latine est un nom, pas un rebut', () => {
+  // Le dépouillement des accents et de la ponctuation vide la chaîne, ce
+  // qui rendait ces deux fiches indistinguables d'un nom vide. Elles
+  // nomment quelque chose : on ne sait pas le lire, c'est différent.
+  // Les rejeter emporterait les bières japonaises et israéliennes réelles.
+  assert.ok(!nomInutilisable('水曜日のネコ'));
+  assert.ok(!nomInutilisable('הוגרדן פחית'));
+});
+
+test('la ponctuation seule, elle, est bien un rebut', () => {
+  for (const n of ['', '   ', '— · —', '...'])
+    assert.ok(nomInutilisable(n), `${JSON.stringify(n)} devrait être refusé`);
+});
+
+test('nettoyerNom retire le libellé de rayon', () => {
+  // c'est ce nettoyage qui fait que « Bière blonde -4,2% » et
+  // « Bière blonde » sont le même nom, donc que le renommage proposé par
+  // Open Food Facts n'apportait rien
+  assert.equal(nettoyerNom('Bière blonde -4,2%', 'Auchan'), 'Bière blonde');
+  assert.equal(nettoyerNom('Grimbergen 25 cl Grimbergen Blonde', 'Grimbergen'),
+               'Grimbergen Blonde');
 });

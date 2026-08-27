@@ -188,7 +188,60 @@ export function classer(p) {
  */
 const PACK = /\d+\s*[x×]\s*\d+([.,]\d+)?\s*(cl|ml)/i;
 
-function nettoyerNom(nom, brasserie) {
+/* ---------- un nom qui ne nomme rien ----------
+ *
+ * Mesuré en base le 27 août 2026, après l'import des brunes : sur 342 fiches
+ * publiées, 19 s'appelaient « bière » dans une langue ou une autre —
+ * QUATRE « Cerveza » de quatre brasseries différentes, trois « Bier »,
+ * trois « Bière blonde ». Dans une liste, ce sont des lignes indiscernables :
+ * personne ne peut choisir. Trois autres s'appelaient « IPA », qui est un
+ * style, pas un nom.
+ *
+ * Le filtre est ici et pas dans une migration de rattrapage, pour la raison
+ * déjà écrite au-dessus de nettoyerNom() : une migration ne tourne qu'une
+ * fois, un import revient. Le rattrapage aurait été refait à chaque passage.
+ *
+ * On teste APRÈS nettoyerNom(), sur la forme sans accent ni ponctuation :
+ * « Bière blonde -4,2% » devient « biereblonde » et tombe, alors que le nom
+ * brut passait au travers.
+ *
+ * Ce qui NE tombe pas, volontairement : « 1664 », un vrai nom de bière
+ * française bien qu'il soit tout en chiffres, et les noms non latins comme
+ * « 水曜日のネコ ». Deux fiches concernées, et une règle qui les viserait
+ * emporterait 1664 avec elles. Ça se tranche à l'œil en modération.
+ */
+const sansOrnement = s => String(s || '').toLowerCase()
+  .normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+
+const MOT_BIERE  = '(biere|bier|birra|cerveza|cerveja|beer|pivo|piwo|ol|olut|sor|cerveses)';
+const QUALIFIANT = '(blonde|blond|especial|special|premium|lager|clara|rubia|extra|forte|fort|legere)*';
+const NOM_GENERIQUE = new RegExp(`^${MOT_BIERE}${QUALIFIANT}$`);
+
+/* Un style seul n'est pas un nom : trois « IPA » de trois brasseries
+   différentes ne se distinguent pas plus que trois « Cerveza ». */
+const STYLE_SEUL = /^(ipa|neipa|stout|porter|lager|pils|pilsner|paleale|ale|blanche|blonde|brune|ambree|triple|double|saison|gose|sour)$/;
+
+/* Ni lettre ni chiffre dans AUCUNE écriture : ce n'est pas un nom, c'est de
+   la ponctuation. `\p{L}` couvre le japonais et l'hébreu autant que le latin,
+   d'où le drapeau `u`. */
+const AUCUNE_LETTRE = /^[^\p{L}\p{N}]*$/u;
+
+export const nomInutilisable = n => {
+  const brut = String(n || '').trim();
+  if (!brut || AUCUNE_LETTRE.test(brut)) return true;
+
+  const s = sansOrnement(brut);
+  /* Chaîne vide APRÈS dépouillement alors qu'il y avait des lettres : le nom
+     est dans une écriture non latine — « 水曜日のネコ », « הוגרדן פחית ». On
+     le garde. Il nomme quelque chose ; on ne sait simplement pas le lire, et
+     ça se tranche en modération, pas par une règle qui emporterait aussi les
+     bières japonaises et israéliennes légitimes. */
+  if (!s) return false;
+
+  return NOM_GENERIQUE.test(s) || STYLE_SEUL.test(s);
+};
+
+export function nettoyerNom(nom, brasserie) {
   let n = nom;
   n = n.replace(/\s*\d+([.,]\d+)?\s*(cl|ml)\b/gi, '');                 // « 33cl », « 25 cl »
   n = n.replace(/\s*\d+([.,]\d+)?\s*(°|degrés?|degres?)\s*(alcool)?/gi, ''); // « 8° », « 6.5 DEGRE ALCOOL »
@@ -221,8 +274,15 @@ function clean(p) {
   // corriger à moitié.
   if (PACK.test(nomBrut)) return null;
 
-  let brand = (p.brands || '').split(',')[0].trim();
-  if (brand && brand.toLowerCase() === nomBrut.toLowerCase()) brand = 'Inconnue';
+  /* La marque, en essayant les suivantes avant d'abandonner.
+     L'ancienne version prenait `split(',')[0]` et, s'il valait le nom du
+     produit, écrivait « Inconnue ». Or OFF donne souvent une LISTE : pour
+     Askania, `brands = "Askania, brasserie Champigneulles SAS"`. La vraie
+     brasserie était en deuxième position, et on l'a jetée. Constaté le
+     27 août 2026 sur les 13 fiches « Inconnue » du catalogue. */
+  const marques = (p.brands || '').split(',').map(m => m.trim()).filter(Boolean);
+  let brand = marques.find(m => m.toLowerCase() !== nomBrut.toLowerCase()) || '';
+  if (!brand) brand = marques.length ? 'Inconnue' : '';
 
   const name  = nettoyerNom(nomBrut, brand === 'Inconnue' ? '' : brand);
   const cl    = parseCl(p.quantity);
@@ -236,6 +296,8 @@ function clean(p) {
   if (abv === null || abv < 0 || abv > 20) return null;
   if (!img) return null;
   if (/^\d+$/.test(name)) return null;
+  // « Cerveza », « Bier », « IPA » : voir nomInutilisable() plus haut
+  if (nomInutilisable(name)) return null;
 
   const verdict = classer(p);
   if (verdict === 'bouteille') return null;      // écartée, sans discussion
