@@ -15,7 +15,7 @@
 > Les sections sont **pondérées** : `🔴 structurant`, `🟠 important`,
 > `🟡 secondaire`. La pondération dit où porter l'attention quand le temps manque.
 >
-> Dernière mise à jour : 27 août 2026 · app en `v6.5` · 34 migrations · non ouvert aux testeurs.
+> Dernière mise à jour : 27 août 2026 · app en `v6.6` · 35 migrations · non ouvert aux testeurs.
 
 ---
 
@@ -1108,3 +1108,54 @@ lien peut se perdre et pas ce fichier.
 - **L'ordre proposé** met les **sept chemins jamais parcourus du §7 bis en
   premier**, avant même les bloquants d'échelle : douze testeurs qui n'arrivent
   pas à créer un compte rendent les dix mégaoctets parfaitement théoriques.
+
+**27 août 2026 (suite) — corrections d'échelle, ce qui pouvait l'être (v6.6, migration 35)**
+
+Sauvegarde avant : tag `avant-corrections-audit` et copie dans
+`.sauvegarde-audit/`. Trois des cinq bloquants de l'audit sont traités.
+
+- **`all_public_stats()` sort du démarrage.** C'était le plus gros coût
+  serveur du projet : jointure `profiles` × `logs` sur tous les comptes, plus
+  une sous-requête corrélée par profil, payée à chaque ouverture par chaque
+  personne. Elle est désormais appelée à l'ouverture des DEUX écrans qui s'en
+  servent — les copains et le profil de quelqu'un — une fois par session
+  (`Store.chargerStatsPubliques`).
+  **Le piège évité** : les compteurs valent `0` par défaut dans `C.users`, donc
+  un chargement paresseux naïf aurait affiché « 0 canette » sur quelqu'un qui
+  en a bu trente. Un chiffre faux est pire qu'un chiffre absent, d'où
+  `Store.statsInconnues()` et les tirets tant qu'on ne sait pas.
+- **Le fil d'avis se déroule progressivement.** C'est exactement la sortie que
+  le commentaire d'origine annonçait, et l'audit a daté le jour. Pas de « voir
+  plus » : le geste reste le défilement, seul le nombre de blocs vivants
+  change (`AVIS_PAS = 25`, `suiteAvis()`).
+  **Mesuré dans le navigateur, sur 500 avis fabriqués** :
+
+  | avis rendus | temps | nœuds DOM | HTML |
+  |---|---|---|---|
+  | 25 (nouveau) | 11 ms | 1 559 | 77 Ko |
+  | 500 | 162 ms | 31 167 | 1,5 Mo |
+  | 15 000 (extrapolé) | **4,9 s** | **935 000** | **46 Mo** |
+
+  Sur ordinateur. Sur téléphone, trois à cinq fois plus — le système tue
+  l'onglet avant la fin. L'écouteur est posé une seule fois sur `#view`, en
+  `passive`, et coûte 0 ms sur les onglets sans fil (mesuré sur 200 événements).
+- **Migration 35** — mécanique, sans changement de comportement, en trois
+  blocs : les 18 politiques RLS passent à `(select auth.uid())`, les 8 clés
+  étrangères reçoivent leur index, et les 7 fonctions de déclencheur perdent
+  le droit d'exécution du rôle `anon`. Les définitions des politiques ont été
+  **recopiées depuis la base**, pas réécrites de mémoire, et l'équivalence
+  `(select f()) is not distinct from f()` a été vérifiée en base avant d'être
+  écrite.
+
+**Ce qui reste, et que je ne peux pas faire à ta place** — détail dans le
+rapport d'audit :
+
+1. Parcourir les 7 chemins jamais exercés du §7 bis (il faut créer de vrais
+   comptes) — **avant tout le reste**.
+2. Cocher la protection contre les mots de passe fuités (réglages Auth).
+3. Brancher un SMTP externe : le plafond de 2 e-mails/heure est un mur.
+4. Passer la migration 35, puis la 34.
+5. Limitation du débit d'écriture et bouton « signaler un problème » : ce sont
+   de vrais chantiers produit, à cadrer avant d'être codés.
+6. La pagination des avis, réponses, prix et abonnements côté BASE — le fil
+   est borné à l'affichage, mais les données sont toujours toutes téléchargées.

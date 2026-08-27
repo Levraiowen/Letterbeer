@@ -1000,6 +1000,7 @@ const classerTexte = t => {
 
 /* cache local */
 const C = { me:null, myId:null, email:'', isAdmin:false, users:{}, beers:[], ratings:{}, counts:{}, weekCounts:{}, dist:{},
+            statsPub:'absentes',   // absentes | encours | chargees | echec
             reviews:[], logs:[], follows:[], watch:[], wish:[], arts:[], blocks:[] };
 
 /* ============================ AUTHENTIFICATION ============================ */
@@ -1196,17 +1197,17 @@ async function hydrate() {
     else for (const b of bofs || []) mesBofs[b.review_id] = b.bofs;
   }
 
-  /* --- stats publiques des autres, en une seule requête ---
-     Une fonction par profil faisait autant d'allers-retours que de
-     membres. all_public_stats les renvoie d'un coup, en appliquant les
-     mêmes filtres côté serveur. */
-  const { data: allStats, error: statsErr } = await sb.rpc('all_public_stats');
-  if (!statsErr) for (const s of allStats || []) {
-    const u = C.users[s.user_id];
-    if (!u) continue;
-    u.cans = +s.cans||0; u.avg = +s.avg_rating||0;
-    u.week = +s.week_cans||0; u.top = s.top_style || '—';
-  }
+  /* --- stats publiques des autres : PLUS AU DÉMARRAGE ---
+     Elles vivaient ici, et c'était le plus gros coût serveur de l'app.
+     all_public_stats() joint profiles à logs pour TOUS les comptes, plus une
+     sous-requête corrélée par profil : le coût est en comptes × entrées de
+     journal, payé à chaque ouverture, par chaque personne. Mesuré à l'audit
+     du 27 août 2026 : invisible à onze comptes, premier à expirer à mille.
+
+     Or ces chiffres ne servent qu'à DEUX écrans — la liste des copains et le
+     profil de quelqu'un. On les charge donc à l'ouverture de ces écrans, une
+     seule fois par session. Voir Store.chargerStatsPubliques().
+  */
 
   /* --- bières --- */
   C.beers = (beers.data||[]).map(b => ({
@@ -1503,6 +1504,44 @@ const Store = {
   /* Et « être dans les dix » n'informe qu'à partir d'un vivier deux fois plus
      grand. Être 4ᵉ sur 8 n'est pas une distinction, c'est une tautologie. */
   SEUIL_VIVIER: 20,
+
+  /* ---- les stats publiques des autres, à la demande ----
+   *
+   * Sortie du démarrage le 27 août 2026. all_public_stats() joint profiles à
+   * logs pour TOUS les comptes, plus une sous-requête corrélée par profil :
+   * son coût est en comptes × entrées de journal. La payer à chaque ouverture
+   * de l'app, pour chaque personne, était le plus gros coût serveur du projet.
+   *
+   * Une fois par session suffit : ces chiffres bougent lentement, et l'écran
+   * qui les montre n'est pas celui qu'on ouvre en premier.
+   *
+   * `encours` empêche deux appels simultanés — ouvrir les copains puis un
+   * profil dans la seconde en déclencherait deux. En cas d'échec on retient
+   * `echec` plutôt que de réessayer en boucle : l'app reste utilisable, seuls
+   * les chiffres manquent, et le prochain lancement retentera.
+   */
+  async chargerStatsPubliques() {
+    if (C.statsPub === 'chargees' || C.statsPub === 'encours') return;
+    C.statsPub = 'encours';
+    const { data, error } = await sb.rpc('all_public_stats');
+    if (error) {
+      console.warn('stats publiques indisponibles', error.message);
+      C.statsPub = 'echec';
+      return;
+    }
+    for (const s of data || []) {
+      const u = C.users[s.user_id];
+      if (!u) continue;
+      u.cans = +s.cans || 0; u.avg = +s.avg_rating || 0;
+      u.week = +s.week_cans || 0; u.top = s.top_style || '—';
+    }
+    C.statsPub = 'chargees';
+  },
+
+  /* Vrai tant qu'on ne SAIT pas. Les compteurs valent 0 par défaut, donc sans
+     ce garde l'app afficherait « 0 canette » — un chiffre faux, ce qui est
+     pire qu'un chiffre absent. */
+  statsInconnues: () => C.statsPub !== 'chargees',
 
   /* La répartition des notes, ou null. Elle vient de la base : `logs` est
      strictement privé par RLS, chacun n'y voit que ses propres lignes, donc
@@ -2431,11 +2470,15 @@ function ouvrirClassement(){
 }
 function go(t){
   quitterModifTournee();
+  AVIS_VUS = AVIS_PAS;   // on ne revient jamais au milieu d'un fil déroulé
   const memeOnglet = S.tab === t || (t === 'me' && S.tab === 'account');
   if (memeOnglet || t === 'home') racineOnglet(t);
   S.dir = 1; S.tab = t; $('#view').scrollTop = 0; render(1);
 }
 function openUser(k){
+  if (Store.statsInconnues() && C.statsPub === 'absentes')
+    Store.chargerStatsPubliques().then(() => { if (document.getElementById('sheet').classList.contains('open')) openUser(k) });
+
   quitterModifTournee();
   closeSheet();
   if(k==='me'){go('me');return}
@@ -2494,15 +2537,28 @@ function vHome(){
     const chauds = S.avisTri !== 'recents';
     const L = chauds ? Store.populaires() : Store.recents();
     return '<div class="sec"><h2>'+(chauds?'En ce moment':'Les derniers')+'</h2>'
-      +'<button class="seeall" onclick="S.avisTri=\''+(chauds?'recents':'chauds')+'\';render()">'
+      +'<button class="seeall" onclick="S.avisTri=\''+(chauds?'recents':'chauds')+'\';AVIS_VUS=AVIS_PAS;render()">'
       +(chauds?'Voir les plus récents':'Voir les plus commentés')+'</button></div>'
       +(L.length
-        // Pas de limite ici, contrairement aux autres listes : cet onglet EST
-        // le feed, il n'y a rien en dessous à atteindre. Borner le seul contenu
-        // d'un écran, c'est mettre un bouton devant sa raison d'être.
-        // Le jour où le nombre d'avis rendra le rendu lourd, la réponse sera
-        // un chargement progressif au défilement, pas un « voir plus ».
-        ? L.map(revHTML).join('')
+        /* Toujours pas de « voir plus » : cet onglet EST le feed, il n'y a
+           rien en dessous à atteindre, et borner l'unique contenu d'un écran
+           reviendrait à mettre un bouton devant sa raison d'être.
+
+           Mais on ne dessine plus tout d'un coup. Le commentaire d'origine
+           annonçait déjà la sortie — « le jour où le nombre d'avis rendra le
+           rendu lourd, la réponse sera un chargement progressif au
+           défilement » — et l'audit du 27 août 2026 a daté ce jour : c'est
+           celui de l'ouverture aux testeurs. À 15 000 avis, une seule passe
+           construit 15 000 blocs et fige le navigateur ; sur téléphone, le
+           système peut tuer l'onglet.
+
+           Le geste ne change pas — on fait défiler, la suite arrive. Seul le
+           nombre de blocs vivants change. Voir suiteAvis(). */
+        ? L.slice(0, AVIS_VUS).map(revHTML).join('')
+          + (L.length > AVIS_VUS
+             ? '<div id="avis-suite" class="hint" style="padding:22px 0">Encore '
+               + (L.length - AVIS_VUS) + ' avis…</div>'
+             : '')
         : '<div class="empty">Personne n\'a encore écrit d\'avis.<br><br>'
           +'Ouvre une bière et donne le tien : c\'est ce qui fait vivre cet onglet.</div>');
   }
@@ -2766,6 +2822,12 @@ function live(){
 
 /* ---------- copains ---------- */
 function vFriends(){
+  /* Les stats des autres ne sont plus chargées au démarrage : on les demande
+     ici, à la première ouverture de l'écran qui s'en sert. Le rendu ne les
+     attend pas — il se redessine tout seul quand elles arrivent. */
+  if (Store.statsInconnues() && C.statsPub === 'absentes')
+    Store.chargerStatsPubliques().then(() => { if (S.tab === 'friends') render() });
+
   const foll=Store.following();
   const revs=Store.friendReviews();
   const feed=[];foll.forEach(k=>Store.user(k).act.forEach(a=>feed.push({u:k,...a})));
@@ -2846,8 +2908,9 @@ function userRow(k, raison){const u=Store.user(k);
    +'<span class="t"><b>'+esc(u.h)+'</b><span>'
    +(raison ? esc(raison)
             : esc(sousTitre(u.priv ? 'stats privées'
-                                   : u.cans+' canette'+(u.cans>1?'s':''),
-                            u.priv ? '' : (u.top!=='—'?u.top:''),
+                                   : (Store.statsInconnues() ? '…'
+                                      : u.cans+' canette'+(u.cans>1?'s':'')),
+                            u.priv || Store.statsInconnues() ? '' : (u.top!=='—'?u.top:''),
                             u.ville!=='—' ? u.ville : '')))+'</span></span>'
    +'<button class="follow'+(u.foll?' on':'')+'" onclick="event.stopPropagation();follow(\''+esc(k)+'\')">'
    +(u.foll?'Suivi':'Suivre')+'</button></div>'}
@@ -2912,11 +2975,15 @@ function vUser(){
          +(u.foll?'Abonné':'S\'abonner')+'</button>')+'</div>'
    +(u.priv
      ? '<div class="locked">'+I.lock_l+'<br>'+esc(u.h)+' garde ses stats privées.<br>Ses avis restent publics.</div>'
+     /* Tant que les stats ne sont pas revenues, on montre des tirets et pas
+        des zéros : « 0 canette » sur quelqu'un qui en a bu trente est un
+        chiffre faux, ce qui est pire qu'un chiffre absent. Elles arrivent en
+        une requête, l'écran se redessine seul. */
      : '<div class="statgrid">'
-        +'<div class="stat"><div class="k">Canettes</div><div class="v">'+u.cans+'</div></div>'
-        +'<div class="stat"><div class="k">Note moyenne</div><div class="v">'+fmtDec(u.avg)+' <small>/5</small></div></div>'
-        +'<div class="stat"><div class="k">Cette semaine</div><div class="v">'+u.week+' <small>canettes</small></div></div>'
-        +'<div class="stat"><div class="k">Style dominant</div><div class="v" style="font-size:16px">'+esc(u.top)+'</div></div>'
+        +'<div class="stat"><div class="k">Canettes</div><div class="v">'+(Store.statsInconnues()?'—':u.cans)+'</div></div>'
+        +'<div class="stat"><div class="k">Note moyenne</div><div class="v">'+(Store.statsInconnues()?'—':fmtDec(u.avg)+' <small>/5</small>')+'</div></div>'
+        +'<div class="stat"><div class="k">Cette semaine</div><div class="v">'+(Store.statsInconnues()?'—':u.week+' <small>canettes</small>')+'</div></div>'
+        +'<div class="stat"><div class="k">Style dominant</div><div class="v" style="font-size:16px">'+(Store.statsInconnues()?'—':esc(u.top))+'</div></div>'
        +'</div>')
    +(Store.estBloque(k) ? '' : blocTournee(k, false))
    +(Store.estBloque(k)
@@ -3717,6 +3784,36 @@ function openArticle(url){
    bouteille : Open Food Facts ne renseigne l'emballage que sur 5 % des
    fiches. La première version l'omettait, ce qui rendait l'écran
    inutilisable. Elle est désormais grande et cliquable. */
+/* ---- défilement progressif du fil d'avis ----
+ *
+ * AVIS_PAS est le nombre d'avis ajoutés chaque fois qu'on approche du bas.
+ * 25 tient sur environ trois écrans de téléphone : assez pour que la suite
+ * arrive avant qu'on la cherche, assez peu pour que le rendu reste instantané.
+ *
+ * Le compteur se remet à zéro dès qu'on change de tri ou d'onglet : revenir
+ * sur « Les derniers » après avoir déroulé cinq cents avis doit remontrer le
+ * début, pas rouvrir au milieu du fil.
+ */
+const AVIS_PAS = 25;
+let AVIS_VUS = AVIS_PAS;
+
+/* Appelé au défilement de #view. On n'ajoute rien tant que la sentinelle
+   n'approche pas du bas : inutile de préparer trois écrans d'avance. */
+function suiteAvis(){
+  const sentinelle = document.getElementById('avis-suite');
+  if (!sentinelle) return;
+  const vue = document.getElementById('view');
+  if (sentinelle.getBoundingClientRect().top > vue.clientHeight + 400) return;
+  AVIS_VUS += AVIS_PAS;
+  /* On redessine la vue plutôt que d'ajouter les blocs à la main : le fil est
+     l'unique contenu de l'écran, et un ajout incrémental devrait se
+     resynchroniser à chaque réaction, réponse ou suppression. Le défilement
+     est restauré pour que rien ne saute sous le doigt. */
+  const y = vue.scrollTop;
+  render();
+  vue.scrollTop = y;
+}
+
 let MODTAB = 'pending';
 let MODQ = '';        // le texte cherché dans l'écran de modération
 let MODLIST = [];     // la liste chargée, filtrée à l'affichage seulement
@@ -4130,7 +4227,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v6.5';
+const APP_VERSION = 'v6.6';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
@@ -4778,6 +4875,17 @@ function majReseau(){
 }
 window.addEventListener('online',  () => { majReseau(); toast('Connexion rétablie') });
 window.addEventListener('offline', majReseau);
+
+/* Le défilement du fil d'avis. Un seul écouteur, posé une fois sur le
+   conteneur qui défile — pas un par écran, qui s'accumuleraient à chaque
+   render(). suiteAvis() sort immédiatement s'il n'y a pas de sentinelle,
+   donc les autres onglets ne paient rien.
+
+   `passive: true` : on ne bloque jamais le défilement, même si le rendu de la
+   page suivante prend un instant. Sur téléphone, c'est la différence entre un
+   fil fluide et un fil qui accroche. */
+document.getElementById('view')
+  .addEventListener('scroll', suiteAvis, { passive: true });
 // une app ouverte alors qu'on est déjà hors ligne doit le dire tout de suite
 majReseau();
 
