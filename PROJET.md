@@ -15,7 +15,7 @@
 > Les sections sont **pondérées** : `🔴 structurant`, `🟠 important`,
 > `🟡 secondaire`. La pondération dit où porter l'attention quand le temps manque.
 >
-> Dernière mise à jour : 27 août 2026 · app en `v6.4` · 34 migrations · non ouvert aux testeurs.
+> Dernière mise à jour : 27 août 2026 · app en `v6.5` · 34 migrations · non ouvert aux testeurs.
 
 ---
 
@@ -1040,3 +1040,30 @@ pas déduit des migrations — c'est exactement ce que le §8 bis espérait.
   indifférent, comme `week_count` avant lui.
 - Vérifié dans un vrai navigateur, pas seulement `node --check` : page servie
   en local, zéro erreur console, `ficheStats()` exercée sur les trois cas.
+
+**27 août 2026 (suite) — l'écran de modération devient utilisable (v6.5)**
+
+Découvert en essayant simplement de corriger les cinq fiches ci-dessus.
+
+- **« Déjà validées » déroulait les 342 fiches publiées d'un bloc, sans
+  recherche.** Atteindre une fiche précise demandait de faire défiler trois
+  cents cartes. L'écran était livré sans avoir jamais servi à ça — il est
+  d'ailleurs au §7 bis dans « jamais exercé ».
+- **Recherche ajoutée** sur le nom, la brasserie et le code-barres, avec
+  pliage des accents (« gosser » trouve « Gösser », « ambree » trouve
+  « Ambrée »). Elle suit le patron imposé — coque dessinée une fois, seul
+  `#mod-res` rafraîchi. **Vérifié dans le navigateur que le champ n'est pas
+  recréé** entre deux frappes et que le focus tient : c'est la règle du §7,
+  et c'est ce qui referme le clavier sur téléphone quand on la casse.
+- **Deux bugs de l'écran, corrigés au passage.** `doModerate()` retirait la
+  carte du DOM mais **pas de la liste en mémoire** : la fiche revenait dès la
+  première frappe dans la recherche. Et il réécrivait `.sheet-body`, ce qui
+  emporterait désormais le champ de saisie.
+- **L'édition revient à la liste, à l'endroit où on l'avait laissée.**
+  `saveEditBeer()` faisait `closeSheet()` : corriger cinq fiches repérées
+  demandait de rouvrir l'écran et de retaper le nom cinq fois. La feuille
+  d'édition est la même que celle de la modération, d'où le va-et-vient.
+- **Le libellé dit la vérité** : « Bouteille » retire de la circulation sans
+  rien effacer, et c'est aussi ce qu'on utilise pour un doublon. Il n'y a pas
+  de motif « doublon » distinct, et en créer un pour un cas par an ne vaut pas
+  une colonne.

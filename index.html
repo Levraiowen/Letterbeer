@@ -3718,6 +3718,8 @@ function openArticle(url){
    fiches. La première version l'omettait, ce qui rendait l'écran
    inutilisable. Elle est désormais grande et cliquable. */
 let MODTAB = 'pending';
+let MODQ = '';        // le texte cherché dans l'écran de modération
+let MODLIST = [];     // la liste chargée, filtrée à l'affichage seulement
 /* ---------- signalements (administrateurs) ----------
    L'onglet n'apparaît que pour un administrateur, mais ce n'est qu'un
    confort d'affichage : tout ce qui suit est refusé par la base à qui n'en
@@ -3890,8 +3892,14 @@ let EDB = null;
 function openEditBeer(id){
   const b = Store.beer(id);
   if(!b) return toast('Fiche introuvable');
+  /* D'où l'on vient, pour y revenir avec la même recherche. Sans ça, corriger
+     cinq fiches repérées demandait de rouvrir l'écran et de retaper le nom
+     cinq fois — l'édition referme la feuille, qui est la même que celle de
+     la modération. */
+  const depuisMod = !!document.getElementById('mod-res');
   EDB = { id, n:b.n, br:b.br, st:b.st==='Non précisé'?'':b.st, abv:b.abv||'',
-          cl:b.cl, pays:b.pays==='—'?'':b.pays, d:b.d, statut:b.ok?'approved':'pending' };
+          cl:b.cl, pays:b.pays==='—'?'':b.pays, d:b.d, statut:b.ok?'approved':'pending',
+          retourMod: depuisMod ? MODTAB : null, retourQ: depuisMod ? MODQ : '' };
   drawEditBeer();
 }
 
@@ -3941,11 +3949,16 @@ async function saveEditBeer(){
   const ok = await act(()=>Store.modifierBiere(EDB.id, {...EDB, abv: abv===null?'':abv, cl}),
                        'Modification refusée — es-tu bien administrateur ?');
   if(ok===null) return;
-  closeSheet(); toast('Fiche mise à jour'); render();
+  toast('Fiche mise à jour');
+  render();
+  // retour à la liste, à l'endroit où on l'avait laissée
+  if(EDB.retourMod) return openModeration(EDB.retourMod, EDB.retourQ);
+  closeSheet();
 }
 
-async function openModeration(tab){
+async function openModeration(tab, q){
   MODTAB = tab || 'pending';
+  MODQ = q || '';
   const sh=$('#sheet'); sh.classList.add('open');
   sh.innerHTML='<div class="sheet-in"><div class="grab"></div>'
    +'<div class="sheet-bar"><b>Fiches</b><button class="icon-btn" onclick="closeSheet()">'+I.x+'</button></div>'
@@ -3953,22 +3966,55 @@ async function openModeration(tab){
      +'<button class="tab'+(MODTAB==='pending'?' on':'')+'" onclick="openModeration(\'pending\')">À valider</button>'
      +'<button class="tab'+(MODTAB==='approved'?' on':'')+'" onclick="openModeration(\'approved\')">Déjà validées</button>'
    +'</div></div>'
-   +'<div class="sheet-body"><div class="empty">Chargement…</div></div></div>';
-  let list;
-  try { list = await Store.pendingBeers(MODTAB); }
+   /* La coque est dessinée UNE fois, et seul #mod-res est rafraîchi ensuite.
+      Réécrire le conteneur pendant la frappe détruirait le champ et le
+      recréerait : le focus partirait, et sur téléphone le clavier se
+      refermerait à chaque lettre. C'est le patron de drawChoixTournee /
+      majChoixTournee, imposé par PROJET.md §7. */
+   +'<div class="sheet-body">'
+   +'<div class="searchbar" style="margin-bottom:10px">'+I.search
+     +'<input id="mod-q" placeholder="Chercher un nom, une brasserie…" '
+     +'value="'+esc(MODQ)+'" oninput="MODQ=this.value;majModeration()"></div>'
+   +'<div id="mod-res"><div class="empty">Chargement…</div></div>'
+   +'</div></div>';
+  try { MODLIST = await Store.pendingBeers(MODTAB); }
   catch(e){ console.error(e); closeSheet(); toast('Liste indisponible'); return }
-  drawModeration(list);
+  majModeration();
+}
+
+/* Sans ce filtre, « Déjà validées » déroulait les 342 fiches publiées d'un
+   seul bloc, sans moyen d'en atteindre une : corriger un nom repéré ailleurs
+   demandait de faire défiler trois cents cartes. Constaté le 27 août 2026,
+   en essayant de corriger cinq fiches précises.
+   La recherche plie les accents, comme celle du catalogue : sans ça,
+   « ambree » ne trouve pas « Ambrée », rédhibitoire sur un catalogue
+   français où l'accent est partout. */
+const plie = s => (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+
+function majModeration(){
+  const q = plie(MODQ).trim();
+  drawModeration(!q ? MODLIST
+    : MODLIST.filter(b => plie(b.name).includes(q) || plie(b.brewery).includes(q)
+                       || (b.barcode||'').includes(q)));
 }
 
 function drawModeration(list){
-  const body=document.querySelector('#sheet .sheet-body'); if(!body) return;
+  const body=document.getElementById('mod-res'); if(!body) return;
   const enAttente = MODTAB==='pending';
+  const filtre = !!plie(MODQ).trim();
   body.innerHTML =
     '<div class="note">'+I.info+'<span>'
    +(enAttente
       ? 'Regarde la photo : <b>canette → Valider, bouteille → Rejeter</b>. Touche l\'image pour l\'agrandir.'
-      : 'Les fiches déjà en ligne. Si une bouteille s\'est glissée dedans, rejette-la ici.')
+      : 'Les fiches déjà en ligne. <b>Éditer</b> corrige un nom ou une brasserie ; '
+        +'<b>Bouteille</b> retire de la circulation sans rien effacer — c\'est aussi '
+        +'ce qu\'on utilise pour un doublon.')
    +'</span></div>'
+   +(filtre||MODLIST.length>40
+      ? '<div class="hint" style="margin:0 0 10px">'
+        +list.length+' fiche'+(list.length>1?'s':'')
+        +(filtre?' sur '+MODLIST.length:'')+'</div>'
+      : '')
    +(list.length
      ? '<div class="modgrid">'+list.map(b=>{
         const img=safeUrl(b.image_url);
@@ -3983,18 +4029,22 @@ function drawModeration(list){
           +'<button class="modbtn no" onclick="doModerate(\''+esc(b.id)+'\',0)">Bouteille</button>'
           +'<button class="modbtn yes" onclick="doModerate(\''+esc(b.id)+'\',1)">Canette</button>'
         +'</div></div>'}).join('')+'</div>'
-     : '<div class="empty">'+(enAttente?'Aucune fiche en attente. Tout est à jour.':'Aucune fiche validée.')+'</div>');
+     : '<div class="empty">'+(filtre
+          ? 'Rien ne correspond à « '+esc(MODQ)+' ».'
+          : (enAttente?'Aucune fiche en attente. Tout est à jour.':'Aucune fiche validée.'))+'</div>');
 }
 
 async function doModerate(id, ok){
   const r = await act(()=>Store.moderate(id, ok), 'Décision non enregistrée — réessaie');
   if(r===null) return;
-  const row=document.getElementById('mod-'+id);
-  if(row) row.remove();
-  toast(ok ? 'Gardée comme canette' : 'Retirée : bouteille');
-  if(!document.querySelector('.modcard'))
-    document.querySelector('#sheet .sheet-body').innerHTML =
-      '<div class="empty">Plus rien ici. Tout est à jour.</div>';
+  /* On retire de la LISTE, pas seulement du DOM : l'ancienne version ôtait
+     la carte et laissait l'entrée en mémoire, si bien que la fiche revenait
+     à la première frappe dans la recherche. Et elle réécrivait .sheet-body,
+     ce qui emporterait désormais le champ de saisie avec. On repasse donc
+     par majModeration(), qui ne touche que #mod-res. */
+  MODLIST = MODLIST.filter(b => b.id !== id);
+  toast(ok ? 'Gardée comme canette' : 'Retirée de la circulation');
+  majModeration();
 }
 
 /* ---------- RGPD : exporter et supprimer ---------- */
@@ -4080,7 +4130,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v6.4';
+const APP_VERSION = 'v6.5';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
