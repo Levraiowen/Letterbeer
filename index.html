@@ -491,6 +491,18 @@ button.lockup:active{transform:scale(.96)}
 .beer-hero .br{font-size:13px;color:var(--accent);margin-top:3px}
 .beer-hero .fx{font-size:12px;color:var(--dim);margin-top:7px;line-height:1.6}
 .avgbox{display:flex;align-items:center;gap:11px;margin-top:11px}
+/* Le rang dans le Top. Bouton et non pavé décoratif : il mène au classement,
+   et ce qui est cliquable doit en avoir l'air. */
+.rang{display:flex;align-items:center;gap:12px;width:calc(100% - 40px);margin:12px 20px 0;
+  padding:12px 14px;border-radius:12px;text-align:left;cursor:pointer;
+  background:var(--accent-soft);border:1px solid rgba(255,90,31,.28);color:var(--text);
+  font-family:'Inter';transition:background .18s var(--e)}
+.rang:hover{background:rgba(255,90,31,.2)}
+.rang:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.rang b{font-family:'Space Grotesk';font-size:22px;font-weight:700;color:var(--accent);
+  line-height:1;font-variant-numeric:tabular-nums}
+.rang span{font-size:13px;line-height:1.4}
+.rang i{font-style:normal;font-size:11px;color:var(--dimmer)}
 .avgbox .num{font-family:'Space Grotesk';font-size:26px;font-weight:600}
 .desc{padding:14px 20px 0;font-size:13.5px;line-height:1.6;color:#CFCAC4}
 .rate-zone{margin:16px 20px 0;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:15px}
@@ -987,7 +999,7 @@ const classerTexte = t => {
 };
 
 /* cache local */
-const C = { me:null, myId:null, email:'', isAdmin:false, users:{}, beers:[], ratings:{}, counts:{}, weekCounts:{},
+const C = { me:null, myId:null, email:'', isAdmin:false, users:{}, beers:[], ratings:{}, counts:{}, weekCounts:{}, dist:{},
             reviews:[], logs:[], follows:[], watch:[], wish:[], arts:[], blocks:[] };
 
 /* ============================ AUTHENTIFICATION ============================ */
@@ -1225,6 +1237,13 @@ async function hydrate() {
     C.counts[r.beer_id]  = +r.rating_count;
     // absente tant que la migration 24 n'est pas passée : la section se masque
     C.weekCounts[r.beer_id] = +r.week_count || 0;
+    /* Idem pour la migration 34. On teste `== null` et non la somme : cinq
+       zéros est un résultat LÉGITIME (des notes toutes hors seaux serait un
+       bug, pas une absence), alors que des colonnes manquantes doivent
+       masquer la section. C'est le repli qui rend l'ordre de déploiement
+       indifférent — voir §8 de PROJET.md. */
+    C.dist[r.beer_id] = r.n1 == null ? null
+      : [r.n1, r.n2, r.n3, r.n4, r.n5].map(v => +v || 0);
   }
 
   /* --- avis --- */
@@ -1467,6 +1486,39 @@ const Store = {
      plafonné à environ un quart de point : il départage des canettes proches,
      il ne peut pas hisser une 3,5 au-dessus d'une 4,5. */
   SEUIL_CONFIANCE: 3,
+
+  /* ---- la fiche s'enrichit quand la donnée existe ----
+   *
+   * Trois seuils, nommés parce que ce sont des JUGEMENTS, pas des évidences.
+   *
+   * Mesuré en base le 27 août 2026 avant de les poser : 342 canettes
+   * publiées, 8 bières notées, 9 notes au total, aucune bière à trois notes.
+   * Aucun des deux enrichissements ne s'affiche donc aujourd'hui, et c'est
+   * le comportement voulu — ils s'allument seuls quand les testeurs
+   * arriveront. Ne pas baisser les seuils pour « voir quelque chose » :
+   * c'est ce qui transformerait une information en décoration.
+   */
+  SEUIL_HISTO: 3,   // en dessous, un histogramme à deux barres ne raconte rien
+  TAILLE_TOP: 10,   // le Top de l'année en montre dix
+  /* Et « être dans les dix » n'informe qu'à partir d'un vivier deux fois plus
+     grand. Être 4ᵉ sur 8 n'est pas une distinction, c'est une tautologie. */
+  SEUIL_VIVIER: 20,
+
+  /* La répartition des notes, ou null. Elle vient de la base : `logs` est
+     strictement privé par RLS, chacun n'y voit que ses propres lignes, donc
+     l'agrégat ne peut PAS se calculer côté navigateur. Même mécanisme que la
+     moyenne, dans la même vue (migration 34). */
+  dist: id => C.dist[id] || null,
+
+  /* Le rang dans le Top de l'année, ou null si le rang ne veut rien dire. */
+  rangTop(id) {
+    if (Store.count(id) <= 0) return null;
+    const vivier = C.beers.filter(b => b.ok && Store.count(b.id) > 0).length;
+    if (vivier < Store.SEUIL_VIVIER) return null;
+    const i = Store.topAnnee(Store.TAILLE_TOP).findIndex(b => b.id === id);
+    return i < 0 ? null : i + 1;
+  },
+
   topAnnee(n) {
     const notees = Store.beers().filter(b => Store.count(b.id) > 0);
     if (!notees.length) return [];
@@ -4028,7 +4080,7 @@ async function doDelete(){
 }
 
 /* ---------- à propos & confidentialité ---------- */
-const APP_VERSION = 'v6.3';
+const APP_VERSION = 'v6.4';
 /* Mention imposée par la loi Évin sur toute promotion de boissons
    alcoolisées. L'onglet Journal relaie des lancements de brasseries :
    elle y figure, ainsi qu'à l'inscription et dans l'écran À propos. */
@@ -4154,6 +4206,54 @@ function openBeer(id){
   SH.rate0=SH.rate; SH.liked0=SH.liked; SH.txt0=SH.txt;
   drawSheet();
 }
+/* ---------- ce que la fiche sait dire d'une canette ----------
+ *
+ * UNE seule fiche, qui s'enrichit quand la donnée existe — plutôt qu'une
+ * page séparée pour les bières du classement. Le Top bouge (moyenne
+ * bayésienne plus bonus d'engagement) : une bière 10e cette semaine et 11e
+ * la suivante changerait de nature sans que personne comprenne pourquoi. Et
+ * conditionner l'affichage au Top ferait perdre le geste de noter
+ * exactement sur les canettes les plus bues, ce qui est l'inverse du but
+ * d'un carnet.
+ *
+ * Ici c'est le VOLUME DE DONNÉES qui décide, pas le rang : la fiche est donc
+ * la même depuis la recherche, le journal, les copains et le Top.
+ *
+ * Les trois seuils vivent dans le Store, avec la mesure qui les justifie.
+ */
+function ficheStats(b){
+  const n = Store.count(b.id);
+
+  // personne ne l'a notée : on le dit, et l'action de noter est juste dessous
+  if(!n) return '<div class="note">'+I.info
+    +'<span>Personne ne l\'a encore notée. Ta note sera la première — '
+    +'elle apparaîtra pour tes copains.</span></div>';
+
+  const rang  = Store.rangTop(b.id);
+  const d     = Store.dist(b.id);
+  const assez = d && n >= Store.SEUIL_HISTO;
+  if(!rang && !assez) return '';
+
+  let h = '';
+
+  if(rang) h += '<button class="rang" onclick="closeSheet();ouvrirClassement()">'
+    +'<b>'+rang+(rang===1?'ᵉʳ':'ᵉ')+'</b>'
+    +'<span>du Top de l\'année<br><i>voir le classement</i></span></button>';
+
+  if(assez){
+    const mx = Math.max(...d, 1);
+    h += '<div class="eyebrow" style="padding:14px 20px 0">Comment elle est notée</div>'
+      +'<div class="histo">'
+      +d.map((v,i)=>'<div class="bar'+(v===mx?' hi':'')+'" style="height:'+(v/mx*100)+'%'
+         +';animation-delay:'+(i*.05)+'s" title="'+v+' note'+(v>1?'s':'')
+         +' à '+(i+1)+' étoile'+(i>1?'s':'')+'"></div>').join('')
+      +'</div>'
+      +'<div class="histo-ax"><span>★</span><span>★★★★★</span></div>';
+  }
+
+  return h;
+}
+
 function drawSheet(){
   const b=Store.beer(SH.beer);
   if(!b){ closeSheet(); toast('Cette fiche n\'est plus disponible'); return }
@@ -4182,6 +4282,7 @@ function drawSheet(){
         : '')+'</span></span></div></div></div>'
    +(b.ok?'':'<div class="note warn">'+I.info+'<span>Fiche proposée par un utilisateur, en attente de validation. '
      +'Tu peux déjà la noter, elle restera privée tant qu\'elle n\'est pas validée.</span></div>')
+   +ficheStats(b)
    +'<div class="desc">'+esc(b.d)+'</div>'
    +(SH.already?'<div class="already">'+I.check
      +'<span><b>Tu l\'as déjà notée.</b> Tu peux corriger ta note ou ton avis ci-dessous — '

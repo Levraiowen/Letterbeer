@@ -15,7 +15,7 @@
 > Les sections sont **pondérées** : `🔴 structurant`, `🟠 important`,
 > `🟡 secondaire`. La pondération dit où porter l'attention quand le temps manque.
 >
-> Dernière mise à jour : 27 août 2026 · app en `v6.3` · 34 migrations · non ouvert aux testeurs.
+> Dernière mise à jour : 27 août 2026 · app en `v6.4` · 34 migrations · non ouvert aux testeurs.
 
 ---
 
@@ -1008,3 +1008,35 @@ pas déduit des migrations — c'est exactement ce que le §8 bis espérait.
   avant l'ouverture aux testeurs, et un badge « Nᵉ du Top » n'aurait aucun sens
   — être 4ᵉ sur 8 n'est pas une distinction. À relire avant de construire quoi
   que ce soit qui suppose du volume social.
+
+**27 août 2026 (suite) — la fiche s'enrichit au lieu de se dédoubler (v6.4)**
+
+- **Idée reçue et retournée** : « une page différente quand on clique une bière
+  du classement ». Refusée telle quelle, pour trois raisons qui valent au-delà
+  de ce cas. Le Top **bouge** — moyenne bayésienne plus bonus d'engagement :
+  une canette 10ᵉ cette semaine et 11ᵉ la suivante changerait de nature sans
+  que personne comprenne pourquoi. Conditionner l'affichage au Top **ferait
+  perdre le geste de noter exactement sur les canettes les plus bues**, soit
+  l'inverse du but d'un carnet. Et deux chemins de rendu pour le même objet
+  dans un fichier de 4 000 lignes, quand le projet fait l'inverse partout
+  (`bornee()`, la tournée). Sans compter qu'une vitrine réservée aux bières les
+  mieux notées glisse vers la promotion, ce que le §6 ferme.
+- **Fait à la place** : UNE fiche, dont c'est le **volume de données** qui
+  décide du contenu — pas le rang. Elle est donc la même depuis la recherche,
+  le journal, les copains et le Top. Zéro note → on le dit, et l'action de
+  noter est juste dessous. Trois notes ou plus → la répartition. Dans le Top,
+  avec un vivier qui rend le rang informatif → un badge qui mène au classement.
+- **Les trois seuils sont nommés dans le Store, avec leur mesure.**
+  `SEUIL_HISTO` 3 — en dessous, un histogramme à deux barres ne raconte rien.
+  `SEUIL_VIVIER` 20 — « être dans les dix » n'informe qu'à partir d'un vivier
+  deux fois plus grand ; être 4ᵉ sur 8 est une tautologie, pas une distinction.
+  **Ne pas les baisser pour « voir quelque chose »** : ça transformerait une
+  information en décoration.
+- **Aucun des deux ne s'affiche aujourd'hui, et c'est voulu** — voir le point
+  sur le catalogue 38 fois plus gros que l'usage. Ils s'allument seuls.
+- La répartition **ne peut pas se calculer côté navigateur** : `logs` est
+  strictement privé par RLS. D'où la migration 34, sur le modèle exact de
+  `beer_ratings`. Le repli `r.n1 == null` rend l'ordre de déploiement
+  indifférent, comme `week_count` avant lui.
+- Vérifié dans un vrai navigateur, pas seulement `node --check` : page servie
+  en local, zéro erreur console, `ficheStats()` exercée sur les trois cas.
